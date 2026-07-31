@@ -1,0 +1,12 @@
+.codegraph/
+.superpowers/
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+data/
+apps/
+tools/
+*.log
+*.tmp
