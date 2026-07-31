@@ -6,7 +6,7 @@ coverage/
 .env
 .env.*
 data/
-apps/
-tools/
+tools/*
+!tools/tool-manifest.json
 *.log
 *.tmp

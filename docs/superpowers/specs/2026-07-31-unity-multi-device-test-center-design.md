@@ -1,8 +1,9 @@
 # Unity Multi-Device Test Center Design
 
 - Date: 2026-07-31
-- Status: Design approved in five review sections; awaiting written-spec review
+- Status: Written design approved; implementation-safety amendments included for plan review
 - Project root: `E:\Projects\UnityMultiDeviceTestCenter`
+- Git remote: `https://github.com/caiyipeng2/AutoIphoneTest.git`
 - Target platform: Windows host with 1-4 locally connected Android devices
 
 ## 1. Summary
@@ -144,6 +145,7 @@ The core contains bounded modules:
 - `artifact-service`: APK/AAB/installed-version records and immutable artifact metadata.
 - `deployment-service`: AAB conversion, install, clear-data option, launch, and version verification.
 - `session-orchestrator`: run state, selected leader/followers, action creation, concurrent dispatch, and failure policy.
+- `action-outbox`: transactional action sequencing, target snapshots, initial per-target results, dispatch leases, and crash reconciliation.
 - `worker-manager`: isolated Appium, ADB, logcat, bridge, and view resources per serial.
 - `evidence-service`: screenshots, videos, logs, state snapshots, hashes, and evidence indexing.
 - `report-service`: offline HTML/ZIP and optional Excel/PDF/JUnit export jobs.
@@ -160,6 +162,7 @@ Each selected serial gets one worker with:
 - One logcat stream and one evidence directory.
 - One Unity bridge correlation state.
 - One view-provider instance or preview subscription.
+- A monotonically increasing worker generation that fences responses from replaced sessions.
 
 No device-global singleton may hold serial-specific state.
 
@@ -168,6 +171,19 @@ No device-global singleton may hold serial-specific state.
 The browser must show the leader inside the management console. Streaming is isolated behind:
 
 ```ts
+interface EncodedFrame {
+  frameId: string;
+  deviceSerial: string;
+  capturedAtDeviceNs?: bigint;
+  receivedAtHostNs: bigint;
+  width: number;
+  height: number;
+  rotation: 0 | 90 | 180 | 270;
+  codec: "h264" | "h265" | "av1" | "jpeg";
+  metricsEpoch: number;
+  bytes: Uint8Array;
+}
+
 interface ViewProvider {
   start(deviceSerial: string, profile: ViewProfile): AsyncIterable<EncodedFrame>;
   setProfile(profile: ViewProfile): Promise<void>;
@@ -182,8 +198,10 @@ First-version behavior:
 - An Appium MJPEG or periodic-screenshot provider is the lower-frame-rate fallback.
 - The leader uses an interactive high-frame-rate profile.
 - Followers use low-frame-rate previews by default. Expanding one follower can temporarily raise its profile.
+- Providers expose a latest-frame stream with a bounded queue of at most two frames. Slow consumers drop superseded frames instead of increasing control latency or memory indefinitely.
+- Every frame carries its display geometry and `metricsEpoch`. The input overlay can dispatch only against the epoch represented by the rendered frame.
 
-The M6 milestone includes a focused streaming spike and acceptance. If the primary provider fails its latency/stability gate, the fallback remains functional and the report states the measured limitation.
+The M6 milestone includes a focused streaming spike and numeric acceptance. If the primary provider fails its latency/stability gate, the fallback remains functional in an explicitly degraded mode and the report states the measured limitation; degraded fallback is not evidence that the primary gate passed.
 
 ### 7.6 Appium Device Farm Boundary
 
@@ -240,6 +258,8 @@ The page has two views:
 
 One selected device creates a single-device evidence run. Two to four selected devices create one leader and one to three followers.
 
+Run membership is fixed to the serials selected at creation. A newly connected device never joins an active run automatically. Quarantine and rejoin apply only to an original member. Rejoin requires a complete preflight, increments the membership epoch and worker generation, and fences late results from the old worker. Loss of the leader always pauses the run; the sole device or current leader cannot be silently quarantined. While paused, the user may finish the run or promote another original, fully preflighted member to leader, which creates a new membership epoch.
+
 ### 8.6 Results
 
 Shows immutable historical records by run and action. It links artifact, device, UID, action, per-device timing/result, screenshots, videos, log excerpts, bridge state, failures, recovery decisions, and exports.
@@ -260,7 +280,7 @@ It never modifies machine-wide environment variables automatically and never exp
 4. Create a deployment when installation is required. Select devices, install/overwrite, optionally clear data, launch, and verify.
 5. Create a synchronized session. Select 1-4 devices and exactly one leader. Select pause policy and evidence options.
 6. Preflight establishes workers and validates serial isolation, Appium sessions, package/version, foreground app, orientation, view provider, bridge, UID, and safe area.
-7. Operate the leader in the computer view. Each captured input becomes an immutable action before dispatch.
+7. Operate the leader in the computer view. Each captured input becomes an immutable, sequential action against the rendered frame and current membership epoch before dispatch.
 8. Observe per-device results. On failure, follow the selected pause/quarantine policy and explicitly retry, skip, remove, or rejoin.
 9. Finish the run. The platform closes resources and generates history, offline HTML, and an evidence ZIP.
 10. Request Excel, PDF, or JUnit only when needed.
@@ -281,10 +301,11 @@ It never modifies machine-wide environment variables automatically and never exp
 1. Preserve the original AAB as an immutable artifact.
 2. Parse bundle metadata and validate the selected QA signing profile before conversion.
 3. Use explicit project-local Java and bundletool.
-4. Build a signed `.apks` archive appropriate to the selected deployment strategy and device specifications.
-5. Install required splits to each selected serial.
-6. Preserve conversion and install logs and generated-artifact hashes without copying private keys or passwords into artifact/evidence storage.
-7. Verify package/version, signing identity, and foreground activity on every target.
+4. Build either one explicitly selected universal archive or one signed `.apks` install set per device specification. The default is per-device generation.
+5. Key every generated install set by original bundle SHA-256, signing-certificate SHA-256, bundletool version, generation mode, and device-specification SHA-256. Never reuse a device-specific set for a different specification.
+6. Install required splits to each selected serial.
+7. Preserve conversion and install logs and generated-artifact hashes without copying private keys or passwords into artifact/evidence storage.
+8. Verify package/version, signing identity, installed APK-set identity, and foreground activity on every target.
 
 Signing-profile rules:
 
@@ -294,9 +315,9 @@ Signing-profile rules:
 
 ### 10.3 Installed Version
 
-1. Query the selected device for package/version/activity.
+1. Query the selected device for package/version/activity, signing-certificate digest, and installed base/split APK-set digest or QA build identifier.
 2. Create an installed-version artifact reference without pretending a source APK/AAB exists.
-3. If multiple selected devices do not have the same package/version, preflight blocks the group until the user resolves or explicitly changes selection.
+3. If multiple selected devices do not have the same package, version, signer, and installed binary identity, preflight blocks the group until the user resolves or explicitly changes selection. Reused version codes are never treated as proof that binaries match.
 
 ## 11. Action Model and Dispatch
 
@@ -307,10 +328,15 @@ An action is persisted before execution:
   "schemaVersion": 1,
   "runId": "RUN-20260731-014",
   "actionId": "ACT-000187",
+  "clientRequestId": "019fb73c-0b3d-78ca-bff3-1057c76f54e1",
+  "actionSeq": 187,
   "parentActionId": null,
   "type": "swipe",
   "sourceSerial": "leader-serial",
   "targetSerials": ["leader-serial", "follower-1"],
+  "membershipEpoch": 3,
+  "sourceMetricsEpoch": 12,
+  "sourceFrameId": "FRAME-008812",
   "hostMonotonicTimeNs": 120045600000,
   "payload": {
     "normalizedPath": [[0.51, 0.78], [0.51, 0.32]],
@@ -322,21 +348,26 @@ An action is persisted before execution:
 Rules:
 
 1. `actionId` is unique within a run and never reused.
-2. Dispatch to selected workers is concurrent, not sequential by device.
-3. Every selected serial receives one `DeviceActionResult` even when dispatch fails before reaching Appium.
-4. A retry creates a new action with `parentActionId` pointing to the original.
-5. Original actions and results are immutable audit records.
-6. Text payloads are masked by default in logs/reports. A run may explicitly allow clear test text.
-7. Clear-data, uninstall, and arbitrary shell operations are not valid synchronized action types.
+2. `clientRequestId` is an idempotency key. Repeating the same browser request returns the existing action; reusing it with a different payload is rejected.
+3. `actionSeq` is strictly increasing. A run allows at most one group action in flight so rapid gestures, bridge arms, and retries cannot interleave.
+4. The API persists the action, immutable membership target snapshot, one `PENDING` `DeviceActionResult` per target, and an outbox row in one SQLite transaction before dispatch.
+5. Dispatch to the target snapshot is concurrent across workers, not sequential by device. Each worker response must match the recorded membership epoch and worker generation.
+6. Dispatch leasing is crash-aware. After restart, a leased or possibly sent result becomes `UNKNOWN`; a definitely undispatched result becomes `CANCELLED`. Neither category is replayed automatically.
+7. Every selected serial therefore retains one result row even when dispatch fails before Appium, the service crashes, or a worker response is fenced as stale.
+8. A retry creates a new action with a new `clientRequestId` and `actionId`, with `parentActionId` pointing to the original.
+9. Original actions, target snapshots, and results are immutable audit records. State transitions append timestamps and reasons rather than replacing identity fields.
+10. Text payloads are masked by default in logs/reports. A run may explicitly allow clear test text.
+11. Clear-data, uninstall, and arbitrary shell operations are not valid synchronized action types.
 
 ## 12. Coordinate Mapping
 
-1. The React overlay captures pointer coordinates within the displayed game-content rectangle, excluding browser chrome, letterboxing, and controls.
-2. The host converts the path to `0..1` coordinates relative to the leader's Unity safe area.
-3. Each worker combines normalized coordinates with its device's current display, orientation, and Unity safe area.
-4. Unity safe-area Y coordinates are converted carefully because Unity and Android/window coordinate origins differ.
-5. Preflight rejects incompatible orientation.
-6. If a layout reflows rather than scales, geometric mapping is not considered reliable. The device is paused/quarantined unless a future semantic-anchor provider supports that view.
+1. The React overlay captures pointer coordinates within the displayed game-content rectangle, excluding browser chrome, letterboxing, and controls, and records the rendered `sourceFrameId` and `sourceMetricsEpoch` at pointer-down.
+2. The host converts the path to `0..1` coordinates relative to the leader's Unity safe area for that exact metrics epoch.
+3. Pointer-up, action commit, and dispatch must still refer to the same source metrics epoch. A rotation, resize, safe-area change, or stream restart cancels the gesture before any device receives it.
+4. Each worker combines normalized coordinates with the display, orientation, and Unity safe area snapshot captured during the action precondition barrier. A target metrics change before injection rejects that target rather than using newer geometry silently.
+5. Unity safe-area Y coordinates are converted carefully because Unity and Android/window coordinate origins differ.
+6. Preflight rejects incompatible orientation.
+7. If a layout reflows rather than scales, geometric mapping is not considered reliable. The device is paused/quarantined unless a future semantic-anchor provider supports that view.
 
 First-version validation uses a dedicated Unity QA target scene with known hit regions and swipe endpoints across representative resolutions.
 
@@ -347,41 +378,64 @@ The bridge is compiled only into QA builds and has a versioned schema.
 It emits compact logcat records such as:
 
 ```text
-QA_STATE {"schemaVersion":1,"uid":"12345","orientation":"Portrait","safeArea":[0,80,1080,2260],"view":"MainHUD","stateSeq":42}
-QA_ACK {"schemaVersion":1,"actionId":"ACT-000187","receivedAtRealtimeMs":9812345,"view":"MainHUD","stateSeq":43}
+QA_HELLO {"schemaVersion":1,"bridgeInstanceId":"boot-3e19","bootId":"android-boot-id","buildId":"qa-20260731.4"}
+QA_STATE {"schemaVersion":1,"bridgeInstanceId":"boot-3e19","uid":"12345","appDataGeneration":7,"orientation":"Portrait","safeArea":[0,80,1080,2260],"metricsEpoch":12,"view":"MainHUD","focusedControlId":"chat_input","stateSeq":42}
+QA_ARMED {"schemaVersion":1,"bridgeInstanceId":"boot-3e19","actionId":"ACT-000187","descriptorHash":"sha256:...","expiresAtRealtimeMs":9812845}
+QA_ACK {"schemaVersion":1,"bridgeInstanceId":"boot-3e19","actionId":"ACT-000187","observedAtRealtimeMs":9812345,"eventShapeHash":"sha256:...","view":"MainHUD","stateSeq":43}
 ```
 
-To correlate a real OS-injected touch with `actionId`, the worker first sends a narrowly typed QA action announcement containing only `actionId`, action type, and a descriptor hash. A QA-only Android receiver or equivalent bridge adapter arms that identifier. The worker then performs the Appium input. The bridge observes the corresponding Unity input/state transition and emits `QA_ACK`.
+To correlate a real OS-injected input with `actionId`, preflight establishes a per-run random nonce through an ADB-only channel and records the current `bridgeInstanceId`, boot ID, metrics epoch, and clock-calibration sample. The worker sends a narrowly typed arm request containing the run nonce hash, `actionId`, action type, descriptor hash, expected view/focus, metrics epoch, and a short expiry. It waits for a matching `QA_ARMED` before Appium injection. The bridge acknowledges only an observed event whose type/shape, instance, epoch, focus precondition, and TTL match the arm, then consumes that arm exactly once.
+
+An unrelated touch, expired arm, bridge restart, metrics change, focus change, or descriptor mismatch produces an explicit rejection/timeout and cannot be mistaken for the synchronized action. Because a run permits only one group action in flight, two arms cannot compete for the same observed input.
 
 The announcement channel cannot invoke gameplay methods or pass arbitrary commands. It exists only to correlate the next observed input. The receiver is absent or disabled in release builds.
 
 Bridge responsibilities:
 
 - Report UID.
-- Report screen dimensions, safe area, and orientation.
-- Report a stable current view/state identifier and monotonic `stateSeq`.
-- Acknowledge an armed action when corresponding input is observed.
-- Report bridge/schema version.
+- Report app-data/install generation and QA build ID with UID.
+- Report screen dimensions, safe area, orientation, and a monotonically increasing metrics epoch.
+- Report a stable current view/state identifier, focused Unity control identity when text input is possible, and monotonic `stateSeq` scoped to the bridge instance.
+- Complete the arm handshake and acknowledge only a matching observed input.
+- Report bridge/schema/instance/boot versions.
 
-Without a bridge, the worker can still use Appium completion, foreground-package checks, screenshots, and logcat. The UI marks the run as degraded and does not claim Unity receipt latency or UID automation.
+ACK applicability is action-specific:
+
+| Action | Bridge contract | Authoritative completion |
+|---|---|---|
+| Tap, long press, drag/swipe, Back | `QA_ARMED` then matching `QA_ACK` | Appium completion plus bridge ACK when bridge-ready |
+| Text | Stable matching `focusedControlId`, `QA_ARMED`, then matching `QA_ACK` | Appium completion plus bridge ACK; synchronized text is blocked without a trusted focus provider |
+| Activate | No input arm | Appium activation plus fresh `QA_HELLO`/`QA_STATE` when bridge-ready |
+| Terminate | No input arm because the bridge is intentionally absent | Appium/process-not-running postcondition |
+| Restart | Terminate postcondition followed by activate contract | Fresh bridge instance and state after launch |
+
+For timing, each worker calibrates the device monotonic clock against the host monotonic clock with repeated bounded round trips at preflight and periodically during a run. `QA_ACK.observedAtRealtimeMs` is converted to a host-time estimate with a recorded uncertainty bound. Cross-device Unity receipt skew is valid only when every included calibration uncertainty is within the configured bound; otherwise the UI/report labels the metric unavailable and separately reports host-observed log-arrival skew, which includes ADB/logcat latency.
+
+Without a bridge, the worker can still use Appium completion, foreground-package checks, screenshots, and logcat. The UI marks the run as degraded and does not claim Unity receipt latency or UID automation. Synchronized text remains disabled unless another trusted focus provider proves the same focused control on every target.
 
 ## 14. Core Data Model
 
 | Entity | Important fields |
 |---|---|
 | `Device` | serial, model, product, Android/API/ABI, display, orientation, safe area, tags, health, lastSeen |
-| `DeviceUid` | serial, package, appVersion, uid, source, observedAt |
+| `DeviceAppInstallation` | serial, package, installGeneration, appDataGeneration, version, signer SHA-256, installed-set SHA-256/buildId, observedAt |
+| `DeviceUid` | installation generation, app-data generation, uid, source, observedAt, invalidatedAt/reason |
 | `AppArtifact` | kind, package, versionName/code, channel, sourcePath, storedPath, SHA-256, signing summary |
+| `GeneratedInstallSet` | artifact, bundletool version, signer SHA-256, mode, device-spec SHA-256, path, SHA-256 |
 | `Deployment` | artifact, target serials, clearData, state, created/started/finished |
 | `DeploymentDeviceResult` | deployment, serial, step, state, exit/error category, log paths |
-| `TestRun` | selected serials, leader, artifact/version, failure policy, evidence policy, state, timestamps |
-| `Action` | run, actionId, parentActionId, type, normalized payload, source/targets, host time |
-| `DeviceActionResult` | action, serial, mapped payload, dispatch/complete/ack times, state, error category |
-| `Evidence` | run, action/result association, serial, type, path, SHA-256, timestamp |
-| `ReportExport` | run, format, state, output path, hash, error |
+| `TestRun` | leader, artifact/version identity, failure policy, evidence policy, membership epoch, state, timestamps |
+| `RunDevice` | run, serial, role, state, membership epoch, worker generation, joined/left/rejoined times and reason |
+| `Action` | run, actionId, clientRequestId, actionSeq, parentActionId, membership/metrics/frame snapshot, type, normalized payload, host time |
+| `ActionOutbox` | action, lease owner/generation, state, queued/leased/reconciled times |
+| `DeviceActionResult` | action, serial, membership/worker generation, mapped payload, dispatch/complete/ack times, uncertainty, state, error category |
+| `Evidence` | run, action/result association, serial, type, state, temporary/final path, SHA-256, timestamp, capture error |
+| `ReportExport` | run, format, attempt, state, temporary/final path, hash, error |
 | `Setting` | validated project-local path, port range, retention, thresholds, defaults |
 
 SQLite stores metadata and paths. Imported packages, generated split archives, videos, screenshots, logs, reports, and ZIPs stay as files on `E:`.
+
+Clear-data, uninstall, reinstall, or a detected data-directory reset increments the appropriate installation/data generation and invalidates prior UID observations immediately. A run may begin only with a UID observed or manually confirmed for the current generation. Rejoin performs the same check; a UID from an earlier generation is never reused silently.
 
 ## 15. Run State Machine
 
@@ -392,21 +446,26 @@ Allowed states:
 - `RUNNING`: new synchronized actions are accepted.
 - `PAUSED`: manual or policy-triggered pause; no new actions accepted.
 - `RECOVERING`: selected worker resources are reconnecting/revalidating.
-- `COMPLETED`: normal finish and report generation.
-- `INTERRUPTED`: host or service ended unexpectedly; partial report generated.
+- `FINALIZING`: workers are closed and mandatory HTML/ZIP outputs are being published.
+- `COMPLETED`: normal finish and all mandatory default outputs are ready.
+- `FINALIZATION_FAILED`: actions/evidence are preserved but one or more mandatory default outputs failed; report generation may be retried without device actions.
+- `ABORTED`: the user ended a draft/preflight run before actions were accepted.
+- `INTERRUPTED`: host or service ended unexpectedly; partial evidence is reconciled and default partial-report generation is attempted.
 
 The browser cannot assign state directly. API commands perform validated transitions and persist them transactionally.
 
-On next launch, stale `RUNNING` or `RECOVERING` runs become `INTERRUPTED`. The platform indexes available evidence and generates a partial report. It never resumes an old action queue automatically.
+On next launch, stale `PREFLIGHT`, `RUNNING`, `PAUSED`, `RECOVERING`, or `FINALIZING` runs become `INTERRUPTED`. Stale dispatch leases are reconciled to `UNKNOWN`/`CANCELLED`, pending evidence files are reconciled, and a partial report attempt is recorded. It never resumes an old worker, bridge arm, or action queue automatically. `DRAFT` remains editable because it owns no live device resources.
+
+SQLite is authoritative for finalization. Evidence/report rows begin as `PENDING`; bytes are written to a sibling temporary file, closed, hashed, atomically renamed, then marked `READY` in a transaction. Startup marks orphaned pending rows `FAILED` or `MISSING` with an explicit reason. A run becomes `COMPLETED` only after mandatory HTML and evidence ZIP rows are `READY`.
 
 ## 16. Failure and Recovery Rules
 
 | Failure | Detection | Default response | Recovery |
 |---|---|---|---|
-| USB/ADB disconnect | serial disappears, offline transport, failed heartbeat | Apply run pause/quarantine policy | Reconnect and fully preflight before rejoin |
+| USB/ADB disconnect | serial disappears, offline transport, failed heartbeat | Leader/sole member always pauses; follower applies run policy | Reconnect and fully preflight before fenced rejoin |
 | Appium session loss | command/session/systemPort failure | Stop dispatch to that worker | Rebuild only that worker; do not replay automatically |
 | Crash/ANR/wrong foreground | process/foreground change and crash/ANR logs | Capture evidence and apply policy | User may restart, then bridge/UID/state revalidation |
-| Bridge timeout/state mismatch | missing ACK or incompatible UID/orientation/view/state | Stop blind broadcast | Query again, skip, quarantine, or require manual confirmation |
+| Bridge timeout/state mismatch | missing arm/ACK or incompatible instance/UID/generation/orientation/view/focus/state | Stop blind broadcast | Query again, skip, quarantine, or require manual confirmation |
 | Text focus mismatch | pre-input state barrier fails | Send text to no devices | Align focus and create a new action |
 | Low disk | free-space and write-rate monitor | Warn, then block video/new runs at danger threshold | Free space or reduce evidence policy |
 
@@ -437,6 +496,18 @@ Video:
 
 Every failure evidence bundle contains the current screenshot, recent logs, foreground package, action/result records, bridge state, and recovery decision under the same action/run relationship.
 
+Mandatory-capture matrix:
+
+| Failure context | Required evidence |
+|---|---|
+| All failures | Persisted action, target snapshot, and one final/unknown result per target |
+| Device still connected | Current screenshot, foreground package/activity, redacted recent logcat, mapped input, worker/Appium timing |
+| Bridge-ready device | Latest bridge state plus arm/ACK/rejection records and timing uncertainty |
+| Disconnected device | Last buffered redacted logs and an explicit unavailable record for captures that require a live transport |
+| Recovery decision | User/system decision, actor, time, reason, new action/rejoin relationship |
+
+The evidence gate passes only when every required item is `READY` or has an allowed, explicit unavailability reason for that failure class. “Capture failed” without a categorized reason is itself a failed acceptance result.
+
 ## 18. Reports and Exports
 
 Automatic outputs:
@@ -453,19 +524,24 @@ Optional outputs:
 
 Optional exports are user-triggered jobs. Their failure cannot invalidate the completed run or the default HTML/ZIP.
 
+Before publication, logcat and text evidence pass through configured secret/PII redaction. HTML escapes all device, package, log, and user-controlled fields; Excel neutralizes formula-leading values; ZIP output uses streaming ZIP64 into a temporary file followed by hash verification and atomic rename.
+
 ## 19. Security and Safety
 
-1. Bind the management console and API to `127.0.0.1` by default.
-2. Do not start Appium with relaxed security.
-3. Validate every ADB operation through a typed command allowlist and explicit serial.
-4. Expose no arbitrary shell endpoint or UI field.
-5. Require explicit confirmation for clear data and uninstall.
-6. Compile bridge receiver/state code only in QA builds.
-7. Keep bridge announcements metadata-only; never expose arbitrary gameplay invocation.
-8. Mask synchronized text in evidence by default.
-9. Store no external account passwords because game accounts are device-derived.
-10. Keep keystore passwords out of SQLite, process arguments where avoidable, logs, diagnostics, and reports; persist secrets only through an OS-backed credential store when the user opts in.
-11. Record tool versions and hashes in diagnostics and reports.
+1. Bind the management console, API, Appium, and helper transports to explicit loopback addresses by default; do not treat loopback binding alone as authentication.
+2. Generate a random credential on each launcher start. The launcher opens a one-time bootstrap URL that exchanges its code for an HttpOnly, SameSite=Strict session cookie; the code is immediately invalidated and is never written to logs.
+3. Enforce strict `Host`, `Origin`, CORS, WebSocket-origin, CSRF-token, and content-security-policy checks. Reject DNS-rebinding and cross-site HTTP/WebSocket attempts in automated security tests.
+4. Destructive operations require a server-issued, single-use confirmation nonce bound to the authenticated session, operation, serials, and expiry; a client-side dialog alone is insufficient.
+5. Do not start Appium with relaxed security.
+6. Validate every ADB operation through a typed command allowlist and explicit serial.
+7. Expose no arbitrary shell endpoint or UI field.
+8. Compile bridge receiver/state code only in QA builds. Protect arm traffic with the per-run nonce over an ADB-only/non-public transport.
+9. Keep bridge announcements metadata-only; never expose arbitrary gameplay invocation.
+10. Add a release-build negative test proving the receiver, exported component, listening socket, and `QA_*` log output are absent.
+11. Mask synchronized text in evidence by default.
+12. Store no external account passwords because game accounts are device-derived.
+13. Keep keystore passwords out of SQLite, process arguments where avoidable, logs, diagnostics, and reports; persist secrets only through an OS-backed credential store when the user opts in.
+14. Record tool versions and hashes in diagnostics and reports.
 
 ## 20. Storage and Retention
 
@@ -473,9 +549,11 @@ Proposed layout:
 
 ```text
 E:\Projects\UnityMultiDeviceTestCenter\
-  apps\                 source packages and generated install sets
+  apps\                 source applications: server, console, launcher
+  packages\             contracts, adapters, reports, Unity QA bridge
   data\
     app.db               SQLite metadata
+    artifacts\           imported packages and generated install sets
     logs\                host and service logs
     runs\<runId>\
       run.json
@@ -486,7 +564,6 @@ E:\Projects\UnityMultiDeviceTestCenter\
         logcat\
         state\
       reports\
-  packages\unity-qa-bridge\
   tools\                 pinned runtime and external tools
 ```
 
@@ -537,6 +614,7 @@ Every milestone follows the same gate:
 Scope:
 
 - Establish project layout and pinned-runtime rules.
+- Establish version manifests and download/hash rules for project-local dependencies without changing global PATH or machine environment variables.
 - Detect E-drive storage, ADB, Java, bundletool, Appium, UiAutomator2, scrcpy, and port readiness.
 - Display actionable diagnostics without changing system environment variables.
 
@@ -553,6 +631,7 @@ Evidence: self-check page, automated checks, and diagnostic JSON.
 Scope:
 
 - Launcher/service lifecycle.
+- Reproducible project-local Node/dependency provisioning from lockfiles and the M0 version manifest.
 - React shell and navigation.
 - API/WebSocket health.
 - SQLite migrations and E-drive data initialization.
@@ -603,6 +682,7 @@ Scope:
 
 - APK install.
 - AAB conversion/signing/install.
+- Installation/data generation tracking and UID invalidation on destructive mutations.
 - Optional clear-data confirmation.
 - Launch and package/version/foreground verification.
 
@@ -611,6 +691,7 @@ Acceptance:
 - APK and AAB paths work on one real device.
 - Each step has an explicit state/log and can retry safely.
 - Signing-profile and installed-signer mismatches fail with actionable diagnostics and never leak credentials.
+- Clear-data/uninstall invalidates the prior UID and requires a current-generation observation or manual confirmation.
 - Installed-version mismatch is visible and blocks an incompatible run.
 
 Evidence: deployment log, installed version, and device screenshot.
@@ -619,15 +700,17 @@ Evidence: deployment log, installed version, and device screenshot.
 
 Scope:
 
-- Versioned bridge package.
-- UID, safe area, orientation, view/state, and action correlation contract.
+- Versioned bridge package plus a minimal QA target scene/build fixture used only for contract and coordinate verification.
+- UID/generation, safe area, orientation/metrics epoch, view/focus/state, clock calibration, and arm/ACK correlation contract.
 - Serial-to-UID storage and degraded non-bridge behavior.
 
 Acceptance:
 
 - QA package binds correct UID to current serial and version.
+- Arm handshake rejects stale instance, nonce, descriptor, focus, metrics epoch, and TTL values.
 - State updates are parsed without leaking unrelated logcat text.
 - Non-QA package is marked degraded, never falsely bridge-ready.
+- A release build contains no active receiver/socket or `QA_*` log path.
 
 Evidence: bridge fixtures, real `QA_STATE`, and Devices page.
 
@@ -638,15 +721,18 @@ Scope:
 - `ViewProvider` primary/fallback spike.
 - Leader stream embedded in console.
 - Overlay pointer capture.
-- One-device run, action persistence, and evidence finish.
+- One-device run, sequential transactional action/outbox persistence, crash reconciliation, and minimal evidence manifest.
 
 Acceptance:
 
 - One visible gesture creates exactly one action.
 - Input is injected by the worker, not duplicated by the video provider.
-- A one-device run completes with a valid report.
+- Client retries are idempotent, one group action is in flight, and a forced service crash produces explicit `UNKNOWN`/`CANCELLED` results without replay.
+- Primary stream reaches first frame within 5 seconds, sustains at least 20 FPS with host-receive-to-browser-render P95 at most 250 ms for 10 minutes, and keeps a bounded two-frame queue.
+- Rotation/metrics change cancels pending input, pauses dispatch, and restores a correctly mapped stream within 3 seconds after geometry stabilizes.
+- A one-device run completes with an indexed action/evidence manifest. Mandatory HTML/ZIP reporting remains owned by M10.
 
-Evidence: session recording, action timeline, and report.
+Evidence: session recording, action timeline, and indexed evidence manifest.
 
 ### M7: One Leader and One Follower
 
@@ -654,13 +740,14 @@ Scope:
 
 - Concurrent two-worker dispatch.
 - Safe-area coordinate mapping.
-- Per-device results and bridge receipts.
+- Per-device results, calibrated bridge receipts, membership epochs, and worker-generation fencing.
 
 Acceptance:
 
 - At least 99 of 100 taps hit the QA target.
 - Twenty straight swipes finish within 2% of safe-viewport dimensions.
-- Back and representative ASCII/CJK test text reproduce correctly.
+- Dispatch-start skew P95 is at most 50 ms and calibrated Unity receipt skew P95 is at most 250 ms when clock uncertainty is within bounds.
+- Leader loss pauses the run; follower quarantine/rejoin increments epochs and never accepts a late old-worker result.
 
 Evidence: two-device action/coordinate/receipt report.
 
@@ -671,10 +758,12 @@ Scope:
 - Run selection for 1, 2, 3, or 4 devices.
 - One leader plus 0-3 followers.
 - Four isolated sessions, ports, previews, logs, and evidence paths.
+- Deployment to 1-4 selected devices, including per-device AAB install-set generation and full installed-identity comparison.
 
 Acceptance:
 
 - All four capacity combinations create and finish correctly.
+- APK, AAB, and installed-version identity checks work for every selected device without reusing an incompatible device-specific install set.
 - Four devices sustain 30 minutes and 1,000 actions.
 - Zero serial cross-talk, port collision, or evidence overwrite.
 
@@ -691,6 +780,7 @@ Scope:
 Acceptance:
 
 - Each action type passes on representative devices.
+- Back and representative ASCII/CJK text reproduce correctly; synchronized text is rejected unless every target proves a matching trusted focus.
 - Faults pause or quarantine within two seconds.
 - No reconnect automatically replays an uncertain action.
 - Retry creates a linked new action.
@@ -705,12 +795,15 @@ Scope:
 - Offline HTML.
 - Evidence ZIP manifest and hashes.
 - Interrupted-run partial report.
+- Transactional `FINALIZING`/`FINALIZATION_FAILED` recovery and mandatory-capture matrix.
+- Redaction, HTML escaping, spreadsheet-safe shared values, and streaming ZIP64 publication.
 
 Acceptance:
 
 - Normal, failed, and interrupted samples open without the service running.
 - Every failed action links to all available per-device evidence.
-- Missing evidence is labeled, not hidden.
+- Every mandatory item is ready or has an allowed categorized unavailability reason; uncategorized capture loss fails acceptance.
+- Forced crashes during evidence/report writes leave no published partial files and can retry finalization without replaying actions.
 
 Evidence: three report fixtures and integrity checks.
 
@@ -727,6 +820,8 @@ Acceptance:
 - Default remains HTML/ZIP.
 - Every optional format is selectable and validated.
 - A clean extracted directory starts successfully and runs self-check.
+- From that clean extracted directory, one real device completes artifact selection/deployment, run, default report, and optional export smoke tests.
+- A 60-minute run completes without crash or sustained linear post-warmup memory growth.
 - Documentation covers device onboarding, package testing, recovery, cleanup, and future BuildProvider integration.
 
 Evidence: export samples and clean-directory smoke test.
@@ -737,6 +832,7 @@ Evidence: export samples and clean-directory smoke test.
 
 - Coordinate transforms and orientation rejection.
 - Run/action state machines.
+- Client idempotency, action sequencing, membership epochs, and worker-generation fencing.
 - Port allocation and serial isolation.
 - Command allowlist and dangerous-operation confirmation.
 - Retry/parent action behavior.
@@ -748,6 +844,7 @@ Evidence: export samples and clean-directory smoke test.
 - Fake and recorded ADB responses.
 - Fake Appium clients and session errors.
 - Bridge state/ack parsers and schema compatibility.
+- Bridge arm nonce/instance/TTL/descriptor/focus/metrics rejection and clock-calibration uncertainty.
 - ViewProvider primary/fallback contract.
 - BuildProvider import/future-provider contract.
 
@@ -756,7 +853,9 @@ Evidence: export samples and clean-directory smoke test.
 - SQLite migrations and transaction recovery.
 - Content-addressed artifact storage.
 - Deployment state persistence and retry.
+- Per-device AAB install-set identity and UID invalidation after data/install generation changes.
 - Interrupted-run recovery.
+- Action-outbox crash reconciliation and atomic evidence/report publication.
 - Report and export pipelines.
 
 ### 23.4 Browser End-to-End Tests
@@ -765,6 +864,7 @@ Evidence: export samples and clean-directory smoke test.
 - Empty, loading, error, disconnected, and paused states.
 - Browser refresh during an active run.
 - Destructive confirmation and masked text behavior.
+- Host/Origin/CORS/CSRF/WebSocket-origin/DNS-rebinding rejection and one-time destructive confirmation nonces.
 - Responsive layout at supported desktop and diagnostic mobile widths.
 
 ### 23.5 Physical Device Tests
@@ -781,13 +881,14 @@ If the necessary number of devices is unavailable, automated fake-adapter tests 
 | Metric | First-version target |
 |---|---|
 | Dispatch-start skew | Four-device P95 at most 50 ms |
-| Unity bridge receipt skew | Four-device P95 at most 250 ms |
+| Unity bridge receipt skew | Four-device calibrated P95 at most 250 ms; every sample reports clock uncertainty and is excluded/labeled unavailable when uncertainty exceeds the configured bound |
+| Leader stream | First frame at most 5 seconds; at least 20 FPS and host-receive-to-browser-render P95 at most 250 ms during the M6 primary-provider gate |
 | Fault response | Pause or quarantine within 2 seconds |
 | QA target taps | At least 99/100 hits |
 | Straight-swipe endpoint | Error at most 2% of safe-viewport dimension |
 | Four-device soak | 30 minutes and 1,000 actions with no cross-talk, port collision, or evidence overwrite |
 | Extended stability | 60-minute run with no crash and no sustained linear post-warmup memory growth |
-| Failed-action evidence | 100% association to all evidence that was successfully captured; missing items explicitly labeled |
+| Failed-action evidence | 100% of mandatory items ready or carrying an allowed categorized unavailability reason; uncategorized capture loss is a failure |
 
 These are low-latency synchronization targets, not frame-lock guarantees. USB scheduling, Appium execution, device frame rate, thermal state, and game/network state can create visible skew.
 
@@ -800,13 +901,13 @@ The project is complete only when:
 3. The portable Windows directory starts from a clean extracted location on `E:`.
 4. The management console exposes every confirmed page and state.
 5. APK, AAB, and installed-version flows are verified.
-6. Single-device and 1-3 follower modes are verified.
+6. Single-device and 1-3 follower modes are verified, including fixed membership, leader-loss pause, fenced rejoin, and multi-device deployment.
 7. Both failure policies and no-auto-replay behavior are proven through fault injection.
-8. Default and optional reports pass integrity/layout checks.
+8. Default and optional reports pass atomic publication, security, integrity, and layout checks.
 9. QA Bridge and non-Bridge degraded behavior are documented and verified.
 10. User and maintenance documentation is complete.
 11. Known later scope remains behind explicit provider/adapter interfaces and is not represented as implemented.
 
 ## 26. Written-Spec Review Gate
 
-This document is the implementation contract. After it is committed, the user reviews the written file. Only after written approval will the `writing-plans` workflow create the detailed implementation plan. Implementation does not begin from this design approval alone.
+This document is the implementation contract. The original written design was approved before implementation planning. The implementation-safety amendments added during plan review do not change the selected product form or feature scope; they close action-ordering, identity, timing, security, persistence, evidence, and milestone-ownership gaps. The amended document and detailed plans are reviewed together before M0 begins.
