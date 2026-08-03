@@ -1,0 +1,22 @@
+{
+  "name": "@test-center/environment",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./process-runner": {
+      "types": "./dist/process-runner.d.ts",
+      "import": "./dist/process-runner.js"
+    },
+    "./tool-resolver": {
+      "types": "./dist/tool-resolver.d.ts",
+      "import": "./dist/tool-resolver.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/contracts": "0.0.0"
+  }
+}
