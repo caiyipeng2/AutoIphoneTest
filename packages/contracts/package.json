@@ -1,0 +1,22 @@
+{
+  "name": "@test-center/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/environment.d.ts",
+      "import": "./dist/environment.js"
+    },
+    "./environment": {
+      "types": "./dist/environment.d.ts",
+      "import": "./dist/environment.js"
+    }
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}
