@@ -13,3 +13,7 @@ playwright-report/
 *.trx
 *.log
 *.tmp
+output/
+**/bin/
+**/obj/
+**/*.tsbuildinfo

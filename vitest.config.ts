@@ -40,7 +40,7 @@ export default defineConfig({
     ],
   },
   test: {
-    include: ["apps/*/src/**/*.test.ts", "packages/*/src/**/*.test.ts"],
+    include: ["apps/*/src/**/*.test.ts", "apps/*/src/**/*.test.tsx", "packages/*/src/**/*.test.ts"],
     exclude: ["**/dist/**"],
   },
 });

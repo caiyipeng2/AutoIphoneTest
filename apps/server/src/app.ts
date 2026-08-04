@@ -1,7 +1,10 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
+import fastifyStatic from "@fastify/static";
 import websocket from "@fastify/websocket";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 import type { HealthSnapshot } from "@test-center/contracts/health";
 import { BootstrapSessionStore } from "@test-center/security/bootstrap-session";
@@ -19,6 +22,7 @@ export interface CreateAppOptions {
   readonly launchSecret?: string;
   readonly bootstrapStore?: BootstrapSessionStore;
   readonly healthSnapshot?: HealthSnapshot;
+  readonly consoleDist?: string;
 }
 
 export async function createApp(options: CreateAppOptions): Promise<FastifyInstance> {
@@ -55,6 +59,10 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
     },
   });
   await app.register(websocket);
+  const consoleDist = options.consoleDist ?? join(process.cwd(), "apps", "console", "dist");
+  if (existsSync(join(consoleDist, "index.html"))) {
+    await app.register(fastifyStatic, { root: consoleDist, prefix: "/", wildcard: false });
+  }
   app.addHook("onRequest", async (request, reply) => {
     try {
       assertAllowedHost(request.headers.host, options.port);
