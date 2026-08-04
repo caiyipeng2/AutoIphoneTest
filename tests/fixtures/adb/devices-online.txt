@@ -1,0 +1,4 @@
+* daemon started successfully *
+List of devices attached
+R5CX211TXNT	device product:epic6 model:SM-S9280 device:e3q transport_id:1
+
