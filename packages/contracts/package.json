@@ -22,6 +22,10 @@
     "./settings": {
       "types": "./dist/settings.d.ts",
       "import": "./dist/settings.js"
+    },
+    "./launcher-ipc": {
+      "types": "./dist/launcher-ipc.d.ts",
+      "import": "./dist/launcher-ipc.js"
     }
   },
   "dependencies": {

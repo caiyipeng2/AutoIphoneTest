@@ -8,6 +8,9 @@ const contractsSource = fileURLToPath(
 const environmentSource = fileURLToPath(
   new URL("./packages/environment/src/", import.meta.url),
 ).replaceAll("\\", "/");
+const securitySource = fileURLToPath(
+  new URL("./packages/security/src/", import.meta.url),
+).replaceAll("\\", "/");
 
 export default defineConfig({
   resolve: {
@@ -29,6 +32,10 @@ export default defineConfig({
       {
         find: /^@test-center\/contracts\/(health|settings)$/,
         replacement: `${contractsSource}$1.ts`,
+      },
+      {
+        find: /^@test-center\/security\/(.+)$/,
+        replacement: `${securitySource}$1.ts`,
       },
     ],
   },
