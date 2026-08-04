@@ -10,6 +10,7 @@ export const EXPECTED_JAVA_VERSION = "17.0.19";
 export interface JavaSnapshot {
   readonly present: boolean;
   readonly resolvedPath?: string;
+  readonly diagnosticPaths?: readonly string[];
   readonly versionOutput?: string;
   readonly exitCode?: number | null;
   readonly timedOut?: boolean;
@@ -72,13 +73,26 @@ export function classifyVersionedRuntime(options: VersionedRuntimeOptions): Prob
     ...(options.snapshot.resolvedPath === undefined
       ? {}
       : { resolvedPath: options.snapshot.resolvedPath }),
-    facts: { expectedVersion: options.expectedVersion },
+    facts: {
+      expectedVersion: options.expectedVersion,
+      ...(options.snapshot.diagnosticPaths === undefined
+        ? {}
+        : { diagnosticPaths: [...options.snapshot.diagnosticPaths] }),
+    },
   };
   if (!options.snapshot.present) {
+    const diagnosticOnly = (options.snapshot.diagnosticPaths?.length ?? 0) > 0;
     return {
       ...base,
       severity,
-      errors: [{ category: "NOT_FOUND", message: `${options.label} was not found.` }],
+      errors: [
+        {
+          category: diagnosticOnly ? "PATH_UNRESOLVED" : "NOT_FOUND",
+          message: diagnosticOnly
+            ? `${options.label} was found only at diagnostic-only paths and is not trusted for execution.`
+            : `${options.label} was not found.`,
+        },
+      ],
     };
   }
   if (

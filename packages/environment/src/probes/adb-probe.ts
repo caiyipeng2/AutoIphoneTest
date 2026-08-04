@@ -10,6 +10,7 @@ export const EXPECTED_ADB_VERSION = "35.0.0";
 export interface AdbSnapshot {
   readonly present: boolean;
   readonly resolvedPath?: string;
+  readonly diagnosticPaths?: readonly string[];
   readonly versionOutput?: string;
   readonly versionExitCode?: number | null;
   readonly devicesOutput?: string;
@@ -52,12 +53,27 @@ export function classifyAdbSnapshot(
   expectedVersion = EXPECTED_ADB_VERSION,
 ): ProbeResult {
   if (!snapshot.present) {
+    const diagnosticOnly = (snapshot.diagnosticPaths?.length ?? 0) > 0;
     return {
       id: "adb",
       severity: "DEGRADED",
       durationMs,
-      facts: { expectedVersion, devices: [], onlineCount: 0 },
-      errors: [{ category: "NOT_FOUND", message: "ADB was not found." }],
+      facts: {
+        expectedVersion,
+        ...(snapshot.diagnosticPaths === undefined
+          ? {}
+          : { diagnosticPaths: [...snapshot.diagnosticPaths] }),
+        devices: [],
+        onlineCount: 0,
+      },
+      errors: [
+        {
+          category: diagnosticOnly ? "PATH_UNRESOLVED" : "NOT_FOUND",
+          message: diagnosticOnly
+            ? "ADB was found only at diagnostic-only paths and is not trusted for execution."
+            : "ADB was not found.",
+        },
+      ],
     };
   }
 

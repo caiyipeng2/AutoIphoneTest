@@ -10,6 +10,7 @@ export const EXPECTED_NODE_VERSION = "v22.23.1";
 export interface NodeSnapshot {
   readonly present: boolean;
   readonly resolvedPath?: string;
+  readonly diagnosticPaths?: readonly string[];
   readonly versionOutput?: string;
   readonly exitCode?: number | null;
   readonly timedOut?: boolean;

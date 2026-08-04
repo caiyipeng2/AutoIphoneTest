@@ -1,0 +1,13 @@
+{
+  "name": "@test-center/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@test-center/contracts": "0.0.0",
+    "@test-center/environment": "0.0.0"
+  }
+}

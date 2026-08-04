@@ -10,6 +10,7 @@ export const EXPECTED_SCRCPY_VERSION = "scrcpy 3.1";
 export interface ScrcpySnapshot {
   readonly present: boolean;
   readonly resolvedPath?: string;
+  readonly diagnosticPaths?: readonly string[];
   readonly versionOutput?: string;
   readonly exitCode?: number | null;
   readonly timedOut?: boolean;
@@ -43,10 +44,23 @@ export function classifyScrcpySnapshot(
   expectedVersion = EXPECTED_SCRCPY_VERSION,
 ): ProbeResult {
   const version = snapshot.versionOutput?.match(/\bscrcpy\s+\d+\.\d+(?:\.\d+)?\b/i)?.[0];
-  const facts = { expectedVersion };
+  const facts = {
+    expectedVersion,
+    ...(snapshot.diagnosticPaths === undefined
+      ? {}
+      : { diagnosticPaths: [...snapshot.diagnosticPaths] }),
+  };
 
   if (!snapshot.present) {
-    return degraded(durationMs, facts, "NOT_FOUND", "scrcpy was not found.");
+    const diagnosticOnly = (snapshot.diagnosticPaths?.length ?? 0) > 0;
+    return degraded(
+      durationMs,
+      facts,
+      diagnosticOnly ? "PATH_UNRESOLVED" : "NOT_FOUND",
+      diagnosticOnly
+        ? "scrcpy was found only at diagnostic-only paths and is not trusted for execution."
+        : "scrcpy was not found.",
+    );
   }
   if (snapshot.resolvedPath === undefined || !win32.isAbsolute(snapshot.resolvedPath)) {
     return degraded(
@@ -103,7 +117,7 @@ export function classifyScrcpySnapshot(
 
 function degraded(
   durationMs: number,
-  facts: Readonly<Record<string, string>>,
+  facts: ProbeResult["facts"],
   category: string,
   message: string,
   resolvedPath?: string,
