@@ -14,6 +14,14 @@
     "./tool-resolver": {
       "types": "./dist/tool-resolver.d.ts",
       "import": "./dist/tool-resolver.js"
+    },
+    "./run-diagnostic": {
+      "types": "./dist/run-diagnostic.d.ts",
+      "import": "./dist/run-diagnostic.js"
+    },
+    "./probes/*": {
+      "types": "./dist/probes/*.d.ts",
+      "import": "./dist/probes/*.js"
     }
   },
   "dependencies": {
