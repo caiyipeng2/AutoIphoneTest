@@ -150,6 +150,35 @@ describe("adb probe classification", () => {
     expect(result.severity).toBe("HEALTHY");
     expect(result.facts).toMatchObject({ onlineCount: 1 });
   });
+
+  it("parses the space-delimited output emitted by a real Windows adb", () => {
+    const result = classifyAdbSnapshot(
+      {
+        present: true,
+        resolvedPath: "D:\\Android\\platform-tools\\adb.exe",
+        versionOutput: "Android Debug Bridge version 1.0.41\r\nVersion 35.0.0-11411520",
+        versionExitCode: 0,
+        devicesOutput:
+          "List of devices attached\r\nR5CX211TXNT            device product:e3qzcx model:SM_S9280 device:e3q transport_id:1\r\n",
+        devicesExitCode: 0,
+        timedOut: false,
+      },
+      durationMs,
+    );
+
+    expect(result.severity).toBe("HEALTHY");
+    expect(result.facts).toMatchObject({
+      onlineCount: 1,
+      devices: [
+        {
+          serial: "R5CX211TXNT",
+          state: "device",
+          model: "SM_S9280",
+          product: "e3qzcx",
+        },
+      ],
+    });
+  });
 });
 
 describe("versioned tool probes", () => {

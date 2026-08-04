@@ -181,12 +181,12 @@ function parseAdbDevices(output: string): AdbDeviceFact[] {
     if (!line || /^List of devices attached$/i.test(line) || line.startsWith("* daemon")) {
       continue;
     }
-    const tabIndex = line.indexOf("\t");
-    if (tabIndex <= 0) {
+    const fields = line.match(/^(\S+)\s+(.+)$/);
+    if (fields === null) {
       continue;
     }
-    const serial = line.slice(0, tabIndex).trim();
-    const descriptor = line.slice(tabIndex + 1).trim();
+    const serial = fields[1] as string;
+    const descriptor = fields[2] as string;
     const state = descriptor.toLowerCase().startsWith("no permissions")
       ? "no permissions"
       : (descriptor.split(/\s+/, 1)[0] ?? "unknown");
