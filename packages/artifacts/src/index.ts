@@ -1,2 +1,5 @@
 export * from "./artifact-repository.js";
 export * from "./content-store.js";
+export * from "./aab-metadata.js";
+export * from "./apk-metadata.js";
+export * from "./tool-commands.js";

@@ -1,0 +1,7 @@
+package: name='com.example.unitygame' versionCode='42' versionName='1.4.2' platformBuildVersionName='15'
+sdkVersion:'26'
+targetSdkVersion:'35'
+application-label:'Unity Game'
+application-debuggable
+launchable-activity: name='com.example.unitygame.MainActivity' label='Unity Game' icon='res/mipmap-xxxhdpi-v4/app_icon.png'
+native-code: 'arm64-v8a' 'armeabi-v7a'
