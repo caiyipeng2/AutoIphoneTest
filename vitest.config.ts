@@ -26,6 +26,10 @@ export default defineConfig({
         find: /^@test-center\/environment\/(.+)$/,
         replacement: `${environmentSource}$1.ts`,
       },
+      {
+        find: /^@test-center\/contracts\/(health|settings)$/,
+        replacement: `${contractsSource}$1.ts`,
+      },
     ],
   },
   test: {

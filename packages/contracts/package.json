@@ -14,6 +14,14 @@
     "./environment": {
       "types": "./dist/environment.d.ts",
       "import": "./dist/environment.js"
+    },
+    "./health": {
+      "types": "./dist/health.d.ts",
+      "import": "./dist/health.js"
+    },
+    "./settings": {
+      "types": "./dist/settings.d.ts",
+      "import": "./dist/settings.js"
     }
   },
   "dependencies": {
