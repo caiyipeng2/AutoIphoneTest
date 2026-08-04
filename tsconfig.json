@@ -4,6 +4,7 @@
     { "path": "./packages/contracts" },
     { "path": "./packages/adb" },
     { "path": "./packages/devices" },
+    { "path": "./packages/artifacts" },
     { "path": "./packages/database" },
     { "path": "./packages/security" },
     { "path": "./packages/environment" },

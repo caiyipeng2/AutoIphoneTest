@@ -22,6 +22,9 @@ const devicesSource = fileURLToPath(new URL("./packages/devices/src/", import.me
   "\\",
   "/",
 );
+const artifactsSource = fileURLToPath(
+  new URL("./packages/artifacts/src/", import.meta.url),
+).replaceAll("\\", "/");
 
 export default defineConfig({
   resolve: {
@@ -59,6 +62,10 @@ export default defineConfig({
       {
         find: /^@test-center\/devices\/(.+)$/,
         replacement: `${devicesSource}$1.ts`,
+      },
+      {
+        find: /^@test-center\/artifacts\/(.+)$/,
+        replacement: `${artifactsSource}$1.ts`,
       },
     ],
   },

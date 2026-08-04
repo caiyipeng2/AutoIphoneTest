@@ -30,6 +30,10 @@
     "./device": {
       "types": "./dist/device.d.ts",
       "import": "./dist/device.js"
+    },
+    "./artifact": {
+      "types": "./dist/artifact.d.ts",
+      "import": "./dist/artifact.js"
     }
   },
   "dependencies": {
