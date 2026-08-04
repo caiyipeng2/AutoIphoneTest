@@ -1,0 +1,27 @@
+{
+  "name": "@test-center/adb",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./commands": {
+      "types": "./dist/commands.d.ts",
+      "import": "./dist/commands.js"
+    },
+    "./adb-client": {
+      "types": "./dist/adb-client.d.ts",
+      "import": "./dist/adb-client.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/contracts": "0.0.0",
+    "@test-center/environment": "0.0.0"
+  }
+}

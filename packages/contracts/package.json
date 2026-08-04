@@ -26,6 +26,10 @@
     "./launcher-ipc": {
       "types": "./dist/launcher-ipc.d.ts",
       "import": "./dist/launcher-ipc.js"
+    },
+    "./device": {
+      "types": "./dist/device.d.ts",
+      "import": "./dist/device.js"
     }
   },
   "dependencies": {
