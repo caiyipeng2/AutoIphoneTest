@@ -7,12 +7,14 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import type { HealthSnapshot } from "@test-center/contracts/health";
+import type { DeviceRegistry } from "@test-center/devices";
 import { BootstrapSessionStore } from "@test-center/security/bootstrap-session";
 import { assertAllowedHost } from "@test-center/security/request-policy";
 
 import { registerBootstrapRoute } from "./routes/bootstrap.js";
 import type { ServerContext } from "./routes/context.js";
 import { registerHealthRoute } from "./routes/health.js";
+import { registerDevicesRoutes } from "./routes/devices.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerStateGateway } from "./ws/state-gateway.js";
 
@@ -23,6 +25,7 @@ export interface CreateAppOptions {
   readonly bootstrapStore?: BootstrapSessionStore;
   readonly healthSnapshot?: HealthSnapshot;
   readonly consoleDist?: string;
+  readonly deviceRegistry?: DeviceRegistry;
 }
 
 export async function createApp(options: CreateAppOptions): Promise<FastifyInstance> {
@@ -45,6 +48,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
         retentionDays: 14,
       },
     },
+    ...(options.deviceRegistry === undefined ? {} : { devices: options.deviceRegistry }),
   };
   const snapshot = options.healthSnapshot ?? createDefaultHealthSnapshot();
 
@@ -75,6 +79,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
   await registerHealthRoute(app, snapshot);
   await registerBootstrapRoute(app, context);
   await registerSettingsRoutes(app, context);
+  await registerDevicesRoutes(app, context);
   await registerStateGateway(app, context, snapshot);
   return app;
 }

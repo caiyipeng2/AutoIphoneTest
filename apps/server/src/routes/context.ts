@@ -1,4 +1,5 @@
 import type { BootstrapSessionStore } from "@test-center/security/bootstrap-session";
+import type { DeviceRegistry } from "@test-center/devices";
 
 export interface ServerSession {
   readonly csrfToken: string;
@@ -15,4 +16,5 @@ export interface ServerContext {
   readonly bootstrapStore: BootstrapSessionStore;
   readonly sessions: Map<string, ServerSession>;
   readonly settings: SettingsState;
+  readonly devices?: DeviceRegistry;
 }

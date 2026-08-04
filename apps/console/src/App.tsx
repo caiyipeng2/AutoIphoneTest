@@ -25,6 +25,7 @@ export function App() {
   const [health, setHealth] = useState<HealthSnapshot | null>(null);
   const [settings, setSettings] = useState<SettingsSnapshot | null>(null);
   const [connected, setConnected] = useState(false);
+  const [deviceRefreshKey, setDeviceRefreshKey] = useState(0);
 
   useEffect(() => {
     const onHash = () => {
@@ -69,6 +70,7 @@ export function App() {
     if (!health) return;
     const socket = openStateStream((event) => {
       if (event.snapshot) setHealth(event.snapshot);
+      if (event.device || event.devices) setDeviceRefreshKey((value) => value + 1);
     }, setConnected);
     return () => socket.close();
   }, [health !== null]);
@@ -79,7 +81,7 @@ export function App() {
   );
   const page =
     route === "devices" ? (
-      <DevicesPage />
+      <DevicesPage refreshKey={deviceRefreshKey} />
     ) : route === "apps" ? (
       <AppsPage />
     ) : route === "deployments" ? (

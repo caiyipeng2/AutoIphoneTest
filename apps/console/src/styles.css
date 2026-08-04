@@ -499,6 +499,24 @@ main {
   gap: 9px;
   margin-bottom: 16px;
 }
+
+.toolbar-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.inline-error {
+  margin: 0 0 12px;
+  color: #a13b32;
+  font-size: 13px;
+}
 .toolbar .button:first-child {
   margin-left: auto;
 }
@@ -532,6 +550,28 @@ main {
   align-items: center;
   gap: 14px;
   padding: 14px 17px;
+}
+
+.tag-list {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.device-edit {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.device-edit input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--text);
+  padding: 7px 9px;
+  font: inherit;
 }
 .table-head {
   color: #899392;

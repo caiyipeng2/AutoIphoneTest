@@ -9,6 +9,7 @@ import type { ServerContext } from "../routes/context.js";
 interface SocketLike {
   send(payload: string): void;
   close(code?: number, reason?: string): void;
+  on?(event: "close", listener: () => void): void;
 }
 
 export async function registerStateGateway(
@@ -23,7 +24,20 @@ export async function registerStateGateway(
       if (requireSession(request, context) === undefined) {
         throw new TypeError("Authentication required.");
       }
-      socket.send(JSON.stringify({ type: "snapshot", eventSeq: 0, snapshot }));
+      socket.send(
+        JSON.stringify({
+          type: "snapshot",
+          eventSeq: context.devices?.eventSeq ?? 0,
+          snapshot,
+          devices: context.devices?.list() ?? [],
+        }),
+      );
+      if (context.devices !== undefined) {
+        const unsubscribe = context.devices.subscribe((event) =>
+          socket.send(JSON.stringify(event)),
+        );
+        socket.on?.("close", unsubscribe);
+      }
     } catch {
       socket.close(1008, "Unauthorized");
     }

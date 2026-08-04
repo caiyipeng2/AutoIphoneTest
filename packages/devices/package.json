@@ -1,0 +1,30 @@
+{
+  "name": "@test-center/devices",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./device-repository": {
+      "types": "./dist/device-repository.d.ts",
+      "import": "./dist/device-repository.js"
+    },
+    "./device-registry": {
+      "types": "./dist/device-registry.d.ts",
+      "import": "./dist/device-registry.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/adb": "0.0.0",
+    "@test-center/contracts": "0.0.0",
+    "@test-center/database": "0.0.0",
+    "better-sqlite3": "13.0.2",
+    "zod": "4.4.3"
+  }
+}

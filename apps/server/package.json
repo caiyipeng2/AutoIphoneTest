@@ -8,7 +8,9 @@
   ],
   "dependencies": {
     "@test-center/contracts": "0.0.0",
+    "@test-center/adb": "0.0.0",
     "@test-center/database": "0.0.0",
+    "@test-center/devices": "0.0.0",
     "@test-center/environment": "0.0.0",
     "@test-center/security": "0.0.0",
     "@fastify/cookie": "11.1.2",

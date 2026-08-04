@@ -7,7 +7,9 @@
     "tsBuildInfoFile": "dist/server.tsbuildinfo"
   },
   "references": [
+    { "path": "../../packages/adb" },
     { "path": "../../packages/contracts" },
+    { "path": "../../packages/devices" },
     { "path": "../../packages/database" },
     { "path": "../../packages/environment" },
     { "path": "../../packages/security" }

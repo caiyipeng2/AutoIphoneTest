@@ -11,6 +11,17 @@ const environmentSource = fileURLToPath(
 const securitySource = fileURLToPath(
   new URL("./packages/security/src/", import.meta.url),
 ).replaceAll("\\", "/");
+const databaseSource = fileURLToPath(
+  new URL("./packages/database/src/", import.meta.url),
+).replaceAll("\\", "/");
+const adbSource = fileURLToPath(new URL("./packages/adb/src/", import.meta.url)).replaceAll(
+  "\\",
+  "/",
+);
+const devicesSource = fileURLToPath(new URL("./packages/devices/src/", import.meta.url)).replaceAll(
+  "\\",
+  "/",
+);
 
 export default defineConfig({
   resolve: {
@@ -36,6 +47,18 @@ export default defineConfig({
       {
         find: /^@test-center\/security\/(.+)$/,
         replacement: `${securitySource}$1.ts`,
+      },
+      {
+        find: /^@test-center\/database\/(.+)$/,
+        replacement: `${databaseSource}$1.ts`,
+      },
+      {
+        find: /^@test-center\/adb\/(.+)$/,
+        replacement: `${adbSource}$1.ts`,
+      },
+      {
+        find: /^@test-center\/devices\/(.+)$/,
+        replacement: `${devicesSource}$1.ts`,
       },
     ],
   },
