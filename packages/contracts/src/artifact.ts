@@ -3,7 +3,7 @@ import { z } from "zod";
 import { DeviceSerialSchema, type DeviceSerial } from "./device.js";
 
 const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/, "SHA-256 must be lowercase hex.");
-const PackageNameSchema = z
+export const AndroidPackageNameSchema = z
   .string()
   .regex(/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/, "Invalid Android package name.");
 
@@ -17,7 +17,7 @@ export const SourceArtifactSchema = z.object({
   sizeBytes: z.number().int().nonnegative(),
   storedPath: z.string().min(1),
   originalName: z.string().min(1).max(128),
-  packageName: PackageNameSchema.optional(),
+  packageName: AndroidPackageNameSchema.optional(),
   versionName: z.string().min(1).optional(),
   versionCode: z.number().int().nonnegative().optional(),
   signerSha256: Sha256Schema.optional(),
@@ -28,7 +28,7 @@ export const InstalledArtifactSchema = z.object({
   id: z.string().min(1),
   kind: z.literal("INSTALLED"),
   deviceSerial: DeviceSerialSchema,
-  packageName: PackageNameSchema,
+  packageName: AndroidPackageNameSchema,
   versionName: z.string().min(1),
   versionCode: z.number().int().nonnegative(),
   signerSha256: Sha256Schema,
@@ -53,4 +53,8 @@ export interface ArtifactMetadata {
   readonly versionName?: string;
   readonly versionCode?: number;
   readonly signerSha256?: string;
+}
+
+export function parseAndroidPackageName(value: string): string {
+  return AndroidPackageNameSchema.parse(value);
 }

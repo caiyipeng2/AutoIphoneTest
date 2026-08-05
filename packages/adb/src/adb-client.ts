@@ -20,6 +20,11 @@ export interface AdbClientOptions {
   readonly runner?: AdbProcessRunner;
 }
 
+export interface AdbExecuteOptions {
+  readonly maxOutputBytes?: number;
+  readonly stdoutSink?: (chunk: Buffer) => void;
+}
+
 export class AdbClient {
   private readonly adbPath: string;
   private readonly cwd: string;
@@ -47,7 +52,10 @@ export class AdbClient {
     this.runner = options.runner ?? new ProcessRunner();
   }
 
-  public async execute(command: AdbCommand): Promise<ProcessResult> {
+  public async execute(
+    command: AdbCommand,
+    options: AdbExecuteOptions = {},
+  ): Promise<ProcessResult> {
     const serial = commandSerial(command);
     const spec: ProcessSpec = {
       executableId: "adb",
@@ -58,6 +66,8 @@ export class AdbClient {
       timeoutMs: this.timeoutMs,
       serialRequirement: serial === undefined ? "optional" : "required",
       ...(serial === undefined ? {} : { serial }),
+      ...(options.maxOutputBytes === undefined ? {} : { maxOutputBytes: options.maxOutputBytes }),
+      ...(options.stdoutSink === undefined ? {} : { stdoutSink: options.stdoutSink }),
     };
     return await this.runner.run(spec);
   }

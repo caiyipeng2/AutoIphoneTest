@@ -61,4 +61,55 @@ describe("serial-bound adb commands", () => {
     expect(calls[0]).toMatchObject({ executableId: "adb", args: ["get-state"], serial });
     expect(calls[0]?.args).not.toContain("-s");
   });
+
+  it("renders package identity commands with explicit serial and package", () => {
+    expect(
+      renderAdbCommand({ kind: "packagePaths", serial, packageName: "com.example.game" }),
+    ).toEqual(["-s", serial, "shell", "pm", "path", "com.example.game"]);
+    expect(
+      renderAdbCommand({ kind: "packageDetails", serial, packageName: "com.example.game" }),
+    ).toEqual(["-s", serial, "shell", "dumpsys", "package", "com.example.game"]);
+    expect(
+      renderAdbCommand({ kind: "resolveActivity", serial, packageName: "com.example.game" }),
+    ).toEqual([
+      "-s",
+      serial,
+      "shell",
+      "cmd",
+      "package",
+      "resolve-activity",
+      "--brief",
+      "com.example.game",
+    ]);
+    expect(
+      renderAdbCommand({
+        kind: "streamPackageFile",
+        serial,
+        packageName: "com.example.game",
+        filePath: "/data/app/x/base.apk",
+      }),
+    ).toEqual(["-s", serial, "exec-out", "cat", "/data/app/x/base.apk"]);
+  });
+
+  it("rejects invalid package names and paths outside the package directory", () => {
+    expect(() =>
+      renderAdbCommand({ kind: "packagePaths", serial, packageName: "bad package" }),
+    ).toThrow();
+    expect(() =>
+      renderAdbCommand({
+        kind: "streamPackageFile",
+        serial,
+        packageName: "com.example.game",
+        filePath: "/sdcard/game.apk",
+      }),
+    ).toThrow(/data\/app/);
+    expect(() =>
+      renderAdbCommand({
+        kind: "streamPackageFile",
+        serial,
+        packageName: "com.example.game",
+        filePath: "/data/app/../secret.apk",
+      }),
+    ).toThrow(/data\/app/);
+  });
 });

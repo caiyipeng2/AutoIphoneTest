@@ -1,3 +1,4 @@
+import { parseAndroidPackageName } from "@test-center/contracts/artifact";
 import { DeviceSerialSchema, type DeviceSerial } from "@test-center/contracts/device";
 
 export const ALLOWLISTED_GETPROP_KEYS = [
@@ -23,7 +24,22 @@ export type AdbDeviceCommand =
   | { readonly kind: "dumpsysBattery"; readonly serial: DeviceSerial }
   | { readonly kind: "dumpsysDisplay"; readonly serial: DeviceSerial };
 
-export type AdbCommand = AdbDiscoveryCommand | AdbDeviceCommand;
+export type AdbPackageCommand =
+  | { readonly kind: "packagePaths"; readonly serial: DeviceSerial; readonly packageName: string }
+  | { readonly kind: "packageDetails"; readonly serial: DeviceSerial; readonly packageName: string }
+  | {
+      readonly kind: "resolveActivity";
+      readonly serial: DeviceSerial;
+      readonly packageName: string;
+    }
+  | {
+      readonly kind: "streamPackageFile";
+      readonly serial: DeviceSerial;
+      readonly packageName: string;
+      readonly filePath: string;
+    };
+
+export type AdbCommand = AdbDiscoveryCommand | AdbDeviceCommand | AdbPackageCommand;
 
 export function renderAdbCommand(command: AdbCommand): string[] {
   if (command.kind === "devices") {
@@ -47,7 +63,44 @@ export function renderAdbCommand(command: AdbCommand): string[] {
       return ["-s", serial, "shell", "dumpsys", "battery"];
     case "dumpsysDisplay":
       return ["-s", serial, "shell", "dumpsys", "display"];
+    case "packagePaths":
+      return ["-s", serial, "shell", "pm", "path", parseAndroidPackageName(command.packageName)];
+    case "packageDetails":
+      return [
+        "-s",
+        serial,
+        "shell",
+        "dumpsys",
+        "package",
+        parseAndroidPackageName(command.packageName),
+      ];
+    case "resolveActivity":
+      return [
+        "-s",
+        serial,
+        "shell",
+        "cmd",
+        "package",
+        "resolve-activity",
+        "--brief",
+        parseAndroidPackageName(command.packageName),
+      ];
+    case "streamPackageFile":
+      parseAndroidPackageName(command.packageName);
+      return ["-s", serial, "exec-out", "cat", validatePackageFilePath(command.filePath)];
   }
+}
+
+function validatePackageFilePath(value: string): string {
+  if (
+    !value.startsWith("/data/app/") ||
+    value.includes("..") ||
+    value.includes("\\") ||
+    value.includes("\0")
+  ) {
+    throw new TypeError("Installed package file must remain below /data/app/.");
+  }
+  return value;
 }
 
 export function commandSerial(command: AdbCommand): DeviceSerial | undefined {

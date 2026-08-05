@@ -4,11 +4,14 @@ import Database from "better-sqlite3";
 
 import {
   AppArtifactSchema,
+  InstalledArtifactSchema,
   type ArtifactMetadata,
+  type InstalledArtifact,
   type SourceArtifact,
 } from "@test-center/contracts/artifact";
 
 import { ContentStore, type PublishedContent, type StagedContent } from "./content-store.js";
+import type { InstalledIdentity } from "./installed-identity.js";
 
 export interface SourceArtifactInput {
   readonly kind: "APK" | "AAB";
@@ -17,6 +20,11 @@ export interface SourceArtifactInput {
 
 export interface ArtifactPublishResult {
   readonly artifact: SourceArtifact;
+  readonly state: "CREATED" | "DEDUPLICATED";
+}
+
+export interface InstalledArtifactResult {
+  readonly artifact: InstalledArtifact;
   readonly state: "CREATED" | "DEDUPLICATED";
 }
 
@@ -123,6 +131,105 @@ export class ArtifactRepository {
       .map((row) => this.toArtifact(row));
   }
 
+  public registerInstalled(
+    identity: InstalledIdentity,
+    createdAt = new Date().toISOString(),
+  ): InstalledArtifactResult {
+    const existing = this.database
+      .prepare<
+        [string, string, number, string, string],
+        {
+          id: string;
+          device_serial: string;
+          package_name: string;
+          version_name: string;
+          version_code: number;
+          signer_sha256: string;
+          installed_set_sha256: string;
+          observed_at: string;
+          created_at: string;
+        }
+      >(
+        `SELECT id, device_serial, package_name, version_name, version_code, signer_sha256,
+                installed_set_sha256, observed_at, created_at
+         FROM artifacts
+         WHERE kind = 'INSTALLED' AND device_serial = ? AND package_name = ? AND version_code = ?
+           AND signer_sha256 = ? AND installed_set_sha256 = ?`,
+      )
+      .get(
+        identity.deviceSerial,
+        identity.packageName,
+        identity.versionCode,
+        identity.signerSha256,
+        identity.installedSetSha256,
+      );
+    if (existing !== undefined) {
+      return { artifact: this.toInstalledArtifact(existing), state: "DEDUPLICATED" };
+    }
+    const artifact = InstalledArtifactSchema.parse({
+      id: randomUUID(),
+      kind: "INSTALLED",
+      deviceSerial: identity.deviceSerial,
+      packageName: identity.packageName,
+      versionName: identity.versionName,
+      versionCode: identity.versionCode,
+      signerSha256: identity.signerSha256,
+      installedSetSha256: identity.installedSetSha256,
+      observedAt: identity.observedAt,
+      createdAt,
+    }) as InstalledArtifact;
+    const insert = this.database.transaction(() => {
+      this.database
+        .prepare(
+          `INSERT INTO artifacts (id, kind, device_serial, package_name, version_name, version_code, signer_sha256, installed_set_sha256, observed_at, metadata_json, created_at)
+           VALUES (?, 'INSTALLED', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          artifact.id,
+          artifact.deviceSerial,
+          artifact.packageName,
+          artifact.versionName,
+          artifact.versionCode,
+          artifact.signerSha256,
+          artifact.installedSetSha256,
+          artifact.observedAt,
+          JSON.stringify({}),
+          artifact.createdAt,
+        );
+      this.database
+        .prepare(
+          "INSERT INTO artifact_import_attempts (kind, state, created_at) VALUES ('INSTALLED', 'PUBLISHED', ?)",
+        )
+        .run(createdAt);
+    });
+    insert.immediate();
+    return { artifact, state: "CREATED" };
+  }
+
+  public listInstalled(): InstalledArtifact[] {
+    return this.database
+      .prepare<
+        [],
+        {
+          id: string;
+          device_serial: string;
+          package_name: string;
+          version_name: string;
+          version_code: number;
+          signer_sha256: string;
+          installed_set_sha256: string;
+          observed_at: string;
+          created_at: string;
+        }
+      >(
+        `SELECT id, device_serial, package_name, version_name, version_code, signer_sha256,
+                installed_set_sha256, observed_at, created_at
+         FROM artifacts WHERE kind = 'INSTALLED' ORDER BY created_at DESC`,
+      )
+      .all()
+      .map((row) => this.toInstalledArtifact(row));
+  }
+
   private findSource(kind: SourceArtifactInput["kind"], sha256: string): ArtifactRow | undefined {
     return this.database
       .prepare<[string, string], ArtifactRow>(
@@ -148,6 +255,31 @@ export class ArtifactRepository {
       ...(row.signer_sha256 === null ? {} : { signerSha256: row.signer_sha256 }),
       createdAt: row.created_at,
     }) as SourceArtifact;
+  }
+
+  private toInstalledArtifact(row: {
+    id: string;
+    device_serial: string;
+    package_name: string;
+    version_name: string;
+    version_code: number;
+    signer_sha256: string;
+    installed_set_sha256: string;
+    observed_at: string;
+    created_at: string;
+  }): InstalledArtifact {
+    return InstalledArtifactSchema.parse({
+      id: row.id,
+      kind: "INSTALLED",
+      deviceSerial: row.device_serial,
+      packageName: row.package_name,
+      versionName: row.version_name,
+      versionCode: row.version_code,
+      signerSha256: row.signer_sha256,
+      installedSetSha256: row.installed_set_sha256,
+      observedAt: row.observed_at,
+      createdAt: row.created_at,
+    }) as InstalledArtifact;
   }
 
   private async recordAttempt(

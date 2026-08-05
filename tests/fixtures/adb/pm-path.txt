@@ -1,0 +1,2 @@
+package:/data/app/~~abc/com.example.game-abc/base.apk
+package:/data/app/~~abc/com.example.game-abc/split_config.arm64_v8a.apk

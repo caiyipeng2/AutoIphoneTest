@@ -78,6 +78,24 @@ describe("ProcessRunner", () => {
     expect(result.stderrTruncated).toBe(true);
   });
 
+  it("delivers the complete stdout stream to a sink while retaining a capped preview", async () => {
+    const chunks: Buffer[] = [];
+    const runner = new ProcessRunner({ maxOutputBytes: 1 });
+    const result = await runner.run({
+      executableId: "node",
+      executablePath: process.execPath,
+      args: ["-e", "process.stdout.write('streamed-package-bytes');"],
+      cwd: process.cwd(),
+      env: {},
+      timeoutMs: 2_000,
+      maxOutputBytes: 1,
+      stdoutSink: (chunk) => chunks.push(chunk),
+    });
+    expect(Buffer.concat(chunks).toString()).toBe("streamed-package-bytes");
+    expect(result.stdout).toBe("s");
+    expect(result.stdoutTruncated).toBe(true);
+  });
+
   it("terminates the process tree after a timeout", async () => {
     const sandbox = await mkdtemp(join(tmpdir(), "test-center-timeout-"));
     temporaryDirectories.push(sandbox);

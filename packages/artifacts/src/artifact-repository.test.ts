@@ -15,6 +15,7 @@ import {
 
 import { ArtifactRepository } from "./artifact-repository.js";
 import { ContentStore, type ContentInput } from "./content-store.js";
+import { parseDeviceSerial } from "@test-center/contracts/device";
 
 const roots: string[] = [];
 const databases: Database.Database[] = [];
@@ -77,5 +78,24 @@ describe("artifact repository", () => {
     );
     expect(await readdir(join(root, "sha256"))).toEqual([]);
     expect(await store.listPartialFiles()).toEqual([]);
+  });
+
+  it("deduplicates an installed identity without creating source content", async () => {
+    const { repository } = await createRepository();
+    const identity = {
+      deviceSerial: parseDeviceSerial("R5CX211TXNT"),
+      packageName: "com.example.game",
+      versionName: "1.4.2",
+      versionCode: 42,
+      signerSha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      installedSetSha256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      observedAt: "2026-08-05T10:00:00.000Z",
+    } as const;
+    const first = repository.registerInstalled(identity, "2026-08-05T10:00:01.000Z");
+    const second = repository.registerInstalled(identity, "2026-08-05T10:00:02.000Z");
+    expect(first.state).toBe("CREATED");
+    expect(second.state).toBe("DEDUPLICATED");
+    expect(repository.listInstalled()).toHaveLength(1);
+    expect(repository.list()).toHaveLength(0);
   });
 });

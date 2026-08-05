@@ -48,6 +48,8 @@ export interface ProcessSpec {
   readonly serial?: string;
   readonly serialRequirement?: "required" | "optional" | "forbidden";
   readonly redactedArgumentIndexes?: readonly number[];
+  readonly maxOutputBytes?: number;
+  readonly stdoutSink?: (chunk: Buffer) => void;
 }
 
 export interface ProcessCommandMetadata {
@@ -161,7 +163,7 @@ export class ProcessRunner {
 
     const effectiveArguments = buildEffectiveArguments(spec);
     const command = buildCommandMetadata(spec, effectiveArguments);
-    const stdout = new CappedOutput(this.maximumOutputBytes);
+    const stdout = new CappedOutput(spec.maxOutputBytes ?? this.maximumOutputBytes);
     const stderr = new CappedOutput(this.maximumOutputBytes);
     const startedAt = performance.now();
     let timedOut = false;
@@ -176,7 +178,10 @@ export class ProcessRunner {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-    child.stdout.on("data", (chunk: Buffer) => stdout.append(chunk));
+    child.stdout.on("data", (chunk: Buffer) => {
+      spec.stdoutSink?.(chunk);
+      stdout.append(chunk);
+    });
     child.stderr.on("data", (chunk: Buffer) => stderr.append(chunk));
 
     return await new Promise<ProcessResult>((resolve, reject) => {

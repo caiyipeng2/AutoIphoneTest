@@ -1,0 +1,4 @@
+Package [com.example.game] (123456):
+  versionCode=42 minSdk=26 targetSdk=35
+  versionName=1.4.2
+  signatures: [Signature{0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}]
