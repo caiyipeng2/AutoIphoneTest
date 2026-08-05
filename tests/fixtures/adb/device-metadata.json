@@ -1,0 +1,15 @@
+{
+  "properties": {
+    "ro.product.model": "SM-S9280",
+    "ro.product.name": "epic6",
+    "ro.product.device": "e3q",
+    "ro.product.manufacturer": "samsung",
+    "ro.build.version.release": "16",
+    "ro.build.version.sdk": "36",
+    "ro.product.cpu.abilist": "arm64-v8a,armeabi-v7a,armeabi"
+  },
+  "wmSize": "Physical size: 1440x3088\nOverride size: 1080x2400\n",
+  "wmDensity": "Physical density: 450\nOverride density: 420\n",
+  "battery": "Current Battery Service state:\n  AC powered: true\n  level: 87\n  status: 2\n",
+  "display": "DisplayDeviceInfo{Built-in Screen, uniqueId=local:0, 1440 x 3088, density 3.5, rotation 0, state ON}\n  mCurrentOrientation=1\n"
+}

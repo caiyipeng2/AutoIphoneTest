@@ -1,0 +1,13 @@
+docs/superpowers/
+tools/
+data/
+**/dist/
+node_modules/
+coverage/
+playwright-report/
+TestResults/
+apps/launcher/**/bin/
+apps/launcher/**/obj/
+output/
+data/tools/
+data/e2e/

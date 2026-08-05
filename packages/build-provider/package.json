@@ -1,0 +1,28 @@
+{
+  "name": "@test-center/build-provider",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./build-provider": {
+      "types": "./dist/build-provider.d.ts",
+      "import": "./dist/build-provider.js"
+    },
+    "./artifact-import-provider": {
+      "types": "./dist/artifact-import-provider.d.ts",
+      "import": "./dist/artifact-import-provider.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/artifacts": "0.0.0",
+    "@test-center/contracts": "0.0.0",
+    "zod": "4.4.3"
+  }
+}

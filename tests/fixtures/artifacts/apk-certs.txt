@@ -1,0 +1,2 @@
+Signer #1 certificate DN: CN=Example, OU=QA, O=Example, C=CN
+Signer #1 certificate SHA-256 digest: 01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef

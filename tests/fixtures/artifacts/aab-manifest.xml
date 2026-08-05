@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest package="com.example.unitygame" android:versionCode="42" android:versionName="1.4.2">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+  <application android:debuggable="false" android:label="Unity Game">
+    <activity android:name="com.example.unitygame.MainActivity" />
+  </application>
+</manifest>

@@ -8,5 +8,12 @@ coverage/
 data/
 tools/*
 !tools/tool-manifest.json
+TestResults/
+playwright-report/
+*.trx
 *.log
 *.tmp
+output/
+**/bin/
+**/obj/
+**/*.tsbuildinfo

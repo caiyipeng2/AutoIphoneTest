@@ -1,0 +1,26 @@
+{
+  "name": "@test-center/security",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./bootstrap-session": {
+      "types": "./dist/bootstrap-session.d.ts",
+      "import": "./dist/bootstrap-session.js"
+    },
+    "./request-policy": {
+      "types": "./dist/request-policy.d.ts",
+      "import": "./dist/request-policy.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/contracts": "0.0.0"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "name": "@test-center/environment",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./process-runner": {
+      "types": "./dist/process-runner.d.ts",
+      "import": "./dist/process-runner.js"
+    },
+    "./tool-resolver": {
+      "types": "./dist/tool-resolver.d.ts",
+      "import": "./dist/tool-resolver.js"
+    },
+    "./run-diagnostic": {
+      "types": "./dist/run-diagnostic.d.ts",
+      "import": "./dist/run-diagnostic.js"
+    },
+    "./default-probes": {
+      "types": "./dist/default-probes.d.ts",
+      "import": "./dist/default-probes.js"
+    },
+    "./publish-diagnostic": {
+      "types": "./dist/publish-diagnostic.d.ts",
+      "import": "./dist/publish-diagnostic.js"
+    },
+    "./render-html": {
+      "types": "./dist/render-html.d.ts",
+      "import": "./dist/render-html.js"
+    },
+    "./probes/*": {
+      "types": "./dist/probes/*.d.ts",
+      "import": "./dist/probes/*.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/contracts": "0.0.0"
+  }
+}

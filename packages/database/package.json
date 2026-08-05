@@ -1,0 +1,35 @@
+{
+  "name": "@test-center/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "src/migrations"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./runtime-paths": {
+      "types": "./dist/runtime-paths.d.ts",
+      "import": "./dist/runtime-paths.js"
+    },
+    "./migrations": {
+      "types": "./dist/migrations.d.ts",
+      "import": "./dist/migrations.js"
+    },
+    "./settings-repository": {
+      "types": "./dist/settings-repository.d.ts",
+      "import": "./dist/settings-repository.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/contracts": "0.0.0",
+    "better-sqlite3": "13.0.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13"
+  }
+}
