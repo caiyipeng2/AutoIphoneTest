@@ -19,7 +19,7 @@ npx playwright test tests/e2e/apps.spec.ts
 
 集成测试必须证明：同一内容使用两个文件名导入后只有一个来源制品；第二次返回 `DEDUPLICATED`；半途异常不会遗留 `.partial`；非法非 ZIP 输入返回 `INVALID_FORMAT`；同一设备 UID、包名、版本、签名和安装集摘要重复登记只产生一条已安装记录；最终内容库不含孤儿临时文件。
 
-本次结果：Vitest `28` 个测试文件、`132` 个测试通过；TypeScript、ESLint、控制台生产构建通过；Playwright Apps 页面在桌面和移动项目各 `1` 条通过。新增验收文件已通过定向 Prettier 检查；仓库中既有的三个全局格式告警未在本任务中改写。
+本次结果：Vitest `28` 个测试文件、`135` 个测试通过；TypeScript、ESLint、控制台生产构建通过；Playwright Apps 页面在桌面和移动项目各 `1` 条通过。新增验收文件已通过定向 Prettier 检查；仓库中既有的三个全局格式告警未在本任务中改写。
 
 ## 真机观察
 
@@ -29,12 +29,28 @@ npx playwright test tests/e2e/apps.spec.ts
 $env:TEST_CENTER_DEVICE_SERIAL = "<明确的 adb serial>"
 $env:TEST_CENTER_PACKAGE = "<明确的 Android package name>"
 $env:TEST_CENTER_ADB_PATH = "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\platform-tools\\adb.exe"
+$env:TEST_CENTER_APKSIGNER_PATH = "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\apksigner.bat"
+$env:TEST_CENTER_JAVA_PATH = "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\OpenJDK\\bin\\java.exe"
+$env:TEST_CENTER_APKSIGNER_JAR_PATH = "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\lib\\apksigner.jar"
 node tools/node/22.23.1/node_modules/tsx/dist/cli.mjs tests/hardware/m3-installed-identity.ts
 ```
 
-脚本只读取 `pm path`、`dumpsys package`、启动 Activity 解析和包体流哈希，并与直接 ADB 命令的成功状态及输出长度做对照；输出会写入 `data/milestones/m3-installed-identity-*.json`。本次若未提供两个必需环境变量，脚本以退出码 `2` 明确标记 `M3_HARDWARE_SKIPPED`，不得以猜测的包名替代。
+脚本只读取 `pm path`、`dumpsys package`、启动 Activity 解析和包体流哈希，并用 Unity SDK 的 `java.exe -jar apksigner.jar` 读取 base APK 证书摘要；输出会写入 `data/milestones/m3-installed-identity-*.json`。本次若未提供两个必需环境变量，脚本以退出码 `2` 明确标记 `M3_HARDWARE_SKIPPED`，不得以猜测的包名替代。
 
-本次实际运行结果：`M3_HARDWARE_SKIPPED`，退出码 `2`。当前环境没有提供 `TEST_CENTER_DEVICE_SERIAL` 和 `TEST_CENTER_PACKAGE`，因此没有执行任何设备变更动作，也没有生成真机身份证据 JSON。
+本次实际运行结果：成功，退出码 `0`。
+
+| 字段           | 结果                                                                         |
+| -------------- | ---------------------------------------------------------------------------- |
+| Serial / UID   | `R5CX211TXNT`                                                                |
+| 包名           | `com.hg.idleweaponshoptycoon.android`                                        |
+| 版本           | `2.0.5` / `59`                                                               |
+| SDK            | min `24` / target `35`                                                       |
+| Unity Activity | `com.hg.idleweaponshoptycoon.android/com.unity3d.player.UnityPlayerActivity` |
+| 签名 SHA-256   | `e58cfe3544fd61237a10f6aedcd8f0e117d476f43995fd69717a960a6da58bec`           |
+| 安装集 SHA-256 | `04876e3cb65da2bd05744931550b46d0f668650f22b58277e0ef7c1f3546892d`           |
+| 证据文件       | `data/milestones/m3-installed-identity-1785903254566.json`                   |
+
+`dumpsys package` 在该 Android 16 设备上只提供短签名令牌，不能直接当作证书摘要；实现已回退到 base APK 流式落盘后调用 `apksigner`，并在本地单元测试和上述真机运行中验证。
 
 ## 回滚证明
 
@@ -45,8 +61,8 @@ node tools/node/22.23.1/node_modules/tsx/dist/cli.mjs tests/hardware/m3-installe
 
 ## 已知限制
 
-当前运行时 `RuntimeArtifactRouteService.parse` 仍返回空元数据；APK/AAB 解析器、签名校验和工具供应脚本已存在，但尚未接入真实导入服务。因此当前验收证明了内容哈希、持久化、去重和安全边界，不能宣称包名/版本/签名已由真实包体自动解析。后续接入解析器时应复用现有 `ArtifactImportService.parse` 接口并补充真实 APK/AAB fixture。
+当前运行时 `RuntimeArtifactRouteService.parse` 仍返回空元数据；APK/AAB 解析器、签名校验和工具供应脚本已存在，但尚未接入真实导入服务。因此当前验收证明了内容哈希、持久化、去重、安全边界和已安装身份采集，不能宣称导入来源包体会自动填充包名/版本/签名。后续接入解析器时应复用现有 `ArtifactImportService.parse` 接口并补充真实 APK/AAB fixture。
 
 ## 验收结论
 
-自动化和浏览器流程完成后，只有在显式设备 serial 与包名采集成功、证据 JSON 可复核时，M3 Task6 才可标记为“完成”。缺少真机环境变量或设备不在线时，结论保持“自动化完成，真机观察待确认”。
+自动化、浏览器流程和显式设备身份采集均已在本地完成，证据 JSON 可复核。当前工作区仍等待用户审批，审批前不提交、不合并、不推送。

@@ -2,6 +2,7 @@ import { AdbClient } from "@test-center/adb";
 import {
   collectInstalledIdentity,
   createAdbInstalledIdentityExecutor,
+  createApksignerSignerResolver,
   ArtifactRepository,
   ContentStore,
   type StagedContent,
@@ -48,6 +49,8 @@ export async function createRuntimeDeviceRegistry(
     database,
     new ContentStore({ rootPath: paths.artifactsRoot }),
     client,
+    projectRoot,
+    paths.tempRoot,
   );
   return {
     registry: new DeviceRegistry(new DeviceRepository(database), createAdbDiscoverySource(client)),
@@ -65,9 +68,25 @@ class RuntimeArtifactRouteService implements ArtifactRouteService {
     database: Database.Database,
     private readonly store: ContentStore,
     client: AdbClient,
+    projectRoot: string,
+    tempRoot: string,
   ) {
     this.repository = new ArtifactRepository(database, store);
-    this.installedExecutor = createAdbInstalledIdentityExecutor(client);
+    this.installedExecutor = createAdbInstalledIdentityExecutor(client, {
+      signerSha256: createApksignerSignerResolver(client, {
+        apksignerPath:
+          process.env.TEST_CENTER_APKSIGNER_PATH ??
+          "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\apksigner.bat",
+        javaPath:
+          process.env.TEST_CENTER_JAVA_PATH ??
+          "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\OpenJDK\\bin\\java.exe",
+        apksignerJarPath:
+          process.env.TEST_CENTER_APKSIGNER_JAR_PATH ??
+          "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\lib\\apksigner.jar",
+        cwd: projectRoot,
+        tempRoot,
+      }),
+    });
     const importService: ArtifactImportService = {
       stage: async (request) => await this.stageFile(request),
       parse: async () => ({}),

@@ -5,6 +5,7 @@ import { AdbClient } from "../../packages/adb/src/index.js";
 import {
   collectInstalledIdentity,
   createAdbInstalledIdentityExecutor,
+  createApksignerSignerResolver,
 } from "../../packages/artifacts/src/index.js";
 import { parseAndroidPackageName } from "../../packages/contracts/src/artifact.js";
 import { parseDeviceSerial } from "../../packages/contracts/src/device.js";
@@ -24,7 +25,23 @@ if (serialText === undefined || packageText === undefined) {
     "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\platform-tools\\adb.exe";
   const projectRoot = win32.normalize(process.env.TEST_CENTER_PROJECT_ROOT ?? process.cwd());
   const client = new AdbClient({ adbPath, cwd: projectRoot, timeoutMs: 30_000 });
-  const executor = createAdbInstalledIdentityExecutor(client);
+  const executor = createAdbInstalledIdentityExecutor(client, {
+    signerSha256: createApksignerSignerResolver(client, {
+      apksignerPath:
+        process.env.TEST_CENTER_APKSIGNER_PATH ??
+        "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\apksigner.bat",
+      javaPath:
+        process.env.TEST_CENTER_JAVA_PATH ??
+        "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\OpenJDK\\bin\\java.exe",
+      apksignerJarPath:
+        process.env.TEST_CENTER_APKSIGNER_JAR_PATH ??
+        "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\lib\\apksigner.jar",
+      cwd: projectRoot,
+      tempRoot: win32.normalize(
+        process.env.TEST_CENTER_SIGNER_TEMP_ROOT ?? win32.join(projectRoot, "data", "temp"),
+      ),
+    }),
+  });
   const identity = await collectInstalledIdentity(serial, packageName, executor);
   const [paths, details, activity] = await Promise.all([
     client.execute({ kind: "packagePaths", serial, packageName }),

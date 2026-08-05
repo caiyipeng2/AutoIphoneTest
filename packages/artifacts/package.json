@@ -21,6 +21,7 @@
     }
   },
   "dependencies": {
+    "@test-center/environment": "0.0.0",
     "@test-center/contracts": "0.0.0",
     "@test-center/database": "0.0.0",
     "better-sqlite3": "13.0.2",
