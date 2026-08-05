@@ -17,6 +17,7 @@ export async function main(): Promise<void> {
     bootstrapCode: launcherInit.bootstrapCode,
     launchSecret: launcherInit.launchSecret,
     deviceRegistry: runtimeDevices.registry,
+    artifactService: runtimeDevices.artifactService,
   });
   app.addHook("onClose", async () => {
     runtimeDevices.registry.stop();

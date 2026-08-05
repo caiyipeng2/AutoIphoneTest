@@ -14,8 +14,13 @@ const app = await createApp(
         ...options,
         consoleDist: process.env.TEST_CENTER_CONSOLE_DIST,
         deviceRegistry: runtimeDevices.registry,
+        artifactService: runtimeDevices.artifactService,
       }
-    : { ...options, deviceRegistry: runtimeDevices.registry },
+    : {
+        ...options,
+        deviceRegistry: runtimeDevices.registry,
+        artifactService: runtimeDevices.artifactService,
+      },
 );
 app.addHook("onClose", async () => {
   runtimeDevices.registry.stop();

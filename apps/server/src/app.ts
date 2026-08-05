@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
+import multipart from "@fastify/multipart";
 import helmet from "@fastify/helmet";
 import fastifyStatic from "@fastify/static";
 import websocket from "@fastify/websocket";
@@ -15,6 +16,11 @@ import { registerBootstrapRoute } from "./routes/bootstrap.js";
 import type { ServerContext } from "./routes/context.js";
 import { registerHealthRoute } from "./routes/health.js";
 import { registerDevicesRoutes } from "./routes/devices.js";
+import {
+  MAX_ARTIFACT_UPLOAD_BYTES,
+  registerArtifactsRoutes,
+  type ArtifactRouteService,
+} from "./routes/artifacts.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerStateGateway } from "./ws/state-gateway.js";
 
@@ -26,6 +32,9 @@ export interface CreateAppOptions {
   readonly healthSnapshot?: HealthSnapshot;
   readonly consoleDist?: string;
   readonly deviceRegistry?: DeviceRegistry;
+  readonly artifactService?: ArtifactRouteService;
+  readonly artifactImportRoot?: string;
+  readonly artifactUploadLimitBytes?: number;
 }
 
 export async function createApp(options: CreateAppOptions): Promise<FastifyInstance> {
@@ -49,10 +58,18 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
       },
     },
     ...(options.deviceRegistry === undefined ? {} : { devices: options.deviceRegistry }),
+    ...(options.artifactService === undefined ? {} : { artifacts: options.artifactService }),
   };
   const snapshot = options.healthSnapshot ?? createDefaultHealthSnapshot();
 
   await app.register(cookie);
+  await app.register(multipart, {
+    limits: {
+      files: 1,
+      fields: 8,
+      fileSize: options.artifactUploadLimitBytes ?? MAX_ARTIFACT_UPLOAD_BYTES,
+    },
+  });
   await app.register(helmet, {
     contentSecurityPolicy: {
       directives: {
@@ -80,6 +97,11 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
   await registerBootstrapRoute(app, context);
   await registerSettingsRoutes(app, context);
   await registerDevicesRoutes(app, context);
+  await registerArtifactsRoutes(
+    app,
+    context,
+    options.artifactImportRoot ?? join(process.cwd(), "data", "imports"),
+  );
   await registerStateGateway(app, context, snapshot);
   return app;
 }

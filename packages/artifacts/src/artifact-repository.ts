@@ -7,6 +7,7 @@ import {
   InstalledArtifactSchema,
   type ArtifactMetadata,
   type InstalledArtifact,
+  type AppArtifact,
   type SourceArtifact,
 } from "@test-center/contracts/artifact";
 
@@ -129,6 +130,12 @@ export class ArtifactRepository {
       )
       .all()
       .map((row) => this.toArtifact(row));
+  }
+
+  public get(id: string): AppArtifact | undefined {
+    const source = this.list().find((artifact) => artifact.id === id);
+    if (source !== undefined) return source;
+    return this.listInstalled().find((artifact) => artifact.id === id);
   }
 
   public registerInstalled(

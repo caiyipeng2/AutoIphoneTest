@@ -855,3 +855,143 @@ main {
     transition-duration: 0.01ms !important;
   }
 }
+
+.upload-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+.artifact-toolbar {
+  align-items: center;
+}
+.artifact-toolbar .toolbar-note {
+  margin-left: auto;
+}
+.artifact-panel {
+  padding: 0;
+}
+.artifact-panel > .panel-heading {
+  padding: 20px 20px 0;
+}
+.artifact-table {
+  border: 0;
+  border-top: 1px solid #ebe6dc;
+}
+.artifact-table .table-head,
+.artifact-table .table-row {
+  grid-template-columns: 1.35fr 1.2fr 1fr 0.95fr 1.05fr;
+}
+.artifact-kind {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.artifact-kind > svg {
+  flex: 0 0 auto;
+  color: #789498;
+}
+.hash-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #637476;
+  cursor: pointer;
+  text-align: left;
+}
+.hash-button:hover {
+  border-color: #c8d3c9;
+  background: #f5f8f1;
+  color: #1a2427;
+}
+.hash-button .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notice-banner {
+  margin-bottom: 14px;
+  padding: 10px 13px;
+  border-left: 3px solid #7ec8d6;
+  background: #e3f1f3;
+  color: #38696d;
+  font-size: 12px;
+}
+.dialog-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #11161a66;
+}
+.dialog-panel {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid #d9d2c5;
+  background: #fffdf8;
+  box-shadow: 0 18px 50px #11161a33;
+}
+.dialog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.dialog-heading h2 {
+  margin: 5px 0 0;
+  font: 700 18px "Trebuchet MS", "Segoe UI", sans-serif;
+}
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 20px;
+}
+.dialog-actions .toolbar-note {
+  margin-right: auto;
+}
+.file-picker input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+.file-picker-value {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px dashed #b7b9aa;
+  background: #eef4e4;
+  color: #547050;
+  cursor: pointer;
+}
+@media (max-width: 620px) {
+  .upload-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+  .upload-actions .button {
+    flex: 1;
+  }
+  .artifact-toolbar .toolbar-note {
+    margin-left: 0;
+  }
+  .dialog-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .dialog-actions .toolbar-note {
+    width: 100%;
+  }
+}

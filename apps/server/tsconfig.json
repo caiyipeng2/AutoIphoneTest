@@ -10,6 +10,8 @@
     { "path": "../../packages/adb" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/devices" },
+    { "path": "../../packages/artifacts" },
+    { "path": "../../packages/build-provider" },
     { "path": "../../packages/database" },
     { "path": "../../packages/environment" },
     { "path": "../../packages/security" }
