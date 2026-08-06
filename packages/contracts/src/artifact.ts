@@ -48,12 +48,14 @@ export type InstalledArtifact = Omit<z.infer<typeof InstalledArtifactSchema>, "d
 };
 export type AppArtifact = SourceArtifact | InstalledArtifact;
 
-export interface ArtifactMetadata {
-  readonly packageName?: string;
-  readonly versionName?: string;
-  readonly versionCode?: number;
-  readonly signerSha256?: string;
-}
+export const ArtifactMetadataSchema = z.object({
+  packageName: AndroidPackageNameSchema.optional(),
+  versionName: z.string().min(1).optional(),
+  versionCode: z.number().int().nonnegative().optional(),
+  signerSha256: Sha256Schema.optional(),
+});
+
+export type ArtifactMetadata = z.infer<typeof ArtifactMetadataSchema>;
 
 export function parseAndroidPackageName(value: string): string {
   return AndroidPackageNameSchema.parse(value);

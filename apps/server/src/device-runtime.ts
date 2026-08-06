@@ -1,5 +1,8 @@
+import { win32 } from "node:path";
+
 import { AdbClient } from "@test-center/adb";
 import {
+  ArtifactMetadataParser,
   collectInstalledIdentity,
   createAdbInstalledIdentityExecutor,
   createApksignerSignerResolver,
@@ -65,10 +68,20 @@ export async function createRuntimeDeviceRegistry(
   };
 }
 
-class RuntimeArtifactRouteService implements ArtifactRouteService {
+export interface RuntimeArtifactMetadataParser {
+  parse(request: { readonly kind: "APK" | "AAB"; readonly artifactPath: string }): Promise<{
+    readonly packageName?: string | undefined;
+    readonly versionName?: string | undefined;
+    readonly versionCode?: number | undefined;
+    readonly signerSha256?: string | undefined;
+  }>;
+}
+
+export class RuntimeArtifactRouteService implements ArtifactRouteService {
   public readonly provider: ArtifactImportProvider;
   private readonly repository: ArtifactRepository;
   private readonly installedExecutor;
+  private readonly metadataParser: RuntimeArtifactMetadataParser;
 
   public constructor(
     database: Database.Database,
@@ -76,26 +89,48 @@ class RuntimeArtifactRouteService implements ArtifactRouteService {
     client: AdbClient,
     projectRoot: string,
     tempRoot: string,
+    metadataParser?: RuntimeArtifactMetadataParser,
   ) {
     this.repository = new ArtifactRepository(database, store);
+    const javaPath =
+      process.env.TEST_CENTER_JAVA_PATH ??
+      win32.join(projectRoot, "tools", "java", "17.0.19+10", "bin", "java.exe");
+    const apksignerPath =
+      process.env.TEST_CENTER_APKSIGNER_PATH ??
+      "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\apksigner.bat";
+    const apksignerJarPath =
+      process.env.TEST_CENTER_APKSIGNER_JAR_PATH ??
+      "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\lib\\apksigner.jar";
+    this.metadataParser =
+      metadataParser ??
+      new ArtifactMetadataParser({
+        aapt2Path:
+          process.env.TEST_CENTER_AAPT2_PATH ??
+          "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\aapt2.exe",
+        apksignerPath,
+        apksignerJarPath,
+        javaPath,
+        bundletoolPath:
+          process.env.TEST_CENTER_BUNDLETOOL_PATH ??
+          win32.join(projectRoot, "tools", "bundletool", "1.18.3", "bundletool-all-1.18.3.jar"),
+        jarsignerPath:
+          process.env.TEST_CENTER_JARSIGNER_PATH ??
+          win32.join(win32.dirname(javaPath), "jarsigner.exe"),
+        cwd: projectRoot,
+      });
     this.installedExecutor = createAdbInstalledIdentityExecutor(client, {
       signerSha256: createApksignerSignerResolver(client, {
-        apksignerPath:
-          process.env.TEST_CENTER_APKSIGNER_PATH ??
-          "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\apksigner.bat",
-        javaPath:
-          process.env.TEST_CENTER_JAVA_PATH ??
-          "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\OpenJDK\\bin\\java.exe",
-        apksignerJarPath:
-          process.env.TEST_CENTER_APKSIGNER_JAR_PATH ??
-          "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\build-tools\\34.0.0\\lib\\apksigner.jar",
+        apksignerPath,
+        javaPath,
+        apksignerJarPath,
         cwd: projectRoot,
         tempRoot,
       }),
     });
     const importService: ArtifactImportService = {
       stage: async (request) => await this.stageFile(request),
-      parse: async () => ({}),
+      parse: async (request, staged) =>
+        await this.metadataParser.parse({ kind: request.kind, artifactPath: staged.partialPath }),
       publish: async (staged, input) => await this.repository.publishSource(staged, input),
       discard: async (staged) => await this.removeStaged(staged),
     };
