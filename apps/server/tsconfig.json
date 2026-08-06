@@ -13,6 +13,7 @@
     { "path": "../../packages/artifacts" },
     { "path": "../../packages/build-provider" },
     { "path": "../../packages/database" },
+    { "path": "../../packages/deployments" },
     { "path": "../../packages/environment" },
     { "path": "../../packages/security" }
   ],

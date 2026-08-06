@@ -18,6 +18,10 @@
     "./request-policy": {
       "types": "./dist/request-policy.d.ts",
       "import": "./dist/request-policy.js"
+    },
+    "./destructive-confirmation": {
+      "types": "./dist/destructive-confirmation.d.ts",
+      "import": "./dist/destructive-confirmation.js"
     }
   },
   "dependencies": {

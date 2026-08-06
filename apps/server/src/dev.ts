@@ -15,11 +15,13 @@ const app = await createApp(
         consoleDist: process.env.TEST_CENTER_CONSOLE_DIST,
         deviceRegistry: runtimeDevices.registry,
         artifactService: runtimeDevices.artifactService,
+        deploymentService: runtimeDevices.deploymentService,
       }
     : {
         ...options,
         deviceRegistry: runtimeDevices.registry,
         artifactService: runtimeDevices.artifactService,
+        deploymentService: runtimeDevices.deploymentService,
       },
 );
 app.addHook("onClose", async () => {

@@ -6,3 +6,4 @@ export * from "./apk-installer.js";
 export * from "./device-spec.js";
 export * from "./aab-install-set.js";
 export * from "./install-set-executor.js";
+export * from "./deployment-orchestrator.js";

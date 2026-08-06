@@ -1,6 +1,7 @@
 import type { BootstrapSessionStore } from "@test-center/security/bootstrap-session";
 import type { DeviceRegistry } from "@test-center/devices";
 import type { ArtifactRouteService } from "./artifacts.js";
+import type { DeploymentRouteService } from "./deployments.js";
 
 export interface ServerSession {
   readonly csrfToken: string;
@@ -19,4 +20,5 @@ export interface ServerContext {
   readonly settings: SettingsState;
   readonly devices?: DeviceRegistry;
   readonly artifacts?: ArtifactRouteService;
+  readonly deployments?: DeploymentRouteService;
 }

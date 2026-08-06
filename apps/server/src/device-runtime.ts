@@ -22,6 +22,7 @@ import {
   configureDatabase,
   DEVICES_MIGRATION,
   DEPLOYMENTS_MIGRATION,
+  DEPLOYMENT_CONTROLS_MIGRATION,
   INSTALL_SETS_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
@@ -30,11 +31,20 @@ import {
   createRuntimePaths,
 } from "@test-center/database";
 import { createAdbDiscoverySource, DeviceRegistry, DeviceRepository } from "@test-center/devices";
+import { InstallationRepository } from "@test-center/devices";
+import { DestructiveConfirmationService } from "@test-center/security";
+import {
+  DeploymentOrchestrator,
+  type DeploymentArtifact,
+  type DeploymentCreateInput,
+} from "@test-center/deployments";
+import type { DeploymentRouteService } from "./routes/deployments.js";
 import type { ArtifactRouteService, InstalledRegistrationResult } from "./routes/artifacts.js";
 
 export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
   readonly artifactService: ArtifactRouteService;
+  readonly deploymentService: DeploymentRouteService;
   readonly close: () => void;
 }
 
@@ -51,6 +61,7 @@ export async function createRuntimeDeviceRegistry(
     ARTIFACTS_MIGRATION,
     DEPLOYMENTS_MIGRATION,
     INSTALL_SETS_MIGRATION,
+    DEPLOYMENT_CONTROLS_MIGRATION,
   ]);
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
@@ -63,9 +74,21 @@ export async function createRuntimeDeviceRegistry(
     projectRoot,
     paths.tempRoot,
   );
-  return {
-    registry: new DeviceRegistry(new DeviceRepository(database), createAdbDiscoverySource(client)),
+  const registry = new DeviceRegistry(
+    new DeviceRepository(database),
+    createAdbDiscoverySource(client),
+  );
+  const deploymentService = new RuntimeDeploymentRouteService(
+    database,
+    registry,
     artifactService,
+    client,
+    paths.artifactsRoot,
+  );
+  return {
+    registry,
+    artifactService,
+    deploymentService,
     close: () => database.close(),
   };
 }
@@ -159,6 +182,17 @@ export class RuntimeArtifactRouteService implements ArtifactRouteService {
     return this.repository.registerInstalled(identity);
   }
 
+  public async collectIdentity(input: {
+    readonly deviceSerial: DeviceSerial;
+    readonly packageName: string;
+  }) {
+    return await collectInstalledIdentity(
+      input.deviceSerial,
+      input.packageName,
+      this.installedExecutor,
+    );
+  }
+
   private async stageFile(request: ArtifactImportFileRequest): Promise<StagedContent> {
     const { createReadStream } = await import("node:fs");
     return await this.store.stage(createReadStream(request.artifactPath), request.originalName);
@@ -168,4 +202,140 @@ export class RuntimeArtifactRouteService implements ArtifactRouteService {
     const { rm } = await import("node:fs/promises");
     await rm(staged.partialPath, { force: true });
   }
+}
+
+class RuntimeDeploymentRouteService implements DeploymentRouteService {
+  private readonly orchestrator: DeploymentOrchestrator;
+  private readonly installations: InstallationRepository;
+  private readonly confirmations: DestructiveConfirmationService;
+
+  public constructor(
+    database: Database.Database,
+    private readonly registry: DeviceRegistry,
+    private readonly artifacts: RuntimeArtifactRouteService,
+    private readonly client: AdbClient,
+    private readonly artifactRoot: string,
+  ) {
+    this.installations = new InstallationRepository(database);
+    this.confirmations = new DestructiveConfirmationService(database);
+    this.orchestrator = new DeploymentOrchestrator(database, {
+      artifact: (id) => this.resolveArtifact(id),
+      deviceState: (serial) => this.registry.get(serial)?.state ?? "UNKNOWN",
+      confirmations: this.confirmations,
+      installation: this.installations,
+      actions: {
+        installApk: async ({ serial, artifact }) =>
+          assertAdbSuccess(
+            await this.client.execute({ kind: "installApk", serial, apkPath: artifact.storedPath }),
+            "APK install",
+          ),
+        installAab: async () => {
+          throw new Error("AAB deployment requires an explicit signing-profile runtime adapter.");
+        },
+        clearData: async ({ serial, packageName }) =>
+          assertAdbSuccess(
+            await this.client.execute({ kind: "clearPackageData", serial, packageName }),
+            "clear package data",
+          ),
+        uninstallReinstall: async ({ serial, packageName }) =>
+          assertAdbSuccess(
+            await this.client.execute({ kind: "uninstallPackage", serial, packageName }),
+            "uninstall package",
+          ),
+        collectIdentity: async ({ serial, packageName }) =>
+          await this.artifacts.collectIdentity({ deviceSerial: serial, packageName }),
+        startActivity: async ({ serial, packageName, activityName }) =>
+          assertAdbSuccess(
+            await this.client.execute({ kind: "startActivity", serial, packageName, activityName }),
+            "start activity",
+          ),
+        foregroundActivity: async ({ serial }) =>
+          (await this.client.execute({ kind: "foregroundActivity", serial })).stdout,
+        packagePid: async ({ serial, packageName }) =>
+          parsePid(await this.client.execute({ kind: "packagePid", serial, packageName })),
+      },
+    });
+    this.orchestrator.recoverInterrupted();
+  }
+
+  public list() {
+    return this.orchestrator.list();
+  }
+  public get(id: string) {
+    return this.orchestrator.get(id);
+  }
+  public create(input: DeploymentCreateInput) {
+    return this.orchestrator.create(input);
+  }
+  public run(id: string) {
+    return this.orchestrator.run(id);
+  }
+  public cancel(id: string) {
+    return this.orchestrator.cancel(id);
+  }
+  public retry(id: string) {
+    return this.orchestrator.retry(id);
+  }
+  public subscribe(listener: Parameters<DeploymentOrchestrator["subscribe"]>[0]) {
+    return this.orchestrator.subscribe(listener);
+  }
+
+  public issueConfirmation(input: Parameters<DeploymentRouteService["issueConfirmation"]>[0]) {
+    const artifact = this.resolveArtifact(input.artifactId);
+    if (artifact === undefined) throw new Error("Artifact not found.");
+    this.installations.ensure(input.deviceSerial, artifact.packageName);
+    const installation = this.installations.get(input.deviceSerial, artifact.packageName);
+    return this.confirmations.issue({
+      sessionId: input.sessionId,
+      operationKind: input.operationKind,
+      artifactId: input.artifactId,
+      deviceSerial: input.deviceSerial,
+      packageName: artifact.packageName,
+      installGeneration: installation.installGeneration,
+      appDataGeneration: installation.appDataGeneration,
+    });
+  }
+
+  private resolveArtifact(id: string): DeploymentArtifact | undefined {
+    const artifact = this.artifacts.get(id);
+    if (
+      artifact === undefined ||
+      artifact.kind === "INSTALLED" ||
+      artifact.packageName === undefined ||
+      artifact.versionName === undefined ||
+      artifact.versionCode === undefined ||
+      artifact.signerSha256 === undefined
+    )
+      return undefined;
+    const relative = win32.relative(this.artifactRoot, artifact.storedPath);
+    if (relative === "" || relative.startsWith("..") || win32.isAbsolute(relative)) return undefined;
+    return {
+      id: artifact.id,
+      kind: artifact.kind,
+      packageName: artifact.packageName,
+      versionName: artifact.versionName,
+      versionCode: artifact.versionCode,
+      signerSha256: artifact.signerSha256,
+      storedPath: artifact.storedPath,
+    };
+  }
+}
+
+function assertAdbSuccess(
+  result: { readonly exitCode: number | null; readonly timedOut: boolean; readonly stderr: string },
+  operation: string,
+): void {
+  if (result.timedOut || result.exitCode !== 0)
+    throw new Error(`${operation} failed: ${result.stderr.trim()}`);
+}
+
+function parsePid(result: {
+  readonly stdout: string;
+  readonly exitCode: number | null;
+  readonly timedOut: boolean;
+  readonly stderr: string;
+}): number | null {
+  if (result.timedOut || result.exitCode !== 0) return null;
+  const match = result.stdout.trim().match(/^\d+$/m);
+  return match === null ? null : Number(match[0]);
 }

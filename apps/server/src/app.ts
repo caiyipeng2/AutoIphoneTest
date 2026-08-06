@@ -22,6 +22,7 @@ import {
   type ArtifactRouteService,
 } from "./routes/artifacts.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
+import { registerDeploymentsRoutes } from "./routes/deployments.js";
 import { registerStateGateway } from "./ws/state-gateway.js";
 
 export interface CreateAppOptions {
@@ -35,6 +36,7 @@ export interface CreateAppOptions {
   readonly artifactService?: ArtifactRouteService;
   readonly artifactImportRoot?: string;
   readonly artifactUploadLimitBytes?: number;
+  readonly deploymentService?: import("./routes/deployments.js").DeploymentRouteService;
 }
 
 export async function createApp(options: CreateAppOptions): Promise<FastifyInstance> {
@@ -59,6 +61,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
     },
     ...(options.deviceRegistry === undefined ? {} : { devices: options.deviceRegistry }),
     ...(options.artifactService === undefined ? {} : { artifacts: options.artifactService }),
+    ...(options.deploymentService === undefined ? {} : { deployments: options.deploymentService }),
   };
   const snapshot = options.healthSnapshot ?? createDefaultHealthSnapshot();
 
@@ -102,6 +105,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
     context,
     options.artifactImportRoot ?? join(process.cwd(), "data", "imports"),
   );
+  await registerDeploymentsRoutes(app, context);
   await registerStateGateway(app, context, snapshot);
   return app;
 }

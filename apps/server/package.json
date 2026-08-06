@@ -12,6 +12,7 @@
     "@test-center/artifacts": "0.0.0",
     "@test-center/build-provider": "0.0.0",
     "@test-center/database": "0.0.0",
+    "@test-center/deployments": "0.0.0",
     "@test-center/devices": "0.0.0",
     "@test-center/environment": "0.0.0",
     "@test-center/security": "0.0.0",

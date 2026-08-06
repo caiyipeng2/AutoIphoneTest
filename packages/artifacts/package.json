@@ -18,6 +18,10 @@
     "./artifact-repository": {
       "types": "./dist/artifact-repository.d.ts",
       "import": "./dist/artifact-repository.js"
+    },
+    "./installed-identity": {
+      "types": "./dist/installed-identity.d.ts",
+      "import": "./dist/installed-identity.js"
     }
   },
   "dependencies": {

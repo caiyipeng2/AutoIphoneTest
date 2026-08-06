@@ -30,11 +30,18 @@ export async function registerStateGateway(
           eventSeq: context.devices?.eventSeq ?? 0,
           snapshot,
           devices: context.devices?.list() ?? [],
+          deployments: context.deployments?.list() ?? [],
         }),
       );
       if (context.devices !== undefined) {
         const unsubscribe = context.devices.subscribe((event) =>
           socket.send(JSON.stringify(event)),
+        );
+        socket.on?.("close", unsubscribe);
+      }
+      if (context.deployments?.subscribe !== undefined) {
+        const unsubscribe = context.deployments.subscribe((deployment) =>
+          socket.send(JSON.stringify({ type: "deployment.updated", deployment })),
         );
         socket.on?.("close", unsubscribe);
       }

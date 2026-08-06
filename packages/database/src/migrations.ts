@@ -215,6 +215,33 @@ CREATE INDEX IF NOT EXISTS idx_install_sets_device_spec ON install_sets(device_s
 `.trim(),
 };
 
+export const DEPLOYMENT_CONTROLS_MIGRATION: Migration = {
+  id: "0006_deployment_controls",
+  sql: `
+ALTER TABLE deployments ADD COLUMN client_request_id TEXT;
+ALTER TABLE deployments ADD COLUMN mutation_kind TEXT NOT NULL DEFAULT 'NONE'
+  CHECK (mutation_kind IN ('NONE', 'CLEAR_DATA', 'UNINSTALL_REINSTALL'));
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_deployments_client_request
+  ON deployments(client_request_id) WHERE client_request_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS destructive_confirmations (
+  nonce_hash TEXT PRIMARY KEY NOT NULL,
+  session_id TEXT NOT NULL,
+  operation_kind TEXT NOT NULL CHECK (operation_kind IN ('CLEAR_DATA', 'UNINSTALL_REINSTALL')),
+  artifact_id TEXT NOT NULL,
+  device_serial TEXT NOT NULL REFERENCES devices(serial),
+  package_name TEXT NOT NULL,
+  install_generation INTEGER NOT NULL CHECK (install_generation > 0),
+  app_data_generation INTEGER NOT NULL CHECK (app_data_generation > 0),
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_destructive_confirmations_expiry ON destructive_confirmations(expires_at);
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
