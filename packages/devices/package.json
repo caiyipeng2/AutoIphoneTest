@@ -18,6 +18,10 @@
     "./device-registry": {
       "types": "./dist/device-registry.d.ts",
       "import": "./dist/device-registry.js"
+    },
+    "./installation-repository": {
+      "types": "./dist/installation-repository.d.ts",
+      "import": "./dist/installation-repository.js"
     }
   },
   "dependencies": {

@@ -1,0 +1,31 @@
+{
+  "name": "@test-center/deployments",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./deployment-machine": {
+      "types": "./dist/deployment-machine.d.ts",
+      "import": "./dist/deployment-machine.js"
+    },
+    "./credential-helper-client": {
+      "types": "./dist/credential-helper-client.d.ts",
+      "import": "./dist/credential-helper-client.js"
+    },
+    "./signing-profile": {
+      "types": "./dist/signing-profile.d.ts",
+      "import": "./dist/signing-profile.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/contracts": "0.0.0",
+    "@test-center/database": "0.0.0"
+  }
+}

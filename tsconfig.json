@@ -8,6 +8,7 @@
     { "path": "./packages/build-provider" },
     { "path": "./packages/database" },
     { "path": "./packages/security" },
+    { "path": "./packages/deployments" },
     { "path": "./packages/environment" },
     { "path": "./apps/server" },
     { "path": "./apps/console" }

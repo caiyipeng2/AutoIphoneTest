@@ -18,6 +18,7 @@ import {
   ARTIFACTS_MIGRATION,
   configureDatabase,
   DEVICES_MIGRATION,
+  DEPLOYMENTS_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
   migrate,
@@ -40,7 +41,12 @@ export async function createRuntimeDeviceRegistry(
   await ensureRuntimeDirectories(paths);
   const database = openDatabase(paths);
   configureDatabase(database);
-  migrate(database, [FOUNDATION_MIGRATION, DEVICES_MIGRATION, ARTIFACTS_MIGRATION]);
+  migrate(database, [
+    FOUNDATION_MIGRATION,
+    DEVICES_MIGRATION,
+    ARTIFACTS_MIGRATION,
+    DEPLOYMENTS_MIGRATION,
+  ]);
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
     "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\platform-tools\\adb.exe";
