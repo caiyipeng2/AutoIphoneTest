@@ -22,10 +22,28 @@
     "./signing-profile": {
       "types": "./dist/signing-profile.d.ts",
       "import": "./dist/signing-profile.js"
+    },
+    "./apk-installer": {
+      "types": "./dist/apk-installer.d.ts",
+      "import": "./dist/apk-installer.js"
+    },
+    "./device-spec": {
+      "types": "./dist/device-spec.d.ts",
+      "import": "./dist/device-spec.js"
+    },
+    "./aab-install-set": {
+      "types": "./dist/aab-install-set.d.ts",
+      "import": "./dist/aab-install-set.js"
+    },
+    "./install-set-executor": {
+      "types": "./dist/install-set-executor.d.ts",
+      "import": "./dist/install-set-executor.js"
     }
   },
   "dependencies": {
+    "@test-center/adb": "0.0.0",
     "@test-center/contracts": "0.0.0",
-    "@test-center/database": "0.0.0"
+    "@test-center/database": "0.0.0",
+    "@test-center/environment": "0.0.0"
   }
 }

@@ -56,7 +56,8 @@ export class DeploymentMachine {
     const initial = options.initialSnapshot;
     if (initial === undefined) return;
     this.state = initial.state;
-    this.stepIndex = initial.currentStep === undefined ? -1 : STEP_ORDER.indexOf(initial.currentStep);
+    this.stepIndex =
+      initial.currentStep === undefined ? -1 : STEP_ORDER.indexOf(initial.currentStep);
     this.stepAttempt = initial.attempt;
     this.failedStep = initial.failedStep;
     this.failureMessage = initial.failureMessage;

@@ -1,5 +1,6 @@
 import { parseAndroidPackageName } from "@test-center/contracts/artifact";
 import { DeviceSerialSchema, type DeviceSerial } from "@test-center/contracts/device";
+import { win32 } from "node:path";
 
 export const ALLOWLISTED_GETPROP_KEYS = [
   "ro.product.model",
@@ -24,6 +25,28 @@ export type AdbDeviceCommand =
   | { readonly kind: "dumpsysBattery"; readonly serial: DeviceSerial }
   | { readonly kind: "dumpsysDisplay"; readonly serial: DeviceSerial };
 
+export type AdbDeploymentCommand =
+  | { readonly kind: "installApk"; readonly serial: DeviceSerial; readonly apkPath: string }
+  | {
+      readonly kind: "clearPackageData";
+      readonly serial: DeviceSerial;
+      readonly packageName: string;
+    }
+  | {
+      readonly kind: "uninstallPackage";
+      readonly serial: DeviceSerial;
+      readonly packageName: string;
+    }
+  | {
+      readonly kind: "startActivity";
+      readonly serial: DeviceSerial;
+      readonly packageName: string;
+      readonly activityName: string;
+    }
+  | { readonly kind: "forceStop"; readonly serial: DeviceSerial; readonly packageName: string }
+  | { readonly kind: "foregroundActivity"; readonly serial: DeviceSerial }
+  | { readonly kind: "packagePid"; readonly serial: DeviceSerial; readonly packageName: string };
+
 export type AdbPackageCommand =
   | { readonly kind: "packagePaths"; readonly serial: DeviceSerial; readonly packageName: string }
   | { readonly kind: "packageDetails"; readonly serial: DeviceSerial; readonly packageName: string }
@@ -39,7 +62,8 @@ export type AdbPackageCommand =
       readonly filePath: string;
     };
 
-export type AdbCommand = AdbDiscoveryCommand | AdbDeviceCommand | AdbPackageCommand;
+export type AdbCommand =
+  AdbDiscoveryCommand | AdbDeviceCommand | AdbPackageCommand | AdbDeploymentCommand;
 
 export function renderAdbCommand(command: AdbCommand): string[] {
   if (command.kind === "devices") {
@@ -88,6 +112,37 @@ export function renderAdbCommand(command: AdbCommand): string[] {
     case "streamPackageFile":
       parseAndroidPackageName(command.packageName);
       return ["-s", serial, "exec-out", "cat", validatePackageFilePath(command.filePath)];
+    case "installApk":
+      return ["-s", serial, "install", "-r", "-t", validateApkPath(command.apkPath)];
+    case "clearPackageData":
+      return ["-s", serial, "shell", "pm", "clear", parseAndroidPackageName(command.packageName)];
+    case "uninstallPackage":
+      return ["-s", serial, "uninstall", parseAndroidPackageName(command.packageName)];
+    case "startActivity": {
+      const packageName = parseAndroidPackageName(command.packageName);
+      return [
+        "-s",
+        serial,
+        "shell",
+        "am",
+        "start",
+        "-n",
+        `${packageName}/${validateActivityName(command.activityName)}`,
+      ];
+    }
+    case "forceStop":
+      return [
+        "-s",
+        serial,
+        "shell",
+        "am",
+        "force-stop",
+        parseAndroidPackageName(command.packageName),
+      ];
+    case "foregroundActivity":
+      return ["-s", serial, "shell", "dumpsys", "activity", "activities"];
+    case "packagePid":
+      return ["-s", serial, "shell", "pidof", parseAndroidPackageName(command.packageName)];
   }
 }
 
@@ -99,6 +154,20 @@ function validatePackageFilePath(value: string): string {
     value.includes("\0")
   ) {
     throw new TypeError("Installed package file must remain below /data/app/.");
+  }
+  return value;
+}
+
+function validateApkPath(value: string): string {
+  if (!win32.isAbsolute(value) || !value.toLowerCase().endsWith(".apk") || value.includes("\0")) {
+    throw new TypeError("APK path must be an absolute .apk file path.");
+  }
+  return win32.normalize(value);
+}
+
+function validateActivityName(value: string): string {
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)+$/.test(value)) {
+    throw new TypeError("Invalid Android activity name.");
   }
   return value;
 }

@@ -91,6 +91,59 @@ describe("serial-bound adb commands", () => {
     ).toEqual(["-s", serial, "exec-out", "cat", "/data/app/x/base.apk"]);
   });
 
+  it("renders closed APK install and lifecycle commands", () => {
+    expect(
+      renderAdbCommand({
+        kind: "installApk",
+        serial,
+        apkPath: "E:\\Projects\\UnityMultiDeviceTestCenter\\data\\artifacts\\qa.apk",
+      }),
+    ).toEqual([
+      "-s",
+      serial,
+      "install",
+      "-r",
+      "-t",
+      "E:\\Projects\\UnityMultiDeviceTestCenter\\data\\artifacts\\qa.apk",
+    ]);
+    expect(
+      renderAdbCommand({ kind: "clearPackageData", serial, packageName: "com.example.game" }),
+    ).toEqual(["-s", serial, "shell", "pm", "clear", "com.example.game"]);
+    expect(
+      renderAdbCommand({ kind: "uninstallPackage", serial, packageName: "com.example.game" }),
+    ).toEqual(["-s", serial, "uninstall", "com.example.game"]);
+    expect(
+      renderAdbCommand({
+        kind: "startActivity",
+        serial,
+        packageName: "com.example.game",
+        activityName: "com.example.game.MainActivity",
+      }),
+    ).toEqual([
+      "-s",
+      serial,
+      "shell",
+      "am",
+      "start",
+      "-n",
+      "com.example.game/com.example.game.MainActivity",
+    ]);
+    expect(
+      renderAdbCommand({ kind: "forceStop", serial, packageName: "com.example.game" }),
+    ).toEqual(["-s", serial, "shell", "am", "force-stop", "com.example.game"]);
+    expect(renderAdbCommand({ kind: "foregroundActivity", serial })).toEqual([
+      "-s",
+      serial,
+      "shell",
+      "dumpsys",
+      "activity",
+      "activities",
+    ]);
+    expect(
+      renderAdbCommand({ kind: "packagePid", serial, packageName: "com.example.game" }),
+    ).toEqual(["-s", serial, "shell", "pidof", "com.example.game"]);
+  });
+
   it("rejects invalid package names and paths outside the package directory", () => {
     expect(() =>
       renderAdbCommand({ kind: "packagePaths", serial, packageName: "bad package" }),

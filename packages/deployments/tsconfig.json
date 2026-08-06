@@ -6,5 +6,10 @@
     "composite": true
   },
   "include": ["src"],
-  "references": [{ "path": "../contracts" }, { "path": "../database" }]
+  "references": [
+    { "path": "../adb" },
+    { "path": "../contracts" },
+    { "path": "../database" },
+    { "path": "../environment" }
+  ]
 }

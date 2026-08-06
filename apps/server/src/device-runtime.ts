@@ -22,6 +22,7 @@ import {
   configureDatabase,
   DEVICES_MIGRATION,
   DEPLOYMENTS_MIGRATION,
+  INSTALL_SETS_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
   migrate,
@@ -49,6 +50,7 @@ export async function createRuntimeDeviceRegistry(
     DEVICES_MIGRATION,
     ARTIFACTS_MIGRATION,
     DEPLOYMENTS_MIGRATION,
+    INSTALL_SETS_MIGRATION,
   ]);
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
