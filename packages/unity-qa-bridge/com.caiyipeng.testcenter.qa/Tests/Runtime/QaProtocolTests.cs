@@ -66,6 +66,8 @@ namespace Caiyipeng.TestCenter.QaBridge.Tests
             Assert.That(state.bridgeInstanceId, Is.EqualTo("bridge-1"));
             Assert.That(state.installGeneration, Is.EqualTo(2));
             Assert.That(state.appDataGeneration, Is.EqualTo(3));
+            Assert.That(state.safeArea, Is.Not.Null);
+            Assert.That(state.safeArea.Length, Is.EqualTo(4));
             Assert.That(state.stateSeq, Is.EqualTo(1));
 
             var failing = new QaStatePublisher(new ThrowingIdentityProvider(), new ViewProvider());

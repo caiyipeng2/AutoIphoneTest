@@ -166,7 +166,11 @@ export function DevicesPage({ refreshKey = 0 }: { refreshKey?: number }) {
         (() => {
           const selected = devices.find((device) => device.serial === selectedSerial);
           return selected ? (
-            <DeviceDetails device={selected} onClose={() => setSelectedSerial(null)} />
+            <DeviceDetails
+              device={selected}
+              refreshKey={refreshKey}
+              onClose={() => setSelectedSerial(null)}
+            />
           ) : null;
         })()}
     </PageFrame>

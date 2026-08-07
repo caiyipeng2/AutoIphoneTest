@@ -45,6 +45,12 @@ export async function registerStateGateway(
         );
         socket.on?.("close", unsubscribe);
       }
+      if (context.uids !== undefined) {
+        const unsubscribe = context.uids.subscribe(({ snapshot: uidSnapshot, ...event }) =>
+          socket.send(JSON.stringify({ ...event, uidSnapshot })),
+        );
+        socket.on?.("close", unsubscribe);
+      }
     } catch {
       socket.close(1008, "Unauthorized");
     }

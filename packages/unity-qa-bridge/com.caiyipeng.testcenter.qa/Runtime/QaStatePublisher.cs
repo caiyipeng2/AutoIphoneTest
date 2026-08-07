@@ -49,7 +49,7 @@ namespace Caiyipeng.TestCenter.QaBridge
                     buildId = identityProvider.BuildId,
                     width = Screen.width,
                     height = Screen.height,
-                    safeArea = new QaSafeArea { x = safeArea.x, y = safeArea.y, width = safeArea.width, height = safeArea.height },
+                    safeArea = new[] { safeArea.x, safeArea.y, safeArea.width, safeArea.height },
                     orientation = ToOrientation(orientation),
                     metricsEpoch = metricsEpoch,
                     view = viewStateProvider.ViewId,

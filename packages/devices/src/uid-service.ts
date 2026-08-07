@@ -47,6 +47,19 @@ export interface UidSnapshot {
   readonly bridge: BridgeHealth;
 }
 
+export type UidServiceEventType = "bridge.updated" | "uid.updated";
+
+export interface UidServiceEvent {
+  readonly version: 1;
+  readonly type: UidServiceEventType;
+  readonly eventSeq: number;
+  readonly serial: DeviceSerial;
+  readonly packageName: string;
+  readonly snapshot: UidSnapshot;
+}
+
+export type UidServiceListener = (event: UidServiceEvent) => void;
+
 export interface UidServiceOptions {
   readonly now?: () => string;
   readonly confirmationTtlMs?: number;
@@ -86,6 +99,8 @@ export class UidService {
   private readonly confirmationTtlMs: number;
   private readonly health = new Map<string, BridgeHealthState>();
   private readonly confirmations = new Map<string, StoredConfirmation>();
+  private readonly listeners = new Set<UidServiceListener>();
+  private eventSequence = 0;
 
   public constructor(
     private readonly database: Database.Database,
@@ -103,6 +118,11 @@ export class UidService {
     validatePackageName(packageName);
     this.installations.ensure(serial, packageName, this.now());
     return this.installations.get(serial, packageName);
+  }
+
+  public subscribe(listener: UidServiceListener): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
   public get(serial: DeviceSerial, packageName: string): UidSnapshot {
@@ -182,7 +202,14 @@ export class UidService {
       lastStateAt: observedAt,
       ...(reason === undefined ? {} : { reason }),
     });
-    return this.get(input.serial, input.packageName);
+    const snapshot = this.get(input.serial, input.packageName);
+    this.emit({
+      type: "bridge.updated",
+      serial: input.serial,
+      packageName: input.packageName,
+      snapshot,
+    });
+    return snapshot;
   }
 
   public markBridgeUnavailable(
@@ -206,6 +233,12 @@ export class UidService {
       reason,
     };
     this.health.set(keyFor(serial, packageName), next);
+    this.emit({
+      type: "bridge.updated",
+      serial,
+      packageName,
+      snapshot: this.get(serial, packageName),
+    });
     return next;
   }
 
@@ -267,7 +300,31 @@ export class UidService {
       buildId: this.health.get(keyFor(input.serial, input.packageName))?.buildId ?? "manual",
       observedAt,
     });
-    return this.get(input.serial, input.packageName);
+    const snapshot = this.get(input.serial, input.packageName);
+    this.emit({
+      type: "uid.updated",
+      serial: input.serial,
+      packageName: input.packageName,
+      snapshot,
+    });
+    return snapshot;
+  }
+
+  private emit(input: {
+    readonly type: UidServiceEventType;
+    readonly serial: DeviceSerial;
+    readonly packageName: string;
+    readonly snapshot: UidSnapshot;
+  }): void {
+    const event: UidServiceEvent = {
+      version: 1,
+      type: input.type,
+      eventSeq: ++this.eventSequence,
+      serial: input.serial,
+      packageName: input.packageName,
+      snapshot: input.snapshot,
+    };
+    for (const listener of this.listeners) listener(event);
   }
 
   private selectCurrentUid(

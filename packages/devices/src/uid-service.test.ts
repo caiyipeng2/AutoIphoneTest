@@ -12,7 +12,7 @@ import {
 import { parseDeviceSerial } from "@test-center/contracts/device";
 
 import { InstallationRepository } from "./installation-repository.js";
-import { UidService } from "./uid-service.js";
+import { UidService, type UidServiceEvent } from "./uid-service.js";
 
 const serial = parseDeviceSerial("R5CX211TXNT");
 const packageName = "com.hg.idleweaponshoptycoon.android";
@@ -143,6 +143,27 @@ describe("UidService", () => {
     expect(service.get(serial, packageName)).toMatchObject({
       uid: { uid: "UID-1001" },
       bridge: { status: "UNAVAILABLE" },
+    });
+  });
+
+  it("publishes current-generation UID and bridge events", () => {
+    const { service } = createService();
+    const events: UidServiceEvent[] = [];
+    service.subscribe((event) => events.push(event));
+
+    service.observeBridgeState(state());
+    service.markBridgeUnavailable(serial, packageName, "test disconnect");
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      type: "bridge.updated",
+      serial,
+      packageName,
+      snapshot: { uid: { uid: "UID-1001" }, bridge: { status: "READY" } },
+    });
+    expect(events[1]).toMatchObject({
+      type: "bridge.updated",
+      snapshot: { bridge: { status: "UNAVAILABLE", reason: "test disconnect" } },
     });
   });
 });

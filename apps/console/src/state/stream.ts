@@ -1,11 +1,20 @@
-import type { DeviceRecord, HealthSnapshot } from "./api";
+import type { DeviceRecord, HealthSnapshot, UidSnapshot } from "./api";
 
 export interface StateEvent {
-  type: "snapshot" | "delta" | "device.upserted" | "device.connectionChanged";
+  type:
+    | "snapshot"
+    | "delta"
+    | "device.upserted"
+    | "device.connectionChanged"
+    | "bridge.updated"
+    | "uid.updated";
   eventSeq: number;
   snapshot?: HealthSnapshot;
   devices?: DeviceRecord[];
   device?: DeviceRecord;
+  serial?: string;
+  packageName?: string;
+  uidSnapshot?: UidSnapshot;
 }
 
 export function openStateStream(
@@ -24,7 +33,9 @@ export function openStateStream(
         event.type === "snapshot" ||
         event.type === "delta" ||
         event.type === "device.upserted" ||
-        event.type === "device.connectionChanged"
+        event.type === "device.connectionChanged" ||
+        event.type === "bridge.updated" ||
+        event.type === "uid.updated"
       )
         onEvent(event);
     } catch {

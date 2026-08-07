@@ -92,6 +92,65 @@ describe("Unity QA bridge protocol", () => {
     ).toMatchObject({ ok: false, error: { code: "STATE_SEQUENCE_REPLAY" } });
   });
 
+  it("keeps safe area wire shape compatible with Unity JsonUtility output", () => {
+    const parser = new BridgeProtocolParser();
+    expect(
+      parser.parseLine(
+        JSON.stringify({
+          type: "QA_HELLO",
+          schemaVersion: 1,
+          bridgeInstanceId: instance,
+          bootId: "boot-1",
+          buildId: "qa-1",
+        }),
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      parser.parseLine(
+        JSON.stringify({
+          type: "QA_STATE",
+          schemaVersion: 1,
+          bridgeInstanceId: instance,
+          uid: "UID-1",
+          installGeneration: 1,
+          appDataGeneration: 1,
+          buildId: "qa-1",
+          width: 1080,
+          height: 2400,
+          safeArea: { x: 0, y: 80, width: 1080, height: 2260 },
+          orientation: "Portrait",
+          metricsEpoch: 1,
+          view: "MainHUD",
+          focusedControlId: null,
+          textInputAvailable: false,
+          stateSeq: 1,
+        }),
+      ),
+    ).toMatchObject({ ok: false, error: { code: "INVALID_MESSAGE" } });
+    expect(
+      parser.parseLine(
+        JSON.stringify({
+          type: "QA_STATE",
+          schemaVersion: 1,
+          bridgeInstanceId: instance,
+          uid: "UID-1",
+          installGeneration: 1,
+          appDataGeneration: 1,
+          buildId: "qa-1",
+          width: 1080,
+          height: 2400,
+          safeArea: [0, 80, 1080, 2260],
+          orientation: "Portrait",
+          metricsEpoch: 1,
+          view: "MainHUD",
+          focusedControlId: null,
+          textInputAvailable: false,
+          stateSeq: 1,
+        }),
+      ),
+    ).toMatchObject({ ok: true, message: { type: "QA_STATE" } });
+  });
+
   it("rejects wrong nonce, descriptor, event shape, focus, and expired arms", () => {
     const parser = new BridgeProtocolParser({
       expectedRunNonceHash: runNonceHash,

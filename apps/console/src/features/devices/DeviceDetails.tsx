@@ -6,7 +6,15 @@ import { fetchDeviceBridge, type DeviceRecord, type UidSnapshot } from "../../st
 
 const GAME_PACKAGE = "com.hg.idleweaponshoptycoon.android";
 
-export function DeviceDetails({ device, onClose }: { device: DeviceRecord; onClose: () => void }) {
+export function DeviceDetails({
+  device,
+  refreshKey = 0,
+  onClose,
+}: {
+  device: DeviceRecord;
+  refreshKey?: number;
+  onClose: () => void;
+}) {
   const [snapshot, setSnapshot] = useState<UidSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +31,7 @@ export function DeviceDetails({ device, onClose }: { device: DeviceRecord; onClo
       )
       .finally(() => setLoading(false));
   };
-  useEffect(load, [device.serial]);
+  useEffect(load, [device.serial, refreshKey]);
   const uid = snapshot?.uid?.uid ?? snapshot?.installation.currentUid ?? "未识别";
   return (
     <section className="device-details" aria-labelledby="device-details-title">

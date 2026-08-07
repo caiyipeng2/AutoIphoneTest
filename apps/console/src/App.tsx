@@ -70,7 +70,8 @@ export function App() {
     if (!health) return;
     const socket = openStateStream((event) => {
       if (event.snapshot) setHealth(event.snapshot);
-      if (event.device || event.devices) setDeviceRefreshKey((value) => value + 1);
+      if (event.device || event.devices || event.uidSnapshot || event.type === "bridge.updated")
+        setDeviceRefreshKey((value) => value + 1);
     }, setConnected);
     return () => socket.close();
   }, [health !== null]);

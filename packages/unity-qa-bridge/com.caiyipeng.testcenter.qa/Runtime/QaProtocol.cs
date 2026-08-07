@@ -15,15 +15,6 @@ namespace Caiyipeng.TestCenter.QaBridge
     }
 
     [Serializable]
-    public sealed class QaSafeArea
-    {
-        public float x;
-        public float y;
-        public float width;
-        public float height;
-    }
-
-    [Serializable]
     public sealed class QaStateMessage
     {
         public string type = "QA_STATE";
@@ -35,7 +26,7 @@ namespace Caiyipeng.TestCenter.QaBridge
         public string buildId;
         public int width;
         public int height;
-        public QaSafeArea safeArea;
+        public float[] safeArea;
         public string orientation;
         public int metricsEpoch;
         public string view;
