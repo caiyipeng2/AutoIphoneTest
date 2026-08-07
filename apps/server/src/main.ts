@@ -19,6 +19,7 @@ export async function main(): Promise<void> {
     deviceRegistry: runtimeDevices.registry,
     artifactService: runtimeDevices.artifactService,
     deploymentService: runtimeDevices.deploymentService,
+    uidService: runtimeDevices.uidService,
   });
   app.addHook("onClose", async () => {
     runtimeDevices.registry.stop();

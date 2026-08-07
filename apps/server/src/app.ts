@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import type { HealthSnapshot } from "@test-center/contracts/health";
-import type { DeviceRegistry } from "@test-center/devices";
+import type { DeviceRegistry, UidService } from "@test-center/devices";
 import { BootstrapSessionStore } from "@test-center/security/bootstrap-session";
 import { assertAllowedHost } from "@test-center/security/request-policy";
 
@@ -16,6 +16,7 @@ import { registerBootstrapRoute } from "./routes/bootstrap.js";
 import type { ServerContext } from "./routes/context.js";
 import { registerHealthRoute } from "./routes/health.js";
 import { registerDevicesRoutes } from "./routes/devices.js";
+import { registerDeviceBridgeRoutes } from "./routes/device-bridge.js";
 import {
   MAX_ARTIFACT_UPLOAD_BYTES,
   registerArtifactsRoutes,
@@ -33,6 +34,7 @@ export interface CreateAppOptions {
   readonly healthSnapshot?: HealthSnapshot;
   readonly consoleDist?: string;
   readonly deviceRegistry?: DeviceRegistry;
+  readonly uidService?: UidService;
   readonly artifactService?: ArtifactRouteService;
   readonly artifactImportRoot?: string;
   readonly artifactUploadLimitBytes?: number;
@@ -60,6 +62,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
       },
     },
     ...(options.deviceRegistry === undefined ? {} : { devices: options.deviceRegistry }),
+    ...(options.uidService === undefined ? {} : { uids: options.uidService }),
     ...(options.artifactService === undefined ? {} : { artifacts: options.artifactService }),
     ...(options.deploymentService === undefined ? {} : { deployments: options.deploymentService }),
   };
@@ -100,6 +103,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
   await registerBootstrapRoute(app, context);
   await registerSettingsRoutes(app, context);
   await registerDevicesRoutes(app, context);
+  await registerDeviceBridgeRoutes(app, context);
   await registerArtifactsRoutes(
     app,
     context,

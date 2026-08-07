@@ -242,6 +242,27 @@ CREATE INDEX IF NOT EXISTS idx_destructive_confirmations_expiry ON destructive_c
 `.trim(),
 };
 
+export const UID_BRIDGE_MIGRATION: Migration = {
+  id: "0007_uid_bridge_observations",
+  sql: `
+CREATE TABLE IF NOT EXISTS device_uid_observations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  serial TEXT NOT NULL,
+  package_name TEXT NOT NULL,
+  install_generation INTEGER NOT NULL CHECK (install_generation > 0),
+  app_data_generation INTEGER NOT NULL CHECK (app_data_generation > 0),
+  uid TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('BRIDGE_AUTO', 'MANUAL')),
+  actor TEXT NOT NULL,
+  build_id TEXT NOT NULL,
+  observed_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_device_uid_observations_current
+  ON device_uid_observations(serial, package_name, install_generation, app_data_generation, observed_at DESC);
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");

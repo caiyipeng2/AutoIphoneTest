@@ -104,6 +104,41 @@ export class InstallationRepository {
       .run(uid, updatedAt, serial, packageName);
   }
 
+  public recordCurrentUidObservation(input: {
+    readonly serial: DeviceSerial;
+    readonly packageName: string;
+    readonly uid: string;
+    readonly installGeneration: number;
+    readonly appDataGeneration: number;
+    readonly updatedAt?: string;
+  }): InstallationRecord {
+    const updatedAt = input.updatedAt ?? new Date().toISOString();
+    this.ensure(input.serial, input.packageName, updatedAt);
+    const current = this.get(input.serial, input.packageName);
+    if (
+      current.installGeneration !== input.installGeneration ||
+      current.appDataGeneration !== input.appDataGeneration
+    ) {
+      throw new Error("UID observation does not match the current installation generation.");
+    }
+    const update = this.database.transaction(() => {
+      this.database
+        .prepare(
+          `UPDATE device_app_installations
+           SET last_mutation_status = NULL, last_mutation_error = NULL, updated_at = ?
+           WHERE serial = ? AND package_name = ?`,
+        )
+        .run(updatedAt, input.serial, input.packageName);
+      this.database
+        .prepare(
+          "UPDATE device_uids SET current_uid = ?, updated_at = ? WHERE serial = ? AND package_name = ?",
+        )
+        .run(input.uid, updatedAt, input.serial, input.packageName);
+    });
+    update.immediate();
+    return this.get(input.serial, input.packageName);
+  }
+
   public recordDataMutation(input: {
     readonly serial: DeviceSerial;
     readonly packageName: string;

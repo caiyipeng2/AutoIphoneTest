@@ -24,13 +24,19 @@ import {
   DEPLOYMENTS_MIGRATION,
   DEPLOYMENT_CONTROLS_MIGRATION,
   INSTALL_SETS_MIGRATION,
+  UID_BRIDGE_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
   migrate,
   openDatabase,
   createRuntimePaths,
 } from "@test-center/database";
-import { createAdbDiscoverySource, DeviceRegistry, DeviceRepository } from "@test-center/devices";
+import {
+  createAdbDiscoverySource,
+  DeviceRegistry,
+  DeviceRepository,
+  UidService,
+} from "@test-center/devices";
 import { InstallationRepository } from "@test-center/devices";
 import { DestructiveConfirmationService } from "@test-center/security";
 import {
@@ -45,6 +51,7 @@ export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
   readonly artifactService: ArtifactRouteService;
   readonly deploymentService: DeploymentRouteService;
+  readonly uidService: UidService;
   readonly close: () => void;
 }
 
@@ -62,6 +69,7 @@ export async function createRuntimeDeviceRegistry(
     DEPLOYMENTS_MIGRATION,
     INSTALL_SETS_MIGRATION,
     DEPLOYMENT_CONTROLS_MIGRATION,
+    UID_BRIDGE_MIGRATION,
   ]);
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
@@ -78,6 +86,7 @@ export async function createRuntimeDeviceRegistry(
     new DeviceRepository(database),
     createAdbDiscoverySource(client),
   );
+  const uidService = new UidService(database);
   const deploymentService = new RuntimeDeploymentRouteService(
     database,
     registry,
@@ -89,6 +98,7 @@ export async function createRuntimeDeviceRegistry(
     registry,
     artifactService,
     deploymentService,
+    uidService,
     close: () => database.close(),
   };
 }
@@ -308,7 +318,8 @@ class RuntimeDeploymentRouteService implements DeploymentRouteService {
     )
       return undefined;
     const relative = win32.relative(this.artifactRoot, artifact.storedPath);
-    if (relative === "" || relative.startsWith("..") || win32.isAbsolute(relative)) return undefined;
+    if (relative === "" || relative.startsWith("..") || win32.isAbsolute(relative))
+      return undefined;
     return {
       id: artifact.id,
       kind: artifact.kind,
