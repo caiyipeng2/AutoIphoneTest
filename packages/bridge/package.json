@@ -18,6 +18,10 @@
     "./bridge-client": {
       "types": "./dist/bridge-client.d.ts",
       "import": "./dist/bridge-client.js"
+    },
+    "./clock-calibrator": {
+      "types": "./dist/clock-calibrator.d.ts",
+      "import": "./dist/clock-calibrator.js"
     }
   },
   "dependencies": {
