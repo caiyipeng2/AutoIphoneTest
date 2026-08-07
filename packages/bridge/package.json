@@ -14,6 +14,10 @@
     "./protocol": {
       "types": "./dist/protocol.d.ts",
       "import": "./dist/protocol.js"
+    },
+    "./bridge-client": {
+      "types": "./dist/bridge-client.d.ts",
+      "import": "./dist/bridge-client.js"
     }
   },
   "dependencies": {
