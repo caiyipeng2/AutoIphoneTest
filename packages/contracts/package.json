@@ -38,6 +38,10 @@
     "./deployment": {
       "types": "./dist/deployment.d.ts",
       "import": "./dist/deployment.js"
+    },
+    "./bridge": {
+      "types": "./dist/bridge.d.ts",
+      "import": "./dist/bridge.js"
     }
   },
   "dependencies": {

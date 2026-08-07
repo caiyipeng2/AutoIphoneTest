@@ -1,0 +1,23 @@
+{
+  "name": "@test-center/bridge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/contracts": "0.0.0",
+    "zod": "4.4.3"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "com.caiyipeng.testcenter.qa",
+  "version": "0.1.0",
+  "displayName": "Test Center QA Bridge",
+  "description": "QA-only observation bridge for Unity test fixtures and approved game instrumentation.",
+  "unity": "2022.3",
+  "author": {
+    "name": "Test Center"
+  },
+  "dependencies": {}
+}

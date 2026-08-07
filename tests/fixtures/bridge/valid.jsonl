@@ -1,0 +1,2 @@
+{"type":"QA_HELLO","schemaVersion":1,"bridgeInstanceId":"bridge-instance-a","bootId":"boot-1","buildId":"qa-1"}
+{"type":"QA_STATE","schemaVersion":1,"bridgeInstanceId":"bridge-instance-a","uid":"UID-1","installGeneration":1,"appDataGeneration":2,"buildId":"qa-1","width":1080,"height":2400,"safeArea":[0,80,1080,2260],"orientation":"Portrait","metricsEpoch":12,"view":"MainHUD","focusedControlId":null,"textInputAvailable":false,"stateSeq":1}
