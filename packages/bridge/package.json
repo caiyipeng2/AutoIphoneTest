@@ -22,6 +22,10 @@
     "./clock-calibrator": {
       "types": "./dist/clock-calibrator.d.ts",
       "import": "./dist/clock-calibrator.js"
+    },
+    "./arm-controller": {
+      "types": "./dist/arm-controller.d.ts",
+      "import": "./dist/arm-controller.js"
     }
   },
   "dependencies": {
