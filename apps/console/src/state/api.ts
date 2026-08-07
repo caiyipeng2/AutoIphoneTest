@@ -27,6 +27,36 @@ export interface DevicesSnapshot {
   devices: DeviceRecord[];
 }
 
+export type BridgeHealthStatus = "READY" | "DEGRADED" | "UNAVAILABLE";
+export interface UidSnapshot {
+  installation: {
+    serial: string;
+    packageName: string;
+    installGeneration: number;
+    appDataGeneration: number;
+    currentUid: string | null;
+    updatedAt: string;
+  };
+  uid: {
+    uid: string;
+    source: "BRIDGE_AUTO" | "MANUAL" | "UNKNOWN";
+    actor: string;
+    buildId: string;
+    installGeneration: number;
+    appDataGeneration: number;
+    observedAt: string;
+  } | null;
+  bridge: {
+    status: BridgeHealthStatus;
+    bridgeInstanceId?: string;
+    bootId?: string;
+    buildId?: string;
+    stateSeq?: number;
+    lastStateAt?: string;
+    reason?: string;
+  };
+}
+
 export const demoHealth: HealthSnapshot = {
   schemaVersion: 1,
   service: { state: "READY" },
@@ -50,6 +80,52 @@ export async function fetchDevices(signal?: AbortSignal): Promise<DevicesSnapsho
   const response = await fetch("/api/devices", signal ? { signal } : undefined);
   if (!response.ok) throw new Error(`devices:${response.status}`);
   return (await response.json()) as DevicesSnapshot;
+}
+
+export async function fetchDeviceBridge(
+  serial: string,
+  packageName: string,
+  signal?: AbortSignal,
+): Promise<UidSnapshot> {
+  const response = await fetch(
+    `/api/devices/${encodeURIComponent(serial)}/bridge?packageName=${encodeURIComponent(packageName)}`,
+    signal ? { signal } : undefined,
+  );
+  if (!response.ok) throw new Error(`device-bridge:${response.status}`);
+  return (await response.json()) as UidSnapshot;
+}
+
+export async function issueUidConfirmation(serial: string, packageName: string): Promise<string> {
+  const csrf = readCsrfToken();
+  const response = await fetch(`/api/devices/${encodeURIComponent(serial)}/uid/confirmations`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+    },
+    body: JSON.stringify({ packageName }),
+  });
+  if (!response.ok) throw new Error(`uid-confirmation:${response.status}`);
+  return ((await response.json()) as { nonce: string }).nonce;
+}
+
+export async function updateManualUid(
+  serial: string,
+  packageName: string,
+  uid: string,
+  confirmationNonce: string,
+): Promise<UidSnapshot> {
+  const csrf = readCsrfToken();
+  const response = await fetch(`/api/devices/${encodeURIComponent(serial)}/uid`, {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+      ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+    },
+    body: JSON.stringify({ packageName, uid, confirmationNonce }),
+  });
+  if (!response.ok) throw new Error(`uid-update:${response.status}`);
+  return (await response.json()) as UidSnapshot;
 }
 
 export async function updateDeviceTags(
@@ -80,4 +156,13 @@ export function exchangeBootstrapCode(code: string): Promise<Response> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ code }),
   });
+}
+
+function readCsrfToken(): string | undefined {
+  const value = document.cookie
+    .split(";")
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith("tc_csrf="))
+    ?.slice("tc_csrf=".length);
+  return value === undefined ? undefined : decodeURIComponent(value);
 }

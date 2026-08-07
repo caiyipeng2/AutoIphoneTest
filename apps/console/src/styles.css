@@ -546,7 +546,7 @@ main {
 .table-head,
 .table-row {
   display: grid;
-  grid-template-columns: 1.6fr 0.6fr 1fr 0.6fr 42px;
+  grid-template-columns: 1.6fr 0.6fr 1fr 0.6fr 1fr 42px;
   align-items: center;
   gap: 14px;
   padding: 14px 17px;
@@ -589,6 +589,21 @@ main {
 .table-row strong,
 .table-row small {
   display: block;
+}
+.device-row-select {
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.device-row-select:hover,
+.device-row-select:focus-visible {
+  border-color: #c8d3c9;
+  background: #f5f8f1;
+  outline: 0;
 }
 .table-row small {
   color: #899392;
@@ -920,6 +935,203 @@ main {
   color: #38696d;
   font-size: 12px;
 }
+
+@media (max-width: 620px) {
+  .device-details {
+    padding: 15px;
+  }
+  .device-details-heading {
+    gap: 10px;
+  }
+  .device-details-grid,
+  .device-facts {
+    grid-template-columns: 1fr;
+  }
+  .device-facts {
+    gap: 0;
+  }
+}
+.notice-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.device-details {
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid #d9d2c5;
+  background: #fffdf8;
+}
+.device-details-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 17px;
+  border-bottom: 1px solid #ebe6dc;
+}
+.device-details-title,
+.device-details-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.device-details-title h2 {
+  margin: 4px 0 3px;
+  font:
+    700 18px "Trebuchet MS",
+    "Segoe UI",
+    sans-serif;
+}
+.device-details-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 12px;
+  margin-top: 17px;
+}
+.detail-block,
+.bridge-status {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid #d9d2c5;
+  background: #f8f6ef;
+}
+.detail-block-uid {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 142px;
+}
+.detail-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #72817f;
+  font-size: 11px;
+}
+.detail-block strong {
+  margin: 9px 0 6px;
+  color: #1e302d;
+  font:
+    700 25px Consolas,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.detail-block small,
+.bridge-status p {
+  color: #7d8988;
+  font-size: 11px;
+}
+.bridge-status-ready {
+  border-top: 3px solid #b9e769;
+}
+.bridge-status-degraded {
+  border-top: 3px solid #e98568;
+}
+.bridge-status-unavailable {
+  border-top: 3px solid #b7b9aa;
+}
+.bridge-status-title,
+.bridge-status-meta,
+.bridge-status-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bridge-status-title > svg {
+  color: #5f7d3f;
+}
+.bridge-status-degraded .bridge-status-title > svg {
+  color: #b05f3e;
+}
+.bridge-status-unavailable .bridge-status-title > svg {
+  color: #7d8988;
+}
+.bridge-status-title strong {
+  color: #28383a;
+  font-size: 13px;
+}
+.bridge-status-title .chip {
+  margin-left: auto;
+  background: #e9e6dc;
+  color: #657372;
+}
+.bridge-status p {
+  margin: 11px 0 9px;
+}
+.bridge-status-meta {
+  justify-content: space-between;
+  color: #788486;
+  font-size: 11px;
+}
+.bridge-status-meta span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.bridge-status-identity {
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e4dfd5;
+  color: #637476;
+  font-size: 10px;
+  overflow: hidden;
+}
+.bridge-status-identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.device-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.device-facts > div {
+  min-width: 0;
+  padding: 11px 12px;
+  border-bottom: 1px solid #ebe6dc;
+}
+.device-facts span,
+.device-facts strong {
+  display: block;
+}
+.device-facts span {
+  color: #899392;
+  font-size: 10px;
+}
+.device-facts strong {
+  margin-top: 5px;
+  color: #334447;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.device-details-loading {
+  padding: 20px 0 3px;
+  color: #788486;
+  font-size: 12px;
+}
+.uid-field {
+  display: grid;
+  gap: 7px;
+  color: #697877;
+  font-size: 11px;
+}
+.uid-field input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #cfc8bc;
+  border-radius: 3px;
+  background: #fffdf8;
+  color: #28383a;
+  outline-color: #7ec8d6;
+  font:
+    12px Consolas,
+    monospace;
+}
 .dialog-backdrop {
   position: fixed;
   z-index: 20;
@@ -947,7 +1159,10 @@ main {
 }
 .dialog-heading h2 {
   margin: 5px 0 0;
-  font: 700 18px "Trebuchet MS", "Segoe UI", sans-serif;
+  font:
+    700 18px "Trebuchet MS",
+    "Segoe UI",
+    sans-serif;
 }
 .dialog-actions {
   display: flex;
@@ -993,5 +1208,18 @@ main {
   }
   .dialog-actions .toolbar-note {
     width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .device-details-grid,
+  .device-facts {
+    grid-template-columns: 1fr;
+  }
+  .device-details {
+    padding: 15px;
+  }
+  .device-facts {
+    gap: 0;
   }
 }

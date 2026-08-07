@@ -1,6 +1,7 @@
 import { MoreHorizontal, RefreshCw, Save, Smartphone } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { PageFrame } from "../components/PageFrame";
+import { DeviceDetails } from "../features/devices/DeviceDetails";
 import { fetchDevices, updateDeviceTags, type DeviceRecord, type DeviceState } from "../state/api";
 
 const stateLabels: Record<DeviceState, string> = {
@@ -18,6 +19,7 @@ export function DevicesPage({ refreshKey = 0 }: { refreshKey?: number }) {
   const [groupDraft, setGroupDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSerial, setSelectedSerial] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -102,10 +104,13 @@ export function DevicesPage({ refreshKey = 0 }: { refreshKey?: number }) {
           const uid = typeof metadata.uid === "string" ? metadata.uid : device.serial;
           return (
             <div className="table-row" key={device.serial}>
-              <div>
+              <button
+                className="device-row-select"
+                onClick={() => setSelectedSerial(device.serial)}
+              >
                 <strong>{model}</strong>
                 <small>UID · {uid}</small>
-              </div>
+              </button>
               <span>{android}</span>
               <span className="mono">{device.serial}</span>
               <span
@@ -157,6 +162,13 @@ export function DevicesPage({ refreshKey = 0 }: { refreshKey?: number }) {
           </div>
         )}
       </div>
+      {selectedSerial !== null &&
+        (() => {
+          const selected = devices.find((device) => device.serial === selectedSerial);
+          return selected ? (
+            <DeviceDetails device={selected} onClose={() => setSelectedSerial(null)} />
+          ) : null;
+        })()}
     </PageFrame>
   );
 }
