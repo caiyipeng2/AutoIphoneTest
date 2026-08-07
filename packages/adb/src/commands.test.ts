@@ -11,6 +11,38 @@ describe("serial-bound adb commands", () => {
     expect(renderAdbCommand({ kind: "devices" })).toEqual(["devices", "-l"]);
   });
 
+  it("renders serial-owned bridge forwarding commands", () => {
+    expect(renderAdbCommand({ kind: "forwardAdd", serial, hostPort: 18101, devicePort: 17501 })).toEqual([
+      "-s",
+      serial,
+      "forward",
+      "tcp:18101",
+      "tcp:17501",
+    ]);
+    expect(renderAdbCommand({ kind: "forwardList", serial })).toEqual([
+      "-s",
+      serial,
+      "forward",
+      "--list",
+    ]);
+    expect(renderAdbCommand({ kind: "forwardRemove", serial, hostPort: 18101 })).toEqual([
+      "-s",
+      serial,
+      "forward",
+      "--remove",
+      "tcp:18101",
+    ]);
+  });
+
+  it("rejects invalid bridge forwarding ports", () => {
+    expect(() => renderAdbCommand({ kind: "forwardAdd", serial, hostPort: 0, devicePort: 17501 })).toThrow(
+      /port/i,
+    );
+    expect(() => renderAdbCommand({ kind: "forwardRemove", serial, hostPort: 65_536 })).toThrow(
+      /port/i,
+    );
+  });
+
   it.each([
     [{ kind: "getState", serial }, ["-s", serial, "get-state"]],
     [{ kind: "getSerialno", serial }, ["-s", serial, "get-serialno"]],

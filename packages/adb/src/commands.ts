@@ -47,6 +47,16 @@ export type AdbDeploymentCommand =
   | { readonly kind: "foregroundActivity"; readonly serial: DeviceSerial }
   | { readonly kind: "packagePid"; readonly serial: DeviceSerial; readonly packageName: string };
 
+export type AdbBridgeCommand =
+  | {
+      readonly kind: "forwardAdd";
+      readonly serial: DeviceSerial;
+      readonly hostPort: number;
+      readonly devicePort: number;
+    }
+  | { readonly kind: "forwardList"; readonly serial: DeviceSerial }
+  | { readonly kind: "forwardRemove"; readonly serial: DeviceSerial; readonly hostPort: number };
+
 export type AdbPackageCommand =
   | { readonly kind: "packagePaths"; readonly serial: DeviceSerial; readonly packageName: string }
   | { readonly kind: "packageDetails"; readonly serial: DeviceSerial; readonly packageName: string }
@@ -63,7 +73,11 @@ export type AdbPackageCommand =
     };
 
 export type AdbCommand =
-  AdbDiscoveryCommand | AdbDeviceCommand | AdbPackageCommand | AdbDeploymentCommand;
+  | AdbDiscoveryCommand
+  | AdbDeviceCommand
+  | AdbPackageCommand
+  | AdbDeploymentCommand
+  | AdbBridgeCommand;
 
 export function renderAdbCommand(command: AdbCommand): string[] {
   if (command.kind === "devices") {
@@ -143,6 +157,24 @@ export function renderAdbCommand(command: AdbCommand): string[] {
       return ["-s", serial, "shell", "dumpsys", "activity", "activities"];
     case "packagePid":
       return ["-s", serial, "shell", "pidof", parseAndroidPackageName(command.packageName)];
+    case "forwardAdd":
+      return [
+        "-s",
+        serial,
+        "forward",
+        `tcp:${validatePort(command.hostPort, "hostPort")}`,
+        `tcp:${validatePort(command.devicePort, "devicePort")}`,
+      ];
+    case "forwardList":
+      return ["-s", serial, "forward", "--list"];
+    case "forwardRemove":
+      return [
+        "-s",
+        serial,
+        "forward",
+        "--remove",
+        `tcp:${validatePort(command.hostPort, "hostPort")}`,
+      ];
   }
 }
 
@@ -168,6 +200,13 @@ function validateApkPath(value: string): string {
 function validateActivityName(value: string): string {
   if (!/^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)+$/.test(value)) {
     throw new TypeError("Invalid Android activity name.");
+  }
+  return value;
+}
+
+function validatePort(value: number, name: string): number {
+  if (!Number.isInteger(value) || value < 1 || value > 65_535) {
+    throw new TypeError(`${name} must be an integer TCP port between 1 and 65535.`);
   }
   return value;
 }
