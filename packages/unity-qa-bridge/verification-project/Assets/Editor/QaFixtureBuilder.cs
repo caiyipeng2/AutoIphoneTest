@@ -38,6 +38,9 @@ namespace Caiyipeng.TestCenter.QaFixture.Editor
             PlayerSettings.productName = "Test Center QA Fixture";
             PlayerSettings.companyName = "Test Center";
             PlayerSettings.bundleVersion = "0.1.0";
+            PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
+            PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+            AssetDatabase.SaveAssets();
 
             var options = new BuildPlayerOptions
             {

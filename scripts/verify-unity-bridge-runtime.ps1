@@ -29,7 +29,7 @@ function Invoke-Adb {
 
 function Select-DeviceSerial {
     if (-not [string]::IsNullOrWhiteSpace($Serial)) { return $Serial }
-    $devices = Invoke-Adb @("devices") | Where-Object { $_ -match "^\S+\s+device\s*$" }
+    $devices = @(Invoke-Adb @("devices") | Where-Object { $_ -match "^\S+\s+device\s*$" })
     if ($devices.Count -ne 1) { throw "Expected exactly one online Android device; found $($devices.Count)." }
     return ($devices[0] -split "\s+")[0]
 }
@@ -55,20 +55,46 @@ function Try-ReadForwardedLine {
     $client = [System.Net.Sockets.TcpClient]::new()
     try {
         $client.Connect("127.0.0.1", $HostPort)
-        if (-not $ShouldConnect) { throw "Release fixture unexpectedly accepted a QA bridge connection." }
         $line = Read-BridgeLine $client
-        if ([string]::IsNullOrWhiteSpace($line) -or $line.IndexOf($ExpectedType, [StringComparison]::Ordinal) -lt 0) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            return @{ connected = $false; firstLine = $null }
+        }
+        if (-not $ShouldConnect) {
+            if ($line.IndexOf($ExpectedType, [StringComparison]::Ordinal) -ge 0) {
+                throw "Release fixture unexpectedly emitted $ExpectedType."
+            }
+            return @{ connected = $false; firstLine = $line }
+        }
+        if ($line.IndexOf($ExpectedType, [StringComparison]::Ordinal) -lt 0) {
             throw "Expected $ExpectedType from QA fixture, received: $line"
         }
         return @{ connected = $true; firstLine = $line }
     }
     catch [System.Net.Sockets.SocketException] {
-        if ($ShouldConnect) { throw }
+        if ($ShouldConnect) { return @{ connected = $false; firstLine = $null } }
+        return @{ connected = $false; firstLine = $null }
+    }
+    catch [System.IO.IOException] {
+        if ($ShouldConnect) { return @{ connected = $false; firstLine = $null } }
         return @{ connected = $false; firstLine = $null }
     }
     finally {
         $client.Dispose()
     }
+}
+
+function Wait-ForForwardedLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExpectedType,
+        [int]$TimeoutSeconds = 20
+    )
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        $result = Try-ReadForwardedLine $ExpectedType $true
+        if ($result.connected) { return $result }
+        Start-Sleep -Milliseconds 500
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "Timed out waiting ${ExpectedType} from QA fixture after ${TimeoutSeconds}s."
 }
 
 $targetSerial = Select-DeviceSerial
@@ -85,7 +111,7 @@ $evidence = [ordered]@{
 try {
     Install-AndLaunch $qaApk $targetSerial
     Invoke-Adb @("-s", $targetSerial, "forward", "tcp:$HostPort", "tcp:$DevicePort") | Out-Null
-    $evidence.qa = Try-ReadForwardedLine "QA_HELLO" $true
+    $evidence.qa = Wait-ForForwardedLine "QA_HELLO"
     Invoke-Adb @("-s", $targetSerial, "forward", "--remove", "tcp:$HostPort") | Out-Null
 
     Invoke-Adb @("-s", $targetSerial, "logcat", "-c") | Out-Null

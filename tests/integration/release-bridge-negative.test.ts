@@ -49,7 +49,8 @@ describe.skipIf(!artifactsAvailable)("Unity bridge release-negative APK inspecti
   it("includes the bridge assembly in the QA artifact", () => {
     const extracted = extractApk(qaApk);
     try {
-      expect(extracted.entries).toContain("assets/bin/Data/Managed/TestCenter.QaBridge.dll");
+      const assembliesPath = join(extracted.root, "assets", "bin", "Data", "ScriptingAssemblies.json");
+      expect(readFileSync(assembliesPath, "utf8")).toContain("TestCenter.QaBridge.dll");
     } finally {
       rmSync(extracted.root, { recursive: true, force: true });
     }
@@ -59,6 +60,8 @@ describe.skipIf(!artifactsAvailable)("Unity bridge release-negative APK inspecti
     const extracted = extractApk(releaseApk);
     try {
       expect(extracted.entries).not.toContain("assets/bin/Data/Managed/TestCenter.QaBridge.dll");
+      const assembliesPath = join(extracted.root, "assets", "bin", "Data", "ScriptingAssemblies.json");
+      expect(readFileSync(assembliesPath, "utf8")).not.toContain("TestCenter.QaBridge.dll");
       for (const marker of [
         "TestCenter.QaBridge",
         "QaBridgeServer",
