@@ -11,6 +11,7 @@
     { "path": "./packages/security" },
     { "path": "./packages/deployments" },
     { "path": "./packages/environment" },
+    { "path": "./packages/appium" },
     { "path": "./apps/server" },
     { "path": "./apps/console" }
   ]

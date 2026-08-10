@@ -1,0 +1,28 @@
+{
+  "name": "@test-center/appium",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./port-allocator": {
+      "types": "./dist/port-allocator.d.ts",
+      "import": "./dist/port-allocator.js"
+    },
+    "./appium-service": {
+      "types": "./dist/appium-service.d.ts",
+      "import": "./dist/appium-service.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/environment": "0.0.0",
+    "appium": "3.6.0",
+    "appium-uiautomator2-driver": "8.2.2"
+  }
+}
