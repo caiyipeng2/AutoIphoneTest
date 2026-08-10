@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 import type { HealthSnapshot } from "@test-center/contracts/health";
 import type { DeviceRegistry, UidService } from "@test-center/devices";
+import type { ViewProvider } from "@test-center/video";
 import { BootstrapSessionStore } from "@test-center/security/bootstrap-session";
 import { assertAllowedHost } from "@test-center/security/request-policy";
 
@@ -25,6 +26,7 @@ import {
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerDeploymentsRoutes } from "./routes/deployments.js";
 import { registerStateGateway } from "./ws/state-gateway.js";
+import { registerVideoGateway } from "./ws/video-gateway.js";
 
 export interface CreateAppOptions {
   readonly port: number;
@@ -39,6 +41,7 @@ export interface CreateAppOptions {
   readonly artifactImportRoot?: string;
   readonly artifactUploadLimitBytes?: number;
   readonly deploymentService?: import("./routes/deployments.js").DeploymentRouteService;
+  readonly viewProviders?: ReadonlyMap<string, ViewProvider>;
 }
 
 export async function createApp(options: CreateAppOptions): Promise<FastifyInstance> {
@@ -65,6 +68,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
     ...(options.uidService === undefined ? {} : { uids: options.uidService }),
     ...(options.artifactService === undefined ? {} : { artifacts: options.artifactService }),
     ...(options.deploymentService === undefined ? {} : { deployments: options.deploymentService }),
+    ...(options.viewProviders === undefined ? {} : { views: options.viewProviders }),
   };
   const snapshot = options.healthSnapshot ?? createDefaultHealthSnapshot();
 
@@ -111,6 +115,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
   );
   await registerDeploymentsRoutes(app, context);
   await registerStateGateway(app, context, snapshot);
+  await registerVideoGateway(app, context);
   return app;
 }
 

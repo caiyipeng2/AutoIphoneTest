@@ -15,7 +15,8 @@
     { "path": "../../packages/database" },
     { "path": "../../packages/deployments" },
     { "path": "../../packages/environment" },
-    { "path": "../../packages/security" }
+    { "path": "../../packages/security" },
+    { "path": "../../packages/video" }
   ],
   "include": ["src/**/*.ts"]
 }

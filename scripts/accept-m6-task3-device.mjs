@@ -3,9 +3,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { join } from "node:path";
 
+import WebSocket from "ws";
+
 import { AppiumService, AppiumW3cClient } from "../packages/appium/dist/index.js";
 import { LogcatStream } from "../packages/adb/dist/index.js";
 import { MjpegViewProvider } from "../packages/video/dist/index.js";
+import { createApp } from "../apps/server/dist/app.js";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = new URL("..", import.meta.url).pathname
@@ -23,6 +26,7 @@ const runDirectory = join(projectRoot, "data", "runs", `m6-task3-${Date.now()}`)
 const appiumPort = 4723;
 const systemPort = 8200;
 const mjpegPort = 7810;
+const gatewayPort = 4783;
 const evidencePath = join(runDirectory, "acceptance.json");
 
 await mkdir(runDirectory, { recursive: true });
@@ -57,9 +61,11 @@ const evidence = {
   appium: {},
   input: {},
   screenshot: {},
+  gateway: {},
   logcat: {},
 };
 let fence;
+let gatewayApp;
 let logcatStarted = false;
 let sessionDeleted = false;
 let serviceStopped = false;
@@ -122,6 +128,41 @@ try {
     degradedReason: frame.degradedReason,
   };
 
+  gatewayApp = await createApp({
+    port: gatewayPort,
+    bootstrapCode: "m6-task3-gateway-bootstrap",
+    launchSecret: "m6-task3-gateway-secret",
+    viewProviders: new Map([[serial, provider]]),
+  });
+  await gatewayApp.listen({ host: "127.0.0.1", port: gatewayPort });
+  const exchange = await fetch(`http://127.0.0.1:${String(gatewayPort)}/api/bootstrap/exchange`, {
+    method: "POST",
+    headers: {
+      host: `127.0.0.1:${String(gatewayPort)}`,
+      origin: `http://127.0.0.1:${String(gatewayPort)}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ code: "m6-task3-gateway-bootstrap" }),
+  });
+  if (!exchange.ok) throw new Error(`Gateway bootstrap failed with HTTP ${exchange.status}.`);
+  const setCookie = exchange.headers.get("set-cookie") ?? "";
+  const cookies = [
+    /tc_session=[^;]+/.exec(setCookie)?.[0],
+    /tc_csrf=[^;]+/.exec(setCookie)?.[0],
+  ].filter((cookie) => cookie !== undefined);
+  const gatewayFrame = await readGatewayFrame(cookies.join("; "));
+  evidence.gateway = {
+    port: gatewayPort,
+    authenticated: true,
+    serial: gatewayFrame.frame.serial,
+    frameId: gatewayFrame.frame.frameId,
+    degraded: gatewayFrame.frame.degraded,
+    provider: gatewayFrame.frame.provider,
+    payloadBytes: Buffer.byteLength(JSON.stringify(gatewayFrame), "utf8"),
+  };
+  await gatewayApp.close();
+  gatewayApp = undefined;
+
   await client.pressKey(fence, 82);
   await client.performActions(fence, [
     {
@@ -138,6 +179,7 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 1_000));
   evidence.input = { ...evidence.input, adbForegroundPackage: await readForegroundPackage() };
 } finally {
+  if (gatewayApp !== undefined) await gatewayApp.close().catch(() => undefined);
   if (logcatStarted) await logcat.stop().catch(() => undefined);
   if (fence !== undefined) {
     await client
@@ -192,4 +234,36 @@ async function readForegroundPackage() {
     );
   if (match === null) throw new Error("Unable to read foreground Android activity.");
   return match[1];
+}
+
+async function readGatewayFrame(cookieHeader) {
+  return await new Promise((resolve, reject) => {
+    const socket = new WebSocket(`ws://127.0.0.1:${String(gatewayPort)}/ws/video/${serial}`, {
+      headers: {
+        Cookie: cookieHeader,
+        Origin: `http://127.0.0.1:${String(gatewayPort)}`,
+      },
+    });
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error("Timed out waiting for the authenticated video frame."));
+    }, 5_000);
+    socket.on("message", (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        if (message?.type !== "video.frame") return;
+        clearTimeout(timeout);
+        socket.close();
+        resolve(message);
+      } catch (error) {
+        clearTimeout(timeout);
+        socket.close();
+        reject(error);
+      }
+    });
+    socket.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
 }

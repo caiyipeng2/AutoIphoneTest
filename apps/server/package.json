@@ -16,6 +16,7 @@
     "@test-center/devices": "0.0.0",
     "@test-center/environment": "0.0.0",
     "@test-center/security": "0.0.0",
+    "@test-center/video": "0.0.0",
     "@fastify/cookie": "11.1.2",
     "@fastify/multipart": "10.1.0",
     "@fastify/helmet": "13.1.0",
