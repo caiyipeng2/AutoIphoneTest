@@ -22,6 +22,10 @@
     "./mjpeg-provider": {
       "types": "./dist/mjpeg-provider.d.ts",
       "import": "./dist/mjpeg-provider.js"
+    },
+    "./scrcpy-primary-process": {
+      "types": "./dist/scrcpy-primary-process.d.ts",
+      "import": "./dist/scrcpy-primary-process.js"
     }
   },
   "dependencies": {
