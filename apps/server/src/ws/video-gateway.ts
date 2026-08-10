@@ -26,6 +26,9 @@ export interface VideoFrameMessage {
     readonly width: number;
     readonly height: number;
     readonly format: EncodedFrame["format"];
+    readonly keyFrame?: boolean;
+    readonly config?: boolean;
+    readonly presentationTimestampUs?: string;
     readonly degraded: boolean;
     readonly provider: EncodedFrame["provider"];
     readonly degradedReason?: EncodedFrame["degradedReason"];
@@ -46,6 +49,11 @@ export function encodeVideoFrame(frame: EncodedFrame): VideoFrameMessage {
       width: frame.width,
       height: frame.height,
       format: frame.format,
+      ...(frame.keyFrame === undefined ? {} : { keyFrame: frame.keyFrame }),
+      ...(frame.config === undefined ? {} : { config: frame.config }),
+      ...(frame.presentationTimestampUs === undefined
+        ? {}
+        : { presentationTimestampUs: frame.presentationTimestampUs }),
       degraded: frame.degraded,
       provider: frame.provider,
       ...(frame.degradedReason === undefined ? {} : { degradedReason: frame.degradedReason }),

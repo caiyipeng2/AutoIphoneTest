@@ -7,6 +7,10 @@
     "dist"
   ],
   "exports": {
+    "./adb-scrcpy-transport": {
+      "types": "./dist/adb-scrcpy-transport.d.ts",
+      "import": "./dist/adb-scrcpy-transport.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
@@ -26,6 +30,14 @@
     "./scrcpy-primary-process": {
       "types": "./dist/scrcpy-primary-process.d.ts",
       "import": "./dist/scrcpy-primary-process.js"
+    },
+    "./scrcpy-video-parser": {
+      "types": "./dist/scrcpy-video-parser.d.ts",
+      "import": "./dist/scrcpy-video-parser.js"
+    },
+    "./tango-scrcpy-provider": {
+      "types": "./dist/tango-scrcpy-provider.d.ts",
+      "import": "./dist/tango-scrcpy-provider.js"
     }
   },
   "dependencies": {

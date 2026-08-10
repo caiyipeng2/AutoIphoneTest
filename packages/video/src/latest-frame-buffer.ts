@@ -8,6 +8,9 @@ export interface EncodedFrame {
   readonly height: number;
   readonly format: "jpeg" | "h264";
   readonly data: Uint8Array;
+  readonly keyFrame?: boolean;
+  readonly config?: boolean;
+  readonly presentationTimestampUs?: string;
   readonly degraded: boolean;
   readonly provider: "tango" | "mjpeg" | "screenshot";
   readonly degradedReason?: "PRIMARY_PROVIDER_UNAVAILABLE" | "BACKPRESSURE";
