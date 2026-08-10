@@ -46,6 +46,9 @@ class FakeLogcatProcess implements LogcatProcess {
     this.terminated = true;
     this.closeListener?.();
   }
+  public emitClose(): void {
+    this.closeListener?.();
+  }
 }
 
 describe("logcat stream", () => {
@@ -146,5 +149,25 @@ describe("logcat stream", () => {
           event.recovered === true,
       ),
     ).toBe(true);
+  });
+
+  it("makes process-close and explicit stop idempotent while closing a segment", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "test-center-logcat-"));
+    temporaryDirectories.push(directory);
+    const process = new FakeLogcatProcess([]);
+    const stream = new LogcatStream({
+      serial: "serial-a",
+      adbPath: "C:\\Android\\platform-tools\\adb.exe",
+      cwd: directory,
+      runDirectory: directory,
+      processFactory: () => process,
+    });
+
+    await stream.start();
+    process.emit("08-10 10:11:12.345  123  456 I Unity: race\n");
+    await stream.flush();
+    process.emitClose();
+
+    await expect(stream.stop()).resolves.toBeUndefined();
   });
 });

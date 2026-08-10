@@ -117,6 +117,7 @@ export class LogcatStream {
   private removeStdoutListener: (() => void) | undefined;
   private removeCloseListener: (() => void) | undefined;
   private segment: SegmentState | undefined;
+  private closePromise: Promise<void> | undefined;
   private nextSegmentIndex = 1;
   private started = false;
 
@@ -271,6 +272,16 @@ export class LogcatStream {
   }
 
   private async closeSegment(): Promise<void> {
+    if (this.closePromise !== undefined) return await this.closePromise;
+    this.closePromise = this.closeSegmentOnce();
+    try {
+      await this.closePromise;
+    } finally {
+      this.closePromise = undefined;
+    }
+  }
+
+  private async closeSegmentOnce(): Promise<void> {
     const segment = this.segment;
     if (segment === undefined || segment.recordCount === 0) {
       this.segment = undefined;

@@ -1,0 +1,30 @@
+{
+  "name": "@test-center/video",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./view-provider": {
+      "types": "./dist/view-provider.d.ts",
+      "import": "./dist/view-provider.js"
+    },
+    "./latest-frame-buffer": {
+      "types": "./dist/latest-frame-buffer.d.ts",
+      "import": "./dist/latest-frame-buffer.js"
+    },
+    "./mjpeg-provider": {
+      "types": "./dist/mjpeg-provider.d.ts",
+      "import": "./dist/mjpeg-provider.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/contracts": "0.0.0"
+  }
+}

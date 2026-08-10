@@ -87,9 +87,47 @@ describe("AppiumW3cClient", () => {
 
     expect(fence).toEqual({ sessionId: "session-a", serial: "serial-a", generation: 7 });
     expect(JSON.parse(requestBody)).toEqual({
-      capabilities: { alwaysMatch: capabilities(), firstMatch: [{}] },
+      capabilities: {
+        alwaysMatch: {
+          platformName: "Android",
+          "appium:automationName": "UiAutomator2",
+          "appium:udid": "serial-a",
+          "appium:systemPort": 8200,
+          "appium:mjpegServerPort": 7810,
+          "appium:noReset": true,
+          "appium:newCommandTimeout": 60,
+        },
+        firstMatch: [{}],
+      },
     });
     expect(client.getLastTiming()?.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("vendor-prefixes Android capabilities for Appium 3", async () => {
+    let requestBody = "";
+    const baseUrl = await createFakeServer(async (_request, init) => {
+      requestBody = String(init?.body ?? "");
+      return Response.json({
+        sessionId: "session-prefixed",
+        value: { sessionId: "session-prefixed", capabilities: {} },
+      });
+    });
+    const client = new AppiumW3cClient({ baseUrl, serial: "serial-a", generation: 1 });
+
+    await client.createSession(capabilities());
+
+    const alwaysMatch = JSON.parse(requestBody).capabilities.alwaysMatch as Record<string, unknown>;
+    expect(alwaysMatch).toMatchObject({
+      platformName: "Android",
+      "appium:automationName": "UiAutomator2",
+      "appium:udid": "serial-a",
+      "appium:systemPort": 8200,
+      "appium:mjpegServerPort": 7810,
+      "appium:noReset": true,
+      "appium:newCommandTimeout": 60,
+    });
+    expect(alwaysMatch.automationName).toBeUndefined();
+    expect(alwaysMatch.udid).toBeUndefined();
   });
 
   it("supports only the narrow product endpoints and preserves the fence on responses", async () => {

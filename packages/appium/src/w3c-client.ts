@@ -156,7 +156,12 @@ export class AppiumW3cClient {
     const body = await this.requestBody(
       "POST",
       "/session",
-      { capabilities: { alwaysMatch: parsedCapabilities.data, firstMatch: [{}] } },
+      {
+        capabilities: {
+          alwaysMatch: toW3cCapabilities(parsedCapabilities.data),
+          firstMatch: [{}],
+        },
+      },
       CreateSessionResponseSchema,
     );
     const sessionId = body.sessionId ?? body.value.sessionId;
@@ -428,6 +433,18 @@ function assertResponseFence(response: Response, body: unknown, expected: Sessio
       throw new AppiumW3cClientError("FENCE_MISMATCH", "Appium response session id mismatch.");
     }
   }
+}
+
+function toW3cCapabilities(capabilities: DeviceSessionCapabilities): Record<string, unknown> {
+  return {
+    platformName: capabilities.platformName,
+    "appium:automationName": capabilities.automationName,
+    "appium:udid": capabilities.udid,
+    "appium:systemPort": capabilities.systemPort,
+    "appium:mjpegServerPort": capabilities.mjpegServerPort,
+    "appium:noReset": capabilities.noReset,
+    "appium:newCommandTimeout": capabilities.newCommandTimeout,
+  };
 }
 
 function getAppiumError(
