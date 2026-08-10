@@ -42,6 +42,14 @@
     "./bridge": {
       "types": "./dist/bridge.d.ts",
       "import": "./dist/bridge.js"
+    },
+    "./logcat": {
+      "types": "./dist/logcat.d.ts",
+      "import": "./dist/logcat.js"
+    },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "import": "./dist/session.js"
     }
   },
   "dependencies": {

@@ -23,6 +23,7 @@
   "dependencies": {
     "@test-center/environment": "0.0.0",
     "appium": "3.6.0",
-    "appium-uiautomator2-driver": "8.2.2"
+    "appium-uiautomator2-driver": "8.2.2",
+    "zod": "4.4.3"
   }
 }

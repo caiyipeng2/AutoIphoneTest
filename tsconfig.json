@@ -12,6 +12,7 @@
     { "path": "./packages/deployments" },
     { "path": "./packages/environment" },
     { "path": "./packages/appium" },
+    { "path": "./packages/sessions" },
     { "path": "./apps/server" },
     { "path": "./apps/console" }
   ]

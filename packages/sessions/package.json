@@ -1,0 +1,24 @@
+{
+  "name": "@test-center/sessions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./device-worker": {
+      "types": "./dist/device-worker.d.ts",
+      "import": "./dist/device-worker.js"
+    }
+  },
+  "dependencies": {
+    "@test-center/appium": "0.0.0",
+    "@test-center/adb": "0.0.0",
+    "@test-center/contracts": "0.0.0"
+  }
+}
