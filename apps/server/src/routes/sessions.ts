@@ -1,0 +1,118 @@
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { z } from "zod";
+
+import { AndroidPackageNameSchema } from "@test-center/contracts/artifact";
+import {
+  DeviceSerialSchema,
+  parseDeviceSerial,
+  type DeviceSerial,
+} from "@test-center/contracts/device";
+import {
+  assertAllowedHost,
+  assertSameOrigin,
+  assertValidCsrf,
+} from "@test-center/security/request-policy";
+
+import { requireSession } from "./bootstrap.js";
+import type { ServerContext } from "./context.js";
+
+const CreateSessionSchema = z
+  .object({
+    clientRequestId: z.string().trim().min(1).max(128),
+    packageName: AndroidPackageNameSchema,
+    deviceSerial: DeviceSerialSchema,
+    leaderVideoEnabled: z.boolean().default(true),
+  })
+  .strict();
+
+export interface SessionLeaderView {
+  readonly serial: DeviceSerial;
+  readonly role: "LEADER";
+  readonly membershipState: "ACTIVE" | "QUARANTINED" | "RECOVERING" | "LEFT";
+  readonly epoch: number;
+  readonly generation: number;
+}
+
+export interface SessionView {
+  readonly id: string;
+  readonly clientRequestId: string;
+  readonly packageName: string;
+  readonly state:
+    "CREATED" | "PREFLIGHT" | "RUNNING" | "PAUSED" | "FINISHED" | "INTERRUPTED" | "FAILED";
+  readonly currentEpoch: number;
+  readonly leaderVideoEnabled: boolean;
+  readonly leader: SessionLeaderView;
+}
+
+export interface SessionCreateInput {
+  readonly clientRequestId: string;
+  readonly packageName: string;
+  readonly deviceSerial: DeviceSerial;
+  readonly leaderVideoEnabled: boolean;
+  readonly actorSessionId: string;
+}
+
+export interface SessionRouteService {
+  create(
+    input: SessionCreateInput,
+  ): Promise<{ readonly session: SessionView; readonly state: "CREATED" | "DEDUPLICATED" }>;
+  get(id: string): SessionView | undefined;
+}
+
+export async function registerSessionsRoutes(
+  app: FastifyInstance,
+  context: ServerContext,
+): Promise<void> {
+  app.post("/api/sessions", async (request, reply) => {
+    try {
+      assertMutationAllowed(request, context);
+      if (context.sessionService === undefined)
+        return await reply.code(503).send({ error: "Session service unavailable." });
+      const payload = CreateSessionSchema.parse(request.body);
+      const session = requireSession(request, context);
+      if (session === undefined)
+        return await reply.code(401).send({ error: "Authentication required." });
+      const result = await context.sessionService.create({
+        clientRequestId: payload.clientRequestId,
+        packageName: payload.packageName,
+        deviceSerial: parseDeviceSerial(payload.deviceSerial),
+        leaderVideoEnabled: payload.leaderVideoEnabled,
+        actorSessionId: session.sessionId,
+      });
+      return await reply
+        .code(result.state === "CREATED" ? 201 : 200)
+        .send({ schemaVersion: 1, ...result });
+    } catch (error) {
+      return await reply
+        .code(sessionErrorCode(error))
+        .send({ error: error instanceof Error ? error.message : "Session creation rejected." });
+    }
+  });
+
+  app.get<{ Params: { id: string } }>("/api/sessions/:id", async (request, reply) => {
+    if (requireSession(request, context) === undefined)
+      return await reply.code(401).send({ error: "Authentication required." });
+    if (context.sessionService === undefined)
+      return await reply.code(503).send({ error: "Session service unavailable." });
+    const session = context.sessionService.get(decodeURIComponent(request.params.id));
+    if (session === undefined) return await reply.code(404).send({ error: "Session not found." });
+    return { schemaVersion: 1, session };
+  });
+}
+
+function assertMutationAllowed(request: FastifyRequest, context: ServerContext): void {
+  assertAllowedHost(request.headers.host, context.port);
+  assertSameOrigin(request.headers.origin, context.port);
+  if (requireSession(request, context) === undefined) throw new Error("Authentication required.");
+  const csrfHeader = request.headers["x-test-center-csrf"];
+  assertValidCsrf(request.cookies.tc_csrf, Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader);
+}
+
+function sessionErrorCode(error: unknown): 400 | 401 | 403 | 404 | 409 | 503 {
+  if (error instanceof Error && error.message === "Authentication required.") return 401;
+  if (error instanceof Error && error.message.includes("CSRF")) return 403;
+  if (error instanceof Error && error.message.includes("already exists")) return 409;
+  if (error instanceof Error && error.message.includes("not found")) return 404;
+  if (error instanceof Error && error.message.includes("unavailable")) return 503;
+  return 400;
+}

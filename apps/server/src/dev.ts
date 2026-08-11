@@ -16,12 +16,14 @@ const app = await createApp(
         deviceRegistry: runtimeDevices.registry,
         artifactService: runtimeDevices.artifactService,
         deploymentService: runtimeDevices.deploymentService,
+        sessionService: runtimeDevices.sessionService,
       }
     : {
         ...options,
         deviceRegistry: runtimeDevices.registry,
         artifactService: runtimeDevices.artifactService,
         deploymentService: runtimeDevices.deploymentService,
+        sessionService: runtimeDevices.sessionService,
       },
 );
 app.addHook("onClose", async () => {

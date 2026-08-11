@@ -362,6 +362,18 @@ CREATE INDEX IF NOT EXISTS idx_action_transitions_lookup ON action_transitions(a
 `.trim(),
 };
 
+export const SESSION_API_MIGRATION: Migration = {
+  id: "0009_session_api",
+  sql: `
+ALTER TABLE test_runs ADD COLUMN client_request_id TEXT;
+ALTER TABLE test_runs ADD COLUMN leader_video_enabled INTEGER NOT NULL DEFAULT 1
+  CHECK (leader_video_enabled IN (0, 1));
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_test_runs_client_request
+  ON test_runs(client_request_id) WHERE client_request_id IS NOT NULL;
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");

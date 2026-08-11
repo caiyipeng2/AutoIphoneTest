@@ -25,6 +25,7 @@ import {
   DEPLOYMENT_CONTROLS_MIGRATION,
   INSTALL_SETS_MIGRATION,
   RUN_ACTIONS_MIGRATION,
+  SESSION_API_MIGRATION,
   UID_BRIDGE_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
@@ -47,12 +48,15 @@ import {
 } from "@test-center/deployments";
 import type { DeploymentRouteService } from "./routes/deployments.js";
 import type { ArtifactRouteService, InstalledRegistrationResult } from "./routes/artifacts.js";
+import type { SessionRouteService } from "./routes/sessions.js";
+import { RuntimeSessionRouteService } from "./session-runtime.js";
 
 export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
   readonly artifactService: ArtifactRouteService;
   readonly deploymentService: DeploymentRouteService;
   readonly uidService: UidService;
+  readonly sessionService: SessionRouteService;
   readonly close: () => void;
 }
 
@@ -72,6 +76,7 @@ export async function createRuntimeDeviceRegistry(
     DEPLOYMENT_CONTROLS_MIGRATION,
     UID_BRIDGE_MIGRATION,
     RUN_ACTIONS_MIGRATION,
+    SESSION_API_MIGRATION,
   ]);
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
@@ -89,6 +94,7 @@ export async function createRuntimeDeviceRegistry(
     createAdbDiscoverySource(client),
   );
   const uidService = new UidService(database);
+  const sessionService = new RuntimeSessionRouteService(database, registry);
   const deploymentService = new RuntimeDeploymentRouteService(
     database,
     registry,
@@ -101,6 +107,7 @@ export async function createRuntimeDeviceRegistry(
     artifactService,
     deploymentService,
     uidService,
+    sessionService,
     close: () => database.close(),
   };
 }
