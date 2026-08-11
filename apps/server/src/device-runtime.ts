@@ -41,7 +41,13 @@ import {
 } from "@test-center/devices";
 import { InstallationRepository } from "@test-center/devices";
 import { DestructiveConfirmationService } from "@test-center/security";
-import { AppiumPreflightProbe } from "@test-center/sessions";
+import {
+  ActionDispatcher,
+  ActionOutbox,
+  AppiumActionExecutor,
+  AppiumPreflightProbe,
+  RunActionRepository,
+} from "@test-center/sessions";
 import {
   DeploymentOrchestrator,
   type DeploymentArtifact,
@@ -95,10 +101,14 @@ export async function createRuntimeDeviceRegistry(
     createAdbDiscoverySource(client),
   );
   const uidService = new UidService(database);
+  const actionRepository = new RunActionRepository(database);
+  const actionOutbox = new ActionOutbox(database);
   const sessionService = new RuntimeSessionRouteService(
     database,
     registry,
     createConfiguredPreflightProbe(),
+    actionRepository,
+    createConfiguredActionDispatcher(actionRepository, actionOutbox),
   );
   const deploymentService = new RuntimeDeploymentRouteService(
     database,
@@ -123,6 +133,37 @@ function createConfiguredPreflightProbe(): AppiumPreflightProbe | undefined {
   const systemPort = Number(process.env.TEST_CENTER_APPIUM_SYSTEM_PORT ?? 8201);
   const mjpegServerPort = Number(process.env.TEST_CENTER_APPIUM_MJPEG_PORT ?? 7811);
   return new AppiumPreflightProbe({ baseUrl, systemPort, mjpegServerPort });
+}
+
+function createConfiguredActionDispatcher(
+  actionRepository: RunActionRepository,
+  actionOutbox: ActionOutbox,
+): ActionDispatcher | undefined {
+  const baseUrl = process.env.TEST_CENTER_APPIUM_URL;
+  if (baseUrl === undefined || baseUrl.trim() === "") return undefined;
+  const systemPort = Number(process.env.TEST_CENTER_APPIUM_SYSTEM_PORT ?? 8201);
+  const mjpegServerPort = Number(process.env.TEST_CENTER_APPIUM_MJPEG_PORT ?? 7811);
+  const viewport = {
+    width: readPositiveInteger(process.env.TEST_CENTER_APPIUM_VIEWPORT_WIDTH, 1080),
+    height: readPositiveInteger(process.env.TEST_CENTER_APPIUM_VIEWPORT_HEIGHT, 2340),
+  };
+  return new ActionDispatcher(
+    actionRepository,
+    actionOutbox,
+    () =>
+      new AppiumActionExecutor({
+        baseUrl,
+        systemPort,
+        mjpegServerPort,
+        viewport,
+      }),
+    `server-action-dispatcher-${process.pid}`,
+  );
+}
+
+function readPositiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value ?? fallback);
+  return Number.isSafeInteger(parsed) && parsed >= 2 ? parsed : fallback;
 }
 
 export interface RuntimeArtifactMetadataParser {

@@ -18,6 +18,8 @@ import {
 } from "@test-center/database";
 
 import { RuntimeSessionRouteService } from "./session-runtime.js";
+import type { ActionView } from "@test-center/sessions";
+import { RunActionRepository } from "@test-center/sessions";
 
 const databases: Database.Database[] = [];
 const roots: string[] = [];
@@ -70,6 +72,14 @@ describe("RuntimeSessionRouteService", () => {
     expect(preflightProbe.check).toHaveBeenCalledWith({ serial, packageName: input.packageName });
     const started = await service.start(created.session.id);
     expect(started.state).toBe("RUNNING");
+    const action = await service.submitAction(created.session.id, "session-1", {
+      clientRequestId: "action-1",
+      type: "tap",
+      payload: { kind: "tap", x: 0.5, y: 0.5 },
+      sourceMetricsEpoch: 1,
+    });
+    expect(action.state).toBe("CREATED");
+    expect(action.action.targets).toEqual([{ serial, state: "QUEUED" }]);
     await expect(service.start(created.session.id)).rejects.toThrow("PREFLIGHT");
     expect(database.prepare("SELECT COUNT(*) AS count FROM test_runs").get()).toEqual({ count: 1 });
   });
@@ -94,6 +104,56 @@ describe("RuntimeSessionRouteService", () => {
         actorSessionId: "session-1",
       }),
     ).rejects.toThrow("online");
+  });
+
+  it("dispatches a newly created action when an executor is configured", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const repository = new RunActionRepository(database);
+    const dispatcher = {
+      dispatch: vi.fn(async ({ actionId }: { readonly actionId: string }): Promise<ActionView> => {
+        const action = repository.get(actionId);
+        if (action === undefined) throw new Error("Action not found in test dispatcher.");
+        return {
+          ...action,
+          state: "SUCCEEDED",
+          targets: action.targets.map((target) => ({ ...target, state: "SUCCEEDED" })),
+        };
+      }),
+    };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      repository,
+      dispatcher,
+    );
+    const created = await service.create({
+      clientRequestId: "request-dispatcher",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    const result = await service.submitAction(created.session.id, "session-1", {
+      clientRequestId: "action-dispatcher",
+      type: "tap",
+      payload: { kind: "tap", x: 0.5, y: 0.5 },
+      sourceMetricsEpoch: 1,
+    });
+
+    expect(dispatcher.dispatch).toHaveBeenCalledWith({
+      actionId: result.action.id,
+      packageName: "com.example.game",
+    });
+    expect(result.action.state).toBe("SUCCEEDED");
   });
 });
 

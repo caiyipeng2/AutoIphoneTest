@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SessionRouteService, SessionView } from "./sessions.js";
 import { createApp } from "../app.js";
 import { parseDeviceSerial } from "@test-center/contracts/device";
+import type { ActionView } from "@test-center/sessions";
 
 const view: SessionView = {
   id: "run-1",
@@ -20,12 +21,25 @@ const view: SessionView = {
   },
 };
 
+const action: ActionView = {
+  id: "act-1",
+  runId: "run-1",
+  clientRequestId: "action-1",
+  actionSeq: 1,
+  type: "tap",
+  payload: { kind: "tap", x: 0.5, y: 0.5 },
+  sourceMetricsEpoch: 1,
+  state: "QUEUED",
+  targets: [{ serial: view.leader.serial, state: "QUEUED" }],
+};
+
 function service(): SessionRouteService {
   return {
     create: async () => ({ session: view, state: "CREATED" }),
     get: (id) => (id === view.id ? view : undefined),
     preflight: async () => ({ ...view, state: "PREFLIGHT" }),
     start: async () => ({ ...view, state: "RUNNING" }),
+    submitAction: async () => ({ state: "CREATED", action }),
   };
 }
 
@@ -107,6 +121,20 @@ describe("session create/detail routes", () => {
       session: { ...view, state: "RUNNING" },
     });
 
+    const actionResponse = await app.inject({
+      method: "POST",
+      url: "/api/sessions/run-1/actions",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+      payload: {
+        clientRequestId: "action-1",
+        type: "tap",
+        payload: { kind: "tap", x: 0.5, y: 0.5 },
+        sourceMetricsEpoch: 1,
+      },
+    });
+    expect(actionResponse.statusCode).toBe(201);
+    expect(actionResponse.json()).toMatchObject({ schemaVersion: 1, state: "CREATED", action });
+
     const detail = await app.inject({
       method: "GET",
       url: "/api/sessions/run-1",
@@ -127,6 +155,7 @@ describe("session create/detail routes", () => {
         get: () => undefined,
         preflight: async () => ({ ...view, state: "PREFLIGHT" }),
         start: async () => ({ ...view, state: "RUNNING" }),
+        submitAction: async () => ({ state: "DEDUPLICATED", action }),
       },
     });
     const headers = { host: "127.0.0.1:4796", origin: "http://127.0.0.1:4796" };

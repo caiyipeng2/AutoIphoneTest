@@ -15,6 +15,8 @@ interface QueuedOutboxRow {
   readonly run_id: string;
 }
 
+export type ActionTargetCompletionState = "SUCCEEDED" | "FAILED";
+
 export class ActionOutbox {
   public constructor(private readonly database: Database.Database) {}
 
@@ -34,34 +36,28 @@ export class ActionOutbox {
            LIMIT 1`,
         )
         .get() as QueuedOutboxRow | undefined;
-      if (row === undefined) return undefined;
-      const leaseToken = `lease-${randomUUID()}`;
-      const changed = this.database
+      return row === undefined ? undefined : this.leaseQueuedRow(row, ownerToken, leasedAt);
+    });
+    return transaction();
+  }
+
+  public leaseAction(
+    actionId: string,
+    ownerToken: string,
+    leasedAt = new Date().toISOString(),
+  ): ActionLease | undefined {
+    if (!actionId.trim()) throw new TypeError("Action actionId is required.");
+    if (!ownerToken.trim()) throw new TypeError("Outbox ownerToken is required.");
+    const transaction = this.database.transaction(() => {
+      const row = this.database
         .prepare(
-          `UPDATE action_outbox
-           SET state = 'LEASED', lease_token = ?, leased_at = ?, attempt_count = attempt_count + 1, updated_at = ?
-           WHERE action_id = ? AND state = 'QUEUED'`,
+          `SELECT outbox.action_id, actions.run_id
+           FROM action_outbox AS outbox
+           JOIN actions ON actions.id = outbox.action_id
+           WHERE outbox.action_id = ? AND outbox.state = 'QUEUED'`,
         )
-        .run(leaseToken, leasedAt, leasedAt, row.action_id) as { changes: number };
-      if (changed.changes !== 1) return undefined;
-      this.database
-        .prepare(
-          "UPDATE actions SET state = 'LEASED', updated_at = ? WHERE id = ? AND state = 'QUEUED'",
-        )
-        .run(leasedAt, row.action_id);
-      this.database
-        .prepare(
-          `INSERT INTO action_transitions (action_id, from_state, to_state, reason, created_at)
-           VALUES (?, 'QUEUED', 'LEASED', 'OUTBOX_LEASED', ?)`,
-        )
-        .run(row.action_id, leasedAt);
-      return {
-        actionId: row.action_id,
-        runId: row.run_id,
-        leaseToken,
-        ownerToken,
-        leasedAt,
-      };
+        .get(actionId) as QueuedOutboxRow | undefined;
+      return row === undefined ? undefined : this.leaseQueuedRow(row, ownerToken, leasedAt);
     });
     return transaction();
   }
@@ -95,6 +91,81 @@ export class ActionOutbox {
            VALUES (?, 'LEASED', 'DISPATCHING', 'OUTBOX_DISPATCHING', ?)`,
         )
         .run(actionId, now);
+    });
+    transaction();
+  }
+
+  public completeTarget(
+    actionId: string,
+    leaseToken: string,
+    serial: string,
+    state: ActionTargetCompletionState,
+    resultJson: string,
+    now = new Date().toISOString(),
+  ): void {
+    if (!leaseToken.trim()) throw new TypeError("Action leaseToken is required.");
+    if (!serial.trim()) throw new TypeError("Action target serial is required.");
+    if (state !== "SUCCEEDED" && state !== "FAILED") {
+      throw new TypeError("Action target completion state is invalid.");
+    }
+    const transaction = this.database.transaction(() => {
+      const outbox = this.database
+        .prepare("SELECT state FROM action_outbox WHERE action_id = ? AND lease_token = ?")
+        .get(actionId, leaseToken) as { state: string } | undefined;
+      if (outbox?.state !== "DISPATCHING") {
+        throw new Error("Action outbox lease is invalid or not dispatching.");
+      }
+      const targetChanged = this.database
+        .prepare(
+          "UPDATE action_targets SET state = ?, updated_at = ? WHERE action_id = ? AND serial = ? AND state = 'DISPATCHING'",
+        )
+        .run(state, now, actionId, serial) as { changes: number };
+      if (targetChanged.changes !== 1) {
+        throw new Error("Action target is invalid or already completed.");
+      }
+      const resultChanged = this.database
+        .prepare(
+          "UPDATE device_action_results SET state = ?, result_json = ?, updated_at = ? WHERE action_id = ? AND serial = ? AND state = 'PENDING'",
+        )
+        .run(state, resultJson, now, actionId, serial) as { changes: number };
+      if (resultChanged.changes !== 1) {
+        throw new Error("Device action result is invalid or already completed.");
+      }
+
+      const pending = this.database
+        .prepare(
+          "SELECT COUNT(*) AS count FROM device_action_results WHERE action_id = ? AND state = 'PENDING'",
+        )
+        .get(actionId) as { count: number };
+      if (pending.count !== 0) return;
+
+      const failed = this.database
+        .prepare(
+          "SELECT COUNT(*) AS count FROM device_action_results WHERE action_id = ? AND state = 'FAILED'",
+        )
+        .get(actionId) as { count: number };
+      const actionState = failed.count > 0 ? "FAILED" : "SUCCEEDED";
+      this.database
+        .prepare(
+          "UPDATE actions SET state = ?, updated_at = ? WHERE id = ? AND state = 'DISPATCHING'",
+        )
+        .run(actionState, now, actionId);
+      this.database
+        .prepare(
+          "UPDATE action_outbox SET state = 'ACKED', lease_token = NULL, updated_at = ? WHERE action_id = ? AND state = 'DISPATCHING' AND lease_token = ?",
+        )
+        .run(now, actionId, leaseToken);
+      this.database
+        .prepare(
+          `INSERT INTO action_transitions (action_id, from_state, to_state, reason, created_at)
+           VALUES (?, 'DISPATCHING', ?, ?, ?)`,
+        )
+        .run(
+          actionId,
+          actionState,
+          actionState === "SUCCEEDED" ? "OUTBOX_COMPLETED" : "OUTBOX_FAILED",
+          now,
+        );
     });
     transaction();
   }
@@ -142,5 +213,39 @@ export class ActionOutbox {
       }
     });
     transaction();
+  }
+
+  private leaseQueuedRow(
+    row: QueuedOutboxRow,
+    ownerToken: string,
+    leasedAt: string,
+  ): ActionLease | undefined {
+    const leaseToken = `lease-${randomUUID()}`;
+    const changed = this.database
+      .prepare(
+        `UPDATE action_outbox
+         SET state = 'LEASED', lease_token = ?, leased_at = ?, attempt_count = attempt_count + 1, updated_at = ?
+         WHERE action_id = ? AND state = 'QUEUED'`,
+      )
+      .run(leaseToken, leasedAt, leasedAt, row.action_id) as { changes: number };
+    if (changed.changes !== 1) return undefined;
+    this.database
+      .prepare(
+        "UPDATE actions SET state = 'LEASED', updated_at = ? WHERE id = ? AND state = 'QUEUED'",
+      )
+      .run(leasedAt, row.action_id);
+    this.database
+      .prepare(
+        `INSERT INTO action_transitions (action_id, from_state, to_state, reason, created_at)
+         VALUES (?, 'QUEUED', 'LEASED', 'OUTBOX_LEASED', ?)`,
+      )
+      .run(row.action_id, leasedAt);
+    return {
+      actionId: row.action_id,
+      runId: row.run_id,
+      leaseToken,
+      ownerToken,
+      leasedAt,
+    };
   }
 }

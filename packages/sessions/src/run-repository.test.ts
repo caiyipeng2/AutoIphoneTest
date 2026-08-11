@@ -11,6 +11,7 @@ import {
 } from "@test-center/database";
 
 import { ActionOutbox } from "./action-outbox.js";
+import { ActionDispatcher } from "./action-dispatcher.js";
 import { RunActionRepository } from "./run-repository.js";
 
 const databases: Database.Database[] = [];
@@ -178,5 +179,89 @@ describe("ActionOutbox", () => {
         .prepare("SELECT state FROM device_action_results WHERE action_id = ?")
         .get(queued.action.id),
     ).toEqual({ state: "UNKNOWN" });
+  });
+
+  it("writes a successful device result and acknowledges the outbox", () => {
+    const { repository, outbox, database } = createHarness();
+    const created = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-1",
+      type: "tap",
+      payload: { kind: "tap", x: 0.25, y: 0.75 },
+      sourceMetricsEpoch: 4,
+    });
+    const lease = outbox.leaseAction(created.action.id, "worker-a", "2026-08-11T00:00:00.000Z");
+    outbox.markDispatching(created.action.id, lease!.leaseToken, "2026-08-11T00:00:01.000Z");
+    outbox.completeTarget(
+      created.action.id,
+      lease!.leaseToken,
+      "leader-a",
+      "SUCCEEDED",
+      JSON.stringify({ ok: true, pointerActionCount: 3 }),
+      "2026-08-11T00:00:02.000Z",
+    );
+
+    expect(repository.get(created.action.id)).toMatchObject({
+      state: "SUCCEEDED",
+      targets: [{ serial: "leader-a", state: "SUCCEEDED" }],
+    });
+    expect(
+      database
+        .prepare("SELECT state, result_json FROM device_action_results WHERE action_id = ?")
+        .get(created.action.id),
+    ).toEqual({
+      state: "SUCCEEDED",
+      result_json: JSON.stringify({ ok: true, pointerActionCount: 3 }),
+    });
+    expect(
+      database
+        .prepare("SELECT state, lease_token FROM action_outbox WHERE action_id = ?")
+        .get(created.action.id),
+    ).toEqual({
+      state: "ACKED",
+      lease_token: null,
+    });
+  });
+
+  it("records executor failures as failed device results", async () => {
+    const { repository, outbox, database } = createHarness();
+    const created = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-1",
+      type: "tap",
+      payload: { kind: "tap", x: 0.25, y: 0.75 },
+      sourceMetricsEpoch: 4,
+    });
+    const dispatcher = new ActionDispatcher(
+      repository,
+      outbox,
+      () => ({
+        execute: async () => {
+          throw new Error("device action failed");
+        },
+      }),
+      "worker-a",
+    );
+
+    const result = await dispatcher.dispatch({
+      actionId: created.action.id,
+      packageName: "Idle Weapon Shop Tycoon",
+    });
+
+    expect(result).toMatchObject({
+      state: "FAILED",
+      targets: [{ serial: "leader-a", state: "FAILED" }],
+    });
+    expect(
+      database
+        .prepare("SELECT state, result_json FROM device_action_results WHERE action_id = ?")
+        .get(created.action.id),
+    ).toEqual({
+      state: "FAILED",
+      result_json: JSON.stringify({
+        ok: false,
+        error: { name: "Error", message: "device action failed" },
+      }),
+    });
   });
 });

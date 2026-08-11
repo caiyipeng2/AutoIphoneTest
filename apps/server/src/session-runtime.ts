@@ -4,10 +4,13 @@ import type Database from "better-sqlite3";
 import type { DeviceRegistry } from "@test-center/devices";
 import { parseAndroidPackageName } from "@test-center/contracts/artifact";
 import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/device";
+import { RunActionRepository, type ActionDispatcher } from "@test-center/sessions";
 
 import type {
   SessionCreateInput,
   SessionPreflightProbe,
+  SessionActionInput,
+  SessionActionResult,
   SessionRouteService,
   SessionView,
 } from "./routes/sessions.js";
@@ -30,6 +33,8 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     private readonly database: Database.Database,
     private readonly registry: DeviceRegistry,
     private readonly preflightProbe?: SessionPreflightProbe,
+    private readonly actionRepository = new RunActionRepository(database),
+    private readonly actionDispatcher?: Pick<ActionDispatcher, "dispatch">,
   ) {}
 
   public async create(
@@ -105,6 +110,24 @@ export class RuntimeSessionRouteService implements SessionRouteService {
 
   public async start(id: string): Promise<SessionView> {
     return await this.transition(id, "PREFLIGHT", "RUNNING", "SESSION_STARTED");
+  }
+
+  public async submitAction(
+    id: string,
+    actorSessionId: string,
+    input: SessionActionInput,
+  ): Promise<SessionActionResult> {
+    void actorSessionId;
+    if (this.get(id) === undefined) throw new Error("Session not found.");
+    const result = this.actionRepository.create({ runId: id, ...input });
+    if (result.state === "CREATED" && this.actionDispatcher !== undefined) {
+      const action = await this.actionDispatcher.dispatch({
+        actionId: result.action.id,
+        packageName: this.get(id)!.packageName,
+      });
+      return { state: result.state, action };
+    }
+    return result;
   }
 
   private findByClientRequestId(clientRequestId: string): SessionRow | undefined {

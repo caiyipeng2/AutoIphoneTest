@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { AndroidPackageNameSchema } from "@test-center/contracts/artifact";
+import type { ActionPayload, ActionView } from "@test-center/sessions";
 import {
   DeviceSerialSchema,
   parseDeviceSerial,
@@ -24,6 +25,46 @@ const CreateSessionSchema = z
     leaderVideoEnabled: z.boolean().default(true),
   })
   .strict();
+
+const TapActionPayloadSchema = z
+  .object({
+    kind: z.literal("tap"),
+    x: z.number().finite().min(0).max(1),
+    y: z.number().finite().min(0).max(1),
+  })
+  .strict();
+const SwipeActionPayloadSchema = z
+  .object({
+    kind: z.literal("swipe"),
+    path: z
+      .array(z.tuple([z.number().finite().min(0).max(1), z.number().finite().min(0).max(1)]))
+      .min(2)
+      .max(64),
+    durationMs: z.number().int().min(1).max(60_000),
+  })
+  .strict();
+const ActionSubmitSchema = z
+  .union([
+    z
+      .object({
+        clientRequestId: z.string().trim().min(1).max(128),
+        type: z.literal("tap"),
+        payload: TapActionPayloadSchema,
+        sourceMetricsEpoch: z.number().int().nonnegative(),
+        sourceFrameId: z.string().trim().min(1).max(128).optional(),
+      })
+      .strict(),
+    z
+      .object({
+        clientRequestId: z.string().trim().min(1).max(128),
+        type: z.literal("swipe"),
+        payload: SwipeActionPayloadSchema,
+        sourceMetricsEpoch: z.number().int().nonnegative(),
+        sourceFrameId: z.string().trim().min(1).max(128).optional(),
+      })
+      .strict(),
+  ])
+  .transform((value) => value as SessionActionInput);
 
 export interface SessionLeaderView {
   readonly serial: DeviceSerial;
@@ -56,6 +97,19 @@ export interface SessionPreflightProbe {
   check(input: { readonly serial: DeviceSerial; readonly packageName: string }): Promise<void>;
 }
 
+export interface SessionActionInput {
+  readonly clientRequestId: string;
+  readonly type: "tap" | "swipe";
+  readonly payload: ActionPayload;
+  readonly sourceMetricsEpoch: number;
+  readonly sourceFrameId?: string;
+}
+
+export interface SessionActionResult {
+  readonly state: "CREATED" | "DEDUPLICATED";
+  readonly action: ActionView;
+}
+
 export interface SessionRouteService {
   create(
     input: SessionCreateInput,
@@ -63,6 +117,11 @@ export interface SessionRouteService {
   get(id: string): SessionView | undefined;
   preflight(id: string, actorSessionId: string): Promise<SessionView>;
   start(id: string, actorSessionId: string): Promise<SessionView>;
+  submitAction(
+    id: string,
+    actorSessionId: string,
+    input: SessionActionInput,
+  ): Promise<SessionActionResult>;
 }
 
 export async function registerSessionsRoutes(
@@ -126,6 +185,30 @@ export async function registerSessionsRoutes(
       }
     });
   }
+
+  app.post<{ Params: { id: string } }>("/api/sessions/:id/actions", async (request, reply) => {
+    try {
+      assertMutationAllowed(request, context);
+      if (context.sessionService === undefined)
+        return await reply.code(503).send({ error: "Session service unavailable." });
+      const auth = requireSession(request, context);
+      if (auth === undefined)
+        return await reply.code(401).send({ error: "Authentication required." });
+      const payload = ActionSubmitSchema.parse(request.body);
+      const result = await context.sessionService.submitAction(
+        decodeURIComponent(request.params.id),
+        auth.sessionId,
+        payload,
+      );
+      return await reply
+        .code(result.state === "CREATED" ? 201 : 200)
+        .send({ schemaVersion: 1, ...result });
+    } catch (error) {
+      return await reply
+        .code(sessionErrorCode(error))
+        .send({ error: error instanceof Error ? error.message : "Action rejected." });
+    }
+  });
 }
 
 function assertMutationAllowed(request: FastifyRequest, context: ServerContext): void {
@@ -140,6 +223,9 @@ function sessionErrorCode(error: unknown): 400 | 401 | 403 | 404 | 409 | 503 {
   if (error instanceof Error && error.message === "Authentication required.") return 401;
   if (error instanceof Error && error.message.includes("CSRF")) return 403;
   if (error instanceof Error && error.message.includes("already exists")) return 409;
+  if (error instanceof Error && error.message.includes("in flight")) return 409;
+  if (error instanceof Error && error.message.includes("different payload")) return 409;
+  if (error instanceof Error && error.message.includes("RUNNING")) return 409;
   if (error instanceof Error && error.message.includes("state")) return 409;
   if (error instanceof Error && error.message.includes("online")) return 409;
   if (error instanceof Error && error.message.includes("not found")) return 404;
