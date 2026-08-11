@@ -263,6 +263,105 @@ CREATE INDEX IF NOT EXISTS idx_device_uid_observations_current
 `.trim(),
 };
 
+export const RUN_ACTIONS_MIGRATION: Migration = {
+  id: "0008_runs_actions",
+  sql: `
+CREATE TABLE IF NOT EXISTS test_runs (
+  id TEXT PRIMARY KEY NOT NULL,
+  package_name TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('CREATED', 'PREFLIGHT', 'RUNNING', 'PAUSED', 'FINISHED', 'INTERRUPTED', 'FAILED')),
+  current_epoch INTEGER NOT NULL CHECK (current_epoch > 0),
+  run_nonce_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS run_devices (
+  run_id TEXT NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+  serial TEXT NOT NULL REFERENCES devices(serial),
+  role TEXT NOT NULL CHECK (role IN ('LEADER', 'FOLLOWER')),
+  membership_state TEXT NOT NULL CHECK (membership_state IN ('ACTIVE', 'QUARANTINED', 'RECOVERING', 'LEFT')),
+  epoch INTEGER NOT NULL CHECK (epoch > 0),
+  generation INTEGER NOT NULL CHECK (generation > 0),
+  joined_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (run_id, serial, epoch)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_run_devices_active_leader
+  ON run_devices(run_id, epoch)
+  WHERE role = 'LEADER' AND membership_state IN ('ACTIVE', 'RECOVERING');
+
+CREATE TABLE IF NOT EXISTS actions (
+  id TEXT PRIMARY KEY NOT NULL,
+  run_id TEXT NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+  action_seq INTEGER NOT NULL CHECK (action_seq > 0),
+  client_request_id TEXT NOT NULL,
+  action_type TEXT NOT NULL CHECK (action_type IN ('tap', 'swipe')),
+  payload_json TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('QUEUED', 'LEASED', 'DISPATCHING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'UNKNOWN')),
+  metrics_epoch INTEGER NOT NULL CHECK (metrics_epoch >= 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (run_id, action_seq),
+  UNIQUE (run_id, client_request_id)
+);
+
+CREATE TABLE IF NOT EXISTS action_targets (
+  action_id TEXT NOT NULL REFERENCES actions(id) ON DELETE CASCADE,
+  serial TEXT NOT NULL REFERENCES devices(serial),
+  state TEXT NOT NULL CHECK (state IN ('QUEUED', 'DISPATCHING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'UNKNOWN')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (action_id, serial)
+);
+
+CREATE TABLE IF NOT EXISTS action_outbox (
+  action_id TEXT PRIMARY KEY NOT NULL REFERENCES actions(id) ON DELETE CASCADE,
+  state TEXT NOT NULL CHECK (state IN ('QUEUED', 'LEASED', 'DISPATCHING', 'ACKED', 'CANCELLED')),
+  lease_token TEXT,
+  leased_at TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS device_action_results (
+  action_id TEXT NOT NULL,
+  serial TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('PENDING', 'SUCCEEDED', 'FAILED', 'CANCELLED', 'UNKNOWN')),
+  result_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (action_id, serial),
+  FOREIGN KEY (action_id, serial) REFERENCES action_targets(action_id, serial) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS run_transitions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+  from_state TEXT,
+  to_state TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS action_transitions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action_id TEXT NOT NULL REFERENCES actions(id) ON DELETE CASCADE,
+  from_state TEXT,
+  to_state TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_actions_run_state ON actions(run_id, state, action_seq);
+CREATE INDEX IF NOT EXISTS idx_action_targets_serial ON action_targets(serial, state);
+CREATE INDEX IF NOT EXISTS idx_run_transitions_lookup ON run_transitions(run_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_action_transitions_lookup ON action_transitions(action_id, created_at);
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
