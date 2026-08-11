@@ -41,6 +41,7 @@ import {
 } from "@test-center/devices";
 import { InstallationRepository } from "@test-center/devices";
 import { DestructiveConfirmationService } from "@test-center/security";
+import { AppiumPreflightProbe } from "@test-center/sessions";
 import {
   DeploymentOrchestrator,
   type DeploymentArtifact,
@@ -94,7 +95,11 @@ export async function createRuntimeDeviceRegistry(
     createAdbDiscoverySource(client),
   );
   const uidService = new UidService(database);
-  const sessionService = new RuntimeSessionRouteService(database, registry);
+  const sessionService = new RuntimeSessionRouteService(
+    database,
+    registry,
+    createConfiguredPreflightProbe(),
+  );
   const deploymentService = new RuntimeDeploymentRouteService(
     database,
     registry,
@@ -110,6 +115,14 @@ export async function createRuntimeDeviceRegistry(
     sessionService,
     close: () => database.close(),
   };
+}
+
+function createConfiguredPreflightProbe(): AppiumPreflightProbe | undefined {
+  const baseUrl = process.env.TEST_CENTER_APPIUM_URL;
+  if (baseUrl === undefined || baseUrl.trim() === "") return undefined;
+  const systemPort = Number(process.env.TEST_CENTER_APPIUM_SYSTEM_PORT ?? 8201);
+  const mjpegServerPort = Number(process.env.TEST_CENTER_APPIUM_MJPEG_PORT ?? 7811);
+  return new AppiumPreflightProbe({ baseUrl, systemPort, mjpegServerPort });
 }
 
 export interface RuntimeArtifactMetadataParser {

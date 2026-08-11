@@ -38,7 +38,8 @@ describe("RuntimeSessionRouteService", () => {
       )
       .run(serial, "now", "now", "now", "now");
     const registry = { get: vi.fn(() => ({ state: "ONLINE" })) };
-    const service = new RuntimeSessionRouteService(database, registry as never);
+    const preflightProbe = { check: vi.fn(async () => undefined) };
+    const service = new RuntimeSessionRouteService(database, registry as never, preflightProbe);
     const input = {
       clientRequestId: "request-1",
       packageName: "com.example.game",
@@ -66,6 +67,7 @@ describe("RuntimeSessionRouteService", () => {
     );
     const preflight = await service.preflight(created.session.id);
     expect(preflight.state).toBe("PREFLIGHT");
+    expect(preflightProbe.check).toHaveBeenCalledWith({ serial, packageName: input.packageName });
     const started = await service.start(created.session.id);
     expect(started.state).toBe("RUNNING");
     await expect(service.start(created.session.id)).rejects.toThrow("PREFLIGHT");

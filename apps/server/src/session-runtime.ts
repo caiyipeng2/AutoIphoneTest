@@ -5,7 +5,12 @@ import type { DeviceRegistry } from "@test-center/devices";
 import { parseAndroidPackageName } from "@test-center/contracts/artifact";
 import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/device";
 
-import type { SessionCreateInput, SessionRouteService, SessionView } from "./routes/sessions.js";
+import type {
+  SessionCreateInput,
+  SessionPreflightProbe,
+  SessionRouteService,
+  SessionView,
+} from "./routes/sessions.js";
 
 interface SessionRow {
   readonly id: string;
@@ -24,6 +29,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
   public constructor(
     private readonly database: Database.Database,
     private readonly registry: DeviceRegistry,
+    private readonly preflightProbe?: SessionPreflightProbe,
   ) {}
 
   public async create(
@@ -44,7 +50,6 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     const device = this.registry.get(input.deviceSerial);
     if (device === undefined) throw new Error("Device not found.");
     if (device.state !== "ONLINE") throw new Error("Device must be online.");
-
     const now = new Date().toISOString();
     const runId = `run-${randomUUID()}`;
     const runNonceHash = createHash("sha256").update(randomUUID()).digest("hex");
@@ -143,6 +148,12 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     const device = this.registry.get(current.leader.serial);
     if (device === undefined) throw new Error("Device not found.");
     if (device.state !== "ONLINE") throw new Error("Device must be online.");
+    if (nextState === "PREFLIGHT") {
+      await this.preflightProbe?.check({
+        serial: current.leader.serial,
+        packageName: current.packageName,
+      });
+    }
     const now = new Date().toISOString();
     const update = this.database.transaction(() => {
       this.database

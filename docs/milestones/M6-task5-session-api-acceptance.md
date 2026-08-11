@@ -14,19 +14,21 @@ Scope: create/detail and preflight/start lifecycle API for one leader device.
 - `POST /api/sessions/:id/preflight` advances `CREATED` to `PREFLIGHT` after an online-device check.
 - `POST /api/sessions/:id/start` advances `PREFLIGHT` to `RUNNING`; stale state transitions are rejected.
 - Both lifecycle mutations require the same session, origin, and CSRF checks as create.
+- Preflight now accepts an injected `SessionPreflightProbe` and awaits its serial/package capability check before committing `PREFLIGHT`.
+- The runtime binds `AppiumPreflightProbe` when `TEST_CENTER_APPIUM_URL` is configured; system and MJPEG ports remain environment-configurable.
 
 ## Verification
 
-| Check | Result |
-| --- | --- |
-| Session route tests | 2/2 passed |
-| Runtime SQLite service tests | 2/2 passed |
-| Full Vitest | 69 files, 258 tests passed |
-| `npm run typecheck` | Passed |
-| Targeted Prettier | Passed |
-| Targeted ESLint | Passed |
-| CodeGraph sync | Added 4 files, modified 6 files; index up to date |
+| Check                        | Result                                            |
+| ---------------------------- | ------------------------------------------------- |
+| Session route tests          | 2/2 passed                                        |
+| Runtime SQLite service tests | 2/2 passed                                        |
+| Full Vitest                  | 69 files, 258 tests passed                        |
+| `npm run typecheck`          | Passed                                            |
+| Targeted Prettier            | Passed                                            |
+| Targeted ESLint              | Passed                                            |
+| CodeGraph sync               | Added 4 files, modified 6 files; index up to date |
 
 ## Boundary
 
-This slice does not yet run Appium preflight checks, submit actions, pause/finish, register evidence from session events, decode WebCodecs input, or change console UI. Those remain separate atomic slices.
+The probe is intentionally optional when Appium is not configured, so local route tests and non-Appium deployments keep working. Action submission, pause/finish, evidence registration from session events, WebCodecs input, and console UI remain separate atomic slices.

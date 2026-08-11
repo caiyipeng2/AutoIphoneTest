@@ -52,6 +52,10 @@ export interface SessionCreateInput {
   readonly actorSessionId: string;
 }
 
+export interface SessionPreflightProbe {
+  check(input: { readonly serial: DeviceSerial; readonly packageName: string }): Promise<void>;
+}
+
 export interface SessionRouteService {
   create(
     input: SessionCreateInput,
