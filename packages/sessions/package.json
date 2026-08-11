@@ -19,6 +19,10 @@
   "dependencies": {
     "@test-center/appium": "0.0.0",
     "@test-center/adb": "0.0.0",
-    "@test-center/contracts": "0.0.0"
+    "@test-center/contracts": "0.0.0",
+    "better-sqlite3": "13.0.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13"
   }
 }
