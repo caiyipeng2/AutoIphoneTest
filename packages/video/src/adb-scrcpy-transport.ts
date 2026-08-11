@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection, createServer, type Socket } from "node:net";
 import { win32 } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/device";
 
@@ -8,6 +9,7 @@ import type { ScrcpyVideoTransport } from "./tango-scrcpy-provider.js";
 
 const DEFAULT_REMOTE_SERVER_PATH = "/data/local/tmp/test-center-scrcpy-server.jar";
 const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
+export const DEFAULT_SCRCPY_SERVER_STARTUP_DELAY_MS = 500;
 
 export interface AdbScrcpyVideoTransportOptions {
   readonly serial: string;
@@ -45,10 +47,7 @@ export function buildScrcpyServerArguments(
   const port = options.localPort ?? 27_183;
   if (!Number.isSafeInteger(port) || port < 1 || port > 65_535)
     throw new TypeError("localPort is invalid.");
-  const adbArgs = [
-    "-s",
-    serial,
-    "shell",
+  const serverCommand = [
     `CLASSPATH=${options.remoteServerPath}`,
     "app_process",
     "/",
@@ -63,9 +62,12 @@ export function buildScrcpyServerArguments(
     "send_dummy_byte=false",
     "video_codec=h264",
   ];
-  if (options.maxSize !== undefined) adbArgs.push(`max_size=${options.maxSize}`);
+  if (options.maxSize !== undefined) serverCommand.push(`max_size=${options.maxSize}`);
   return {
-    adbArgs,
+    // Windows adb.exe expects the remote shell command as one argv value.
+    // Keeping spawn(shell:false) avoids command injection while matching adb's
+    // shell parser and prevents the server process from exiting before metadata.
+    adbArgs: ["-s", serial, "shell", serverCommand.join(" ")],
     pushArgs: ["-s", serial, "push", options.serverPath, options.remoteServerPath],
     forwardArgs: [
       "-s",
@@ -127,6 +129,10 @@ export class AdbScrcpyVideoTransport implements ScrcpyVideoTransport {
         windowsHide: true,
       });
       this.serverProcess.stderr?.resume();
+      // adb forward accepts TCP before the remote localabstract endpoint is
+      // ready. Give scrcpy time to start its encoder before opening the socket;
+      // otherwise Windows clients can observe an immediate EOF with no frame.
+      await delay(DEFAULT_SCRCPY_SERVER_STARTUP_DELAY_MS);
       this.socket = await connectSocket(port, this.connectTimeoutMs);
       return this.socket;
     } catch (error) {

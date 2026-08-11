@@ -15,7 +15,7 @@ Scope: scrcpy 3.1 H.264 packet parsing, serial-bound Tango ViewProvider, ADB tun
 
 - H.264 parser tests: `3` passing.
 - Tango ViewProvider tests: `2` passing.
-- ADB transport argument test: `1` passing.
+- ADB transport argument/startup race tests: `2` passing.
 - Existing gateway regression: passing.
 - TypeScript project build: passing.
 
@@ -26,6 +26,18 @@ Evidence: `E:\Projects\UnityMultiDeviceTestCenter\data\runs\m6-task4-primary-vid
 - The acceptance script reached cleanup correctly, but the ADB server currently reports no attached device, so no first frame was received.
 - This is an environment availability failure, not a provider/parser assertion failure. The same script can be rerun when `R5CX211TXNT` is visible in `adb devices`.
 
+## Real-device rerun
+
+Date: 2026-08-11
+Device: `R5CX211TXNT` / `SM-S9280`
+Package: `com.hg.idleweaponshoptycoon.android`
+Evidence: `E:\Projects\UnityMultiDeviceTestCenter\data\runs\m6-task4-primary-video-1786418671748\acceptance.json`
+
+- The transport now passes the remote scrcpy command as one Windows `adb shell` argument and waits 500 ms for the remote encoder/localabstract endpoint before connecting.
+- The acceptance script received 17 H.264 frames at `496x1080`, with `degraded=false` and `metricsEpoch=1`.
+- Provider stop completed with `providerState=STOPPED` and `cleanup=true`.
+- The installed Unity package was confirmed through `adb shell pm path` and includes the base APK plus Unity data and arm64 splits.
+
 ## Limitations
 
-The provider now emits encoded H.264 packets, but browser WebCodecs canvas decoding and UI presentation remain in the following console/session slice. The current real-device evidence is blocked by temporary device disconnection.
+The provider now emits encoded H.264 packets. Browser WebCodecs canvas decoding and UI presentation remain in the following console/session slice; this acceptance does not yet prove browser-side visual rendering.

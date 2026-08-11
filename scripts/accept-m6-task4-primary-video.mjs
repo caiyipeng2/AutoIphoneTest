@@ -1,5 +1,4 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { console } from "node:console";
 import path from "node:path";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";

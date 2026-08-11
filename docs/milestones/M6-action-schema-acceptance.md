@@ -15,7 +15,7 @@
 | ------------------------ | ----------------------------- |
 | 新增迁移测试             | 4/4 通过                      |
 | 数据库/服务定向回归      | 3 个测试文件、9 个测试通过    |
-| 全量 Vitest              | 66 个测试文件、251 个测试通过 |
+| 全量 Vitest              | 66 个测试文件、252 个测试通过 |
 | `npm run typecheck`      | 通过                          |
 | Console 生产构建         | 通过                          |
 | 改动文件 targeted ESLint | 通过                          |
@@ -25,5 +25,6 @@
 ## 未覆盖边界
 
 - 本切片没有实现 run repository、action outbox dispatcher、崩溃恢复逻辑或 session API。
-- 本切片没有连接 Android 真机，也没有执行真实 tap/swipe；这些内容必须在 schema 之后继续按原子切片完成。
-- 当前仍遵循用户审批门禁，代码和记录保持本地未提交状态。
+- 本切片没有执行真实 tap/swipe；这些内容必须在 schema 之后继续按原子切片完成。
+- Schema 切片已获用户确认并提交推送：`150c73f feat: add single-device action schema`。
+- 本次 Task4 transport 启动竞态修复和真机验收记录仍保持本地未提交，待用户确认后再提交推送。

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildScrcpyServerArguments } from "./adb-scrcpy-transport.js";
+import {
+  buildScrcpyServerArguments,
+  DEFAULT_SCRCPY_SERVER_STARTUP_DELAY_MS,
+} from "./adb-scrcpy-transport.js";
 
 describe("adb scrcpy transport", () => {
   it("builds a serial-bound control-free v3.1 server command", () => {
@@ -17,20 +20,7 @@ describe("adb scrcpy transport", () => {
         "-s",
         "R5CX211TXNT",
         "shell",
-        "CLASSPATH=/data/local/tmp/test-center-scrcpy-server.jar",
-        "app_process",
-        "/",
-        "com.genymobile.scrcpy.Server",
-        "3.1",
-        "tunnel_forward=true",
-        "scid=12abcdef",
-        "audio=false",
-        "control=false",
-        "cleanup=true",
-        "send_device_meta=false",
-        "send_dummy_byte=false",
-        "video_codec=h264",
-        "max_size=1080",
+        "CLASSPATH=/data/local/tmp/test-center-scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 3.1 tunnel_forward=true scid=12abcdef audio=false control=false cleanup=true send_device_meta=false send_dummy_byte=false video_codec=h264 max_size=1080",
       ],
       pushArgs: [
         "-s",
@@ -41,5 +31,9 @@ describe("adb scrcpy transport", () => {
       ],
       forwardArgs: ["-s", "R5CX211TXNT", "forward", "tcp:27183", "localabstract:scrcpy_12abcdef"],
     });
+  });
+
+  it("leaves time for adb forward to bind the remote scrcpy socket", () => {
+    expect(DEFAULT_SCRCPY_SERVER_STARTUP_DELAY_MS).toBe(500);
   });
 });
