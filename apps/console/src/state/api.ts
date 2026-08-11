@@ -27,6 +27,34 @@ export interface DevicesSnapshot {
   devices: DeviceRecord[];
 }
 
+export type SessionState =
+  "CREATED" | "PREFLIGHT" | "RUNNING" | "PAUSED" | "FINISHED" | "INTERRUPTED" | "FAILED";
+
+export interface SessionDevice {
+  serial: string;
+  role: "LEADER" | "FOLLOWER";
+  membershipState: "ACTIVE" | "QUARANTINED" | "RECOVERING" | "LEFT";
+  epoch: number;
+  generation: number;
+}
+
+export interface SessionView {
+  id: string;
+  clientRequestId: string;
+  packageName: string;
+  state: SessionState;
+  currentEpoch: number;
+  leaderVideoEnabled: boolean;
+  leader: SessionDevice & { role: "LEADER" };
+  devices: SessionDevice[];
+}
+
+export interface SessionMutationResponse {
+  schemaVersion: 1;
+  state: "CREATED" | "DEDUPLICATED";
+  session: SessionView;
+}
+
 export type BridgeHealthStatus = "READY" | "DEGRADED" | "UNAVAILABLE";
 export interface UidSnapshot {
   installation: {
@@ -80,6 +108,35 @@ export async function fetchDevices(signal?: AbortSignal): Promise<DevicesSnapsho
   const response = await fetch("/api/devices", signal ? { signal } : undefined);
   if (!response.ok) throw new Error(`devices:${response.status}`);
   return (await response.json()) as DevicesSnapshot;
+}
+
+export async function createSession(input: {
+  clientRequestId: string;
+  packageName: string;
+  deviceSerials: string[];
+  leaderVideoEnabled: boolean;
+}): Promise<SessionMutationResponse> {
+  return await sessionMutation("/api/sessions", input);
+}
+
+export async function fetchSession(id: string, signal?: AbortSignal): Promise<SessionView> {
+  const response = await fetch(
+    `/api/sessions/${encodeURIComponent(id)}`,
+    signal ? { signal } : undefined,
+  );
+  const body = (await response.json()) as { session?: SessionView; error?: string };
+  if (!response.ok || body.session === undefined) {
+    throw new Error(body.error ?? `session:${response.status}`);
+  }
+  return body.session;
+}
+
+export async function preflightSession(id: string): Promise<SessionView> {
+  return await sessionPhase(id, "preflight");
+}
+
+export async function startSession(id: string): Promise<SessionView> {
+  return await sessionPhase(id, "start");
 }
 
 export async function fetchDeviceBridge(
@@ -165,4 +222,40 @@ function readCsrfToken(): string | undefined {
     .find((entry) => entry.startsWith("tc_csrf="))
     ?.slice("tc_csrf=".length);
   return value === undefined ? undefined : decodeURIComponent(value);
+}
+
+async function sessionMutation(
+  url: string,
+  body: Record<string, unknown>,
+): Promise<SessionMutationResponse> {
+  const csrf = readCsrfToken();
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json()) as Partial<SessionMutationResponse> & { error?: string };
+  if (!response.ok || payload.session === undefined || payload.state === undefined) {
+    throw new Error(payload.error ?? `session:${response.status}`);
+  }
+  return payload as SessionMutationResponse;
+}
+
+async function sessionPhase(id: string, phase: "preflight" | "start"): Promise<SessionView> {
+  const csrf = readCsrfToken();
+  const response = await fetch(`/api/sessions/${encodeURIComponent(id)}/${phase}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+    },
+  });
+  const payload = (await response.json()) as { session?: SessionView; error?: string };
+  if (!response.ok || payload.session === undefined) {
+    throw new Error(payload.error ?? `session-${phase}:${response.status}`);
+  }
+  return payload.session;
 }

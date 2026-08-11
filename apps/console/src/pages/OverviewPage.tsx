@@ -16,7 +16,10 @@ export function OverviewPage({
       title="总览"
       eyebrow="TEST BAY / 即时态势"
       action={
-        <button className="button button-primary">
+        <button
+          className="button button-primary"
+          onClick={() => (window.location.hash = "sessions")}
+        >
           <Play size={15} />
           新建测试会话
         </button>

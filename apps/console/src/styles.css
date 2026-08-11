@@ -751,6 +751,191 @@ main {
   gap: 24px;
   margin-bottom: 18px;
 }
+.session-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.session-builder {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.55fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.session-device-panel,
+.session-config-panel,
+.session-members-panel,
+.session-preview-panel {
+  min-width: 0;
+}
+.device-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.device-choice {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  min-height: 68px;
+  padding: 11px 12px;
+  border: 1px solid #d9d2c5;
+  background: #fffdf8;
+  color: #28383a;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.device-choice:hover,
+.device-choice:focus-visible {
+  border-color: #9fbd77;
+  box-shadow: 0 4px 14px #26362c12;
+  outline: 0;
+}
+.device-choice.is-selected {
+  border-color: #9fbd77;
+  background: #edf5df;
+}
+.device-choice-icon {
+  display: grid;
+  flex: 0 0 30px;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  background: #eef1ec;
+  color: #6c7d78;
+}
+.device-choice.is-selected .device-choice-icon {
+  background: #d6edaf;
+  color: #4c712c;
+}
+.device-choice-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.device-choice-copy strong,
+.device-choice-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.device-choice-copy strong {
+  font:
+    700 12px Consolas,
+    monospace;
+}
+.device-choice-copy small {
+  color: #899392;
+  font-size: 11px;
+}
+.device-choice > .device-dot {
+  flex: 0 0 7px;
+  margin-left: auto;
+}
+.device-selection-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 68px;
+  padding: 12px;
+  border: 1px dashed #c6c1b7;
+  color: #899392;
+  font-size: 12px;
+}
+.session-config-field {
+  display: grid;
+  gap: 7px;
+  color: #697877;
+  font-size: 11px;
+}
+.session-config-field input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #cfc8bc;
+  border-radius: 3px;
+  background: #fffdf8;
+  color: #28383a;
+  outline-color: #7ec8d6;
+  font:
+    12px Consolas,
+    monospace;
+}
+.session-config-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #ebe6dc;
+  color: #899392;
+  font-size: 11px;
+}
+.session-config-summary strong {
+  color: #334447;
+  font-size: 12px;
+  text-align: right;
+}
+.session-members-panel {
+  margin-bottom: 18px;
+}
+.session-members-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.session-member {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid #e2ddd4;
+  background: #faf8f3;
+}
+.session-member > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.session-member strong,
+.session-member small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-member strong {
+  color: #334447;
+  font-size: 12px;
+}
+.session-member small {
+  color: #899392;
+  font:
+    10px Consolas,
+    monospace;
+}
+.session-member .chip {
+  margin-left: auto;
+}
+.session-preview-panel {
+  margin-bottom: 18px;
+}
+.session-preview-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.session-preview-controls .session-serial-field {
+  flex: 0 1 330px;
+}
+.session-preview-controls .button {
+  margin-bottom: 0;
+}
 .session-setup h2 {
   margin: 5px 0 0;
   font:
@@ -974,6 +1159,20 @@ main {
     align-items: stretch;
     flex-direction: column;
     gap: 16px;
+  }
+  .session-builder {
+    grid-template-columns: 1fr;
+  }
+  .device-selection-grid,
+  .session-members-grid {
+    grid-template-columns: 1fr;
+  }
+  .session-preview-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .session-preview-controls .session-serial-field {
+    flex-basis: auto;
   }
   .session-serial-field {
     flex-basis: auto;
