@@ -19,6 +19,15 @@ const view: SessionView = {
     epoch: 1,
     generation: 1,
   },
+  devices: [
+    {
+      serial: parseDeviceSerial("R5CX211TXNT"),
+      role: "LEADER",
+      membershipState: "ACTIVE",
+      epoch: 1,
+      generation: 1,
+    },
+  ],
 };
 
 const action: ActionView = {
@@ -93,7 +102,7 @@ describe("session create/detail routes", () => {
       payload: {
         clientRequestId: "create-1",
         packageName: view.packageName,
-        deviceSerial: view.leader.serial,
+        deviceSerials: [view.leader.serial],
         leaderVideoEnabled: true,
       },
     });

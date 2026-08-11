@@ -264,4 +264,65 @@ describe("ActionOutbox", () => {
       }),
     });
   });
+
+  it("dispatches all active targets concurrently", async () => {
+    const { repository, outbox, database } = createHarness();
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at)
+         VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run("follower-b", "now", "now", "now", "now");
+    database
+      .prepare(
+        `INSERT INTO run_devices
+         (run_id, serial, role, membership_state, epoch, generation, joined_at, updated_at)
+         VALUES (?, ?, 'FOLLOWER', 'ACTIVE', 1, 1, ?, ?)`,
+      )
+      .run("run-1", "follower-b", "now", "now");
+    const created = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-concurrent",
+      type: "tap",
+      payload: { kind: "tap", x: 0.25, y: 0.75 },
+      sourceMetricsEpoch: 4,
+    });
+    let concurrent = 0;
+    let maxConcurrent = 0;
+    const dispatcher = new ActionDispatcher(
+      repository,
+      outbox,
+      () => ({
+        execute: async () => {
+          concurrent += 1;
+          maxConcurrent = Math.max(maxConcurrent, concurrent);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          concurrent -= 1;
+          return { accepted: true };
+        },
+      }),
+      "worker-concurrent",
+    );
+
+    const result = await dispatcher.dispatch({
+      actionId: created.action.id,
+      packageName: "Idle Weapon Shop Tycoon",
+    });
+
+    expect(maxConcurrent).toBe(2);
+    expect(result).toMatchObject({
+      state: "SUCCEEDED",
+      targets: [
+        { serial: "follower-b", state: "SUCCEEDED" },
+        { serial: "leader-a", state: "SUCCEEDED" },
+      ],
+    });
+    expect(
+      database
+        .prepare(
+          "SELECT COUNT(*) AS count FROM device_action_results WHERE action_id = ? AND state = 'SUCCEEDED'",
+        )
+        .get(created.action.id),
+    ).toEqual({ count: 2 });
+  });
 });

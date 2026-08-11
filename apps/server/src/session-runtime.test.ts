@@ -155,6 +155,53 @@ describe("RuntimeSessionRouteService", () => {
     });
     expect(result.action.state).toBe("SUCCEEDED");
   });
+
+  it("creates a variable-size session with a leader and follower members", async () => {
+    const database = await createDatabase();
+    const serials = [parseDeviceSerial("R5CX211TXNT"), parseDeviceSerial("R5CRC342PRF")];
+    for (const serial of serials) {
+      database
+        .prepare(
+          `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+        )
+        .run(serial, "now", "now", "now", "now");
+    }
+    const preflightProbe = { check: vi.fn(async () => undefined) };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      preflightProbe,
+    );
+
+    const created = await service.create({
+      clientRequestId: "request-two-devices",
+      packageName: "com.example.game",
+      deviceSerials: serials,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+
+    expect(created.session.devices).toMatchObject([
+      { serial: serials[0], role: "LEADER" },
+      { serial: serials[1], role: "FOLLOWER" },
+    ]);
+    await service.preflight(created.session.id);
+    expect(preflightProbe.check).toHaveBeenNthCalledWith(1, {
+      serial: serials[0],
+      packageName: "com.example.game",
+    });
+    expect(preflightProbe.check).toHaveBeenNthCalledWith(2, {
+      serial: serials[1],
+      packageName: "com.example.game",
+    });
+    const started = await service.start(created.session.id);
+    expect(started.devices).toHaveLength(2);
+    expect(
+      database
+        .prepare("SELECT COUNT(*) AS count FROM run_devices WHERE run_id = ?")
+        .get(created.session.id),
+    ).toEqual({ count: 2 });
+  });
 });
 
 async function createDatabase(): Promise<Database.Database> {

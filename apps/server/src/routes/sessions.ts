@@ -21,10 +21,35 @@ const CreateSessionSchema = z
   .object({
     clientRequestId: z.string().trim().min(1).max(128),
     packageName: AndroidPackageNameSchema,
-    deviceSerial: DeviceSerialSchema,
+    deviceSerial: DeviceSerialSchema.optional(),
+    deviceSerials: z.array(DeviceSerialSchema).min(1).max(4).optional(),
     leaderVideoEnabled: z.boolean().default(true),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.deviceSerial === undefined && value.deviceSerials === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one device is required.",
+      });
+    }
+    if (value.deviceSerial !== undefined && value.deviceSerials !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Use deviceSerial or deviceSerials, not both.",
+      });
+    }
+    if (
+      value.deviceSerials !== undefined &&
+      new Set(value.deviceSerials).size !== value.deviceSerials.length
+    ) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "Device serials must be unique." });
+    }
+  })
+  .transform((value) => ({
+    ...value,
+    deviceSerials: value.deviceSerials ?? [value.deviceSerial!],
+  }));
 
 const TapActionPayloadSchema = z
   .object({
@@ -74,6 +99,14 @@ export interface SessionLeaderView {
   readonly generation: number;
 }
 
+export interface SessionDeviceView {
+  readonly serial: DeviceSerial;
+  readonly role: "LEADER" | "FOLLOWER";
+  readonly membershipState: "ACTIVE" | "QUARANTINED" | "RECOVERING" | "LEFT";
+  readonly epoch: number;
+  readonly generation: number;
+}
+
 export interface SessionView {
   readonly id: string;
   readonly clientRequestId: string;
@@ -83,12 +116,14 @@ export interface SessionView {
   readonly currentEpoch: number;
   readonly leaderVideoEnabled: boolean;
   readonly leader: SessionLeaderView;
+  readonly devices: readonly SessionDeviceView[];
 }
 
 export interface SessionCreateInput {
   readonly clientRequestId: string;
   readonly packageName: string;
-  readonly deviceSerial: DeviceSerial;
+  readonly deviceSerials?: readonly DeviceSerial[];
+  readonly deviceSerial?: DeviceSerial;
   readonly leaderVideoEnabled: boolean;
   readonly actorSessionId: string;
 }
@@ -140,7 +175,7 @@ export async function registerSessionsRoutes(
       const result = await context.sessionService.create({
         clientRequestId: payload.clientRequestId,
         packageName: payload.packageName,
-        deviceSerial: parseDeviceSerial(payload.deviceSerial),
+        deviceSerials: payload.deviceSerials.map(parseDeviceSerial),
         leaderVideoEnabled: payload.leaderVideoEnabled,
         actorSessionId: session.sessionId,
       });

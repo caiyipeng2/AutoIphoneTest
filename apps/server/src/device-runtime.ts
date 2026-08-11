@@ -108,7 +108,7 @@ export async function createRuntimeDeviceRegistry(
     registry,
     createConfiguredPreflightProbe(),
     actionRepository,
-    createConfiguredActionDispatcher(actionRepository, actionOutbox),
+    createConfiguredActionDispatcher(actionRepository, actionOutbox, registry),
   );
   const deploymentService = new RuntimeDeploymentRouteService(
     database,
@@ -138,6 +138,7 @@ function createConfiguredPreflightProbe(): AppiumPreflightProbe | undefined {
 function createConfiguredActionDispatcher(
   actionRepository: RunActionRepository,
   actionOutbox: ActionOutbox,
+  registry: DeviceRegistry,
 ): ActionDispatcher | undefined {
   const baseUrl = process.env.TEST_CENTER_APPIUM_URL;
   if (baseUrl === undefined || baseUrl.trim() === "") return undefined;
@@ -147,16 +148,25 @@ function createConfiguredActionDispatcher(
     width: readPositiveInteger(process.env.TEST_CENTER_APPIUM_VIEWPORT_WIDTH, 1080),
     height: readPositiveInteger(process.env.TEST_CENTER_APPIUM_VIEWPORT_HEIGHT, 2340),
   };
+  const serialPortIndexes = new Map<string, number>(
+    registry
+      .list()
+      .map((device) => device.serial)
+      .sort()
+      .map((serial, index) => [serial, index] as const),
+  );
   return new ActionDispatcher(
     actionRepository,
     actionOutbox,
-    () =>
-      new AppiumActionExecutor({
+    (serial) => {
+      const portIndex = serialPortIndexes.get(serial) ?? 0;
+      return new AppiumActionExecutor({
         baseUrl,
-        systemPort,
-        mjpegServerPort,
+        systemPort: systemPort + portIndex,
+        mjpegServerPort: mjpegServerPort + portIndex,
         viewport,
-      }),
+      });
+    },
     `server-action-dispatcher-${process.pid}`,
   );
 }

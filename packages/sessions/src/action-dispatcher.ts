@@ -35,30 +35,32 @@ export class ActionDispatcher {
     if (lease === undefined) throw new Error("Action is not available for dispatch.");
     this.outbox.markDispatching(input.actionId, lease.leaseToken);
 
-    for (const target of queued.targets) {
-      try {
-        const result = await this.executorFactory(target.serial).execute({
-          serial: target.serial,
-          packageName: input.packageName,
-          payload: queued.payload,
-        });
-        this.outbox.completeTarget(
-          input.actionId,
-          lease.leaseToken,
-          target.serial,
-          "SUCCEEDED",
-          JSON.stringify({ ok: true, result }),
-        );
-      } catch (error) {
-        this.outbox.completeTarget(
-          input.actionId,
-          lease.leaseToken,
-          target.serial,
-          "FAILED",
-          JSON.stringify({ ok: false, error: serializeError(error) }),
-        );
-      }
-    }
+    await Promise.all(
+      queued.targets.map(async (target) => {
+        try {
+          const result = await this.executorFactory(target.serial).execute({
+            serial: target.serial,
+            packageName: input.packageName,
+            payload: queued.payload,
+          });
+          this.outbox.completeTarget(
+            input.actionId,
+            lease.leaseToken,
+            target.serial,
+            "SUCCEEDED",
+            JSON.stringify({ ok: true, result }),
+          );
+        } catch (error) {
+          this.outbox.completeTarget(
+            input.actionId,
+            lease.leaseToken,
+            target.serial,
+            "FAILED",
+            JSON.stringify({ ok: false, error: serializeError(error) }),
+          );
+        }
+      }),
+    );
     const completed = this.repository.get(input.actionId);
     if (completed === undefined) throw new Error("Completed action could not be read back.");
     return completed;

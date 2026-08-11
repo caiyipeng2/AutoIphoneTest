@@ -10,7 +10,7 @@ This slice closes the confirmed single-device action path:
 4. The target result is written to `device_action_results`; the action becomes `SUCCEEDED` or `FAILED` only after all target rows finish.
 5. A successful action acknowledges the outbox row.
 
-The dispatcher iterates every active or recovering target snapshot, so the persistence boundary is already compatible with one to four connected devices. The current session creation API intentionally creates one leader target; adding follower selection remains a later slice.
+The dispatcher iterates every active or recovering target snapshot, so the persistence boundary is compatible with one to four connected devices. Session member selection and the two-device hardware proof are recorded in [M6 Task 6](./M6-task6-multi-device-sync-acceptance.md).
 
 ## Automated verification
 

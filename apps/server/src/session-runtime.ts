@@ -28,6 +28,14 @@ interface SessionRow {
   readonly generation: number;
 }
 
+interface SessionMemberRow {
+  readonly serial: string;
+  readonly role: "LEADER" | "FOLLOWER";
+  readonly membership_state: SessionView["leader"]["membershipState"];
+  readonly epoch: number;
+  readonly generation: number;
+}
+
 export class RuntimeSessionRouteService implements SessionRouteService {
   public constructor(
     private readonly database: Database.Database,
@@ -41,20 +49,23 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     input: SessionCreateInput,
   ): Promise<{ readonly session: SessionView; readonly state: "CREATED" | "DEDUPLICATED" }> {
     const packageName = parseAndroidPackageName(input.packageName);
+    const deviceSerials = normalizeDeviceSerials(input);
     const existing = this.findByClientRequestId(input.clientRequestId);
     if (existing !== undefined) {
       if (
         existing.package_name !== packageName ||
-        existing.serial !== input.deviceSerial ||
+        !sameSerials(this.readMemberSerials(existing.id), deviceSerials) ||
         Boolean(existing.leader_video_enabled) !== input.leaderVideoEnabled
       ) {
         throw new Error("Session client request already exists with different payload.");
       }
       return { session: this.toView(existing), state: "DEDUPLICATED" };
     }
-    const device = this.registry.get(input.deviceSerial);
-    if (device === undefined) throw new Error("Device not found.");
-    if (device.state !== "ONLINE") throw new Error("Device must be online.");
+    for (const serial of deviceSerials) {
+      const device = this.registry.get(serial);
+      if (device === undefined) throw new Error(`Device not found: ${serial}.`);
+      if (device.state !== "ONLINE") throw new Error(`Device must be online: ${serial}.`);
+    }
     const now = new Date().toISOString();
     const runId = `run-${randomUUID()}`;
     const runNonceHash = createHash("sha256").update(randomUUID()).digest("hex");
@@ -73,12 +84,13 @@ export class RuntimeSessionRouteService implements SessionRouteService {
           now,
           now,
         );
-      this.database
-        .prepare(
-          `INSERT INTO run_devices (run_id, serial, role, membership_state, epoch, generation, joined_at, updated_at)
-         VALUES (?, ?, 'LEADER', 'ACTIVE', 1, 1, ?, ?)`,
-        )
-        .run(runId, input.deviceSerial, now, now);
+      const insertMember = this.database.prepare(
+        `INSERT INTO run_devices (run_id, serial, role, membership_state, epoch, generation, joined_at, updated_at)
+         VALUES (?, ?, ?, 'ACTIVE', 1, 1, ?, ?)`,
+      );
+      deviceSerials.forEach((serial, index) =>
+        insertMember.run(runId, serial, index === 0 ? "LEADER" : "FOLLOWER", now, now),
+      );
       this.database
         .prepare(
           `INSERT INTO run_transitions (run_id, from_state, to_state, reason, created_at)
@@ -141,7 +153,21 @@ export class RuntimeSessionRouteService implements SessionRouteService {
       .get(clientRequestId) as SessionRow | undefined;
   }
 
+  private readMemberSerials(runId: string): readonly string[] {
+    return (
+      this.database
+        .prepare("SELECT serial FROM run_devices WHERE run_id = ? ORDER BY serial ASC")
+        .all(runId) as readonly { serial: string }[]
+    ).map((row) => row.serial);
+  }
+
   private toView(row: SessionRow): SessionView {
+    const devices = this.database
+      .prepare(
+        `SELECT serial, role, membership_state, epoch, generation
+         FROM run_devices WHERE run_id = ? AND epoch = ? ORDER BY role = 'LEADER' DESC, serial ASC`,
+      )
+      .all(row.id, row.current_epoch) as readonly SessionMemberRow[];
     return {
       id: row.id,
       clientRequestId: row.client_request_id,
@@ -156,6 +182,13 @@ export class RuntimeSessionRouteService implements SessionRouteService {
         epoch: row.epoch,
         generation: row.generation,
       },
+      devices: devices.map((device) => ({
+        serial: parseDeviceSerial(device.serial) as DeviceSerial,
+        role: device.role,
+        membershipState: device.membership_state,
+        epoch: device.epoch,
+        generation: device.generation,
+      })),
     };
   }
 
@@ -168,14 +201,20 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     const current = this.get(id);
     if (current === undefined) throw new Error("Session not found.");
     if (current.state !== expectedState) throw new Error(`Session state must be ${expectedState}.`);
-    const device = this.registry.get(current.leader.serial);
-    if (device === undefined) throw new Error("Device not found.");
-    if (device.state !== "ONLINE") throw new Error("Device must be online.");
+    for (const member of current.devices) {
+      const device = this.registry.get(member.serial);
+      if (device === undefined) throw new Error(`Device not found: ${member.serial}.`);
+      if (device.state !== "ONLINE") throw new Error(`Device must be online: ${member.serial}.`);
+    }
     if (nextState === "PREFLIGHT") {
-      await this.preflightProbe?.check({
-        serial: current.leader.serial,
-        packageName: current.packageName,
-      });
+      if (this.preflightProbe !== undefined) {
+        for (const member of current.devices) {
+          await this.preflightProbe.check({
+            serial: member.serial,
+            packageName: current.packageName,
+          });
+        }
+      }
     }
     const now = new Date().toISOString();
     const update = this.database.transaction(() => {
@@ -193,4 +232,21 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     if (next === undefined) throw new Error("Session transition could not be read back.");
     return next;
   }
+}
+
+function normalizeDeviceSerials(input: SessionCreateInput): readonly DeviceSerial[] {
+  const serials =
+    input.deviceSerials ?? (input.deviceSerial === undefined ? [] : [input.deviceSerial]);
+  const unique = [...new Set(serials)];
+  if (unique.length === 0) throw new Error("At least one device is required.");
+  if (unique.length > 4) throw new Error("A session supports at most four devices.");
+  if (unique.length !== serials.length) throw new Error("Device serials must be unique.");
+  return unique;
+}
+
+function sameSerials(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  const leftSorted = [...left].sort();
+  const rightSorted = [...right].sort();
+  return leftSorted.every((serial, index) => serial === rightSorted[index]);
 }

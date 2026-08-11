@@ -24,7 +24,8 @@ import {
 import { RuntimeSessionRouteService } from "../apps/server/dist/session-runtime.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const serial = process.env.ANDROID_SERIAL ?? "R5CX211TXNT";
+const serials = parseSerials();
+const primarySerial = serials[0];
 const packageName = process.env.TEST_CENTER_PACKAGE ?? "com.hg.idleweaponshoptycoon.android";
 const baseUrl = process.env.TEST_CENTER_APPIUM_URL ?? "http://127.0.0.1:4723";
 const systemPort = Number(process.env.TEST_CENTER_APPIUM_SYSTEM_PORT ?? 8201);
@@ -34,7 +35,7 @@ const actionRequestId = `hardware-action-${Date.now()}`;
 const runId = `m6-session-action-${Date.now()}`;
 const runRoot = path.join(projectRoot, "data", "runs", runId);
 const acceptancePath = path.join(runRoot, "acceptance.json");
-const viewport = readViewport(serial);
+const viewports = new Map(serials.map((serial) => [serial, readViewport(serial)]));
 const database = new Database(":memory:");
 configureDatabase(database);
 migrate(database, [
@@ -43,12 +44,14 @@ migrate(database, [
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
 ]);
-database
-  .prepare(
-    `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at)
-     VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
-  )
-  .run(serial, "now", "now", "now", "now");
+for (const serial of serials) {
+  database
+    .prepare(
+      `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at)
+       VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+    )
+    .run(serial, "now", "now", "now", "now");
+}
 
 await mkdir(runRoot, { recursive: true });
 const startedAt = new Date().toISOString();
@@ -59,7 +62,15 @@ try {
   const dispatcher = new ActionDispatcher(
     repository,
     outbox,
-    () => new AppiumActionExecutor({ baseUrl, systemPort, mjpegServerPort, viewport }),
+    (targetSerial) => {
+      const portIndex = Math.max(serials.indexOf(targetSerial), 0);
+      return new AppiumActionExecutor({
+        baseUrl,
+        systemPort: systemPort + portIndex,
+        mjpegServerPort: mjpegServerPort + portIndex,
+        viewport: viewports.get(targetSerial) ?? viewports.get(primarySerial),
+      });
+    },
     `hardware-acceptance-${process.pid}`,
   );
   const registry = { get: () => ({ state: "ONLINE" }) };
@@ -68,7 +79,7 @@ try {
   const created = await service.create({
     clientRequestId,
     packageName,
-    deviceSerial: serial,
+    deviceSerials: serials,
     leaderVideoEnabled: true,
     actorSessionId: "hardware-acceptance",
   });
@@ -83,7 +94,7 @@ try {
   });
   const resultRows = database
     .prepare(
-      "SELECT action_id, serial, state, result_json FROM device_action_results WHERE action_id = ?",
+      "SELECT action_id, serial, state, result_json FROM device_action_results WHERE action_id = ? ORDER BY serial ASC",
     )
     .all(action.action.id);
   const outboxRow = database
@@ -92,11 +103,12 @@ try {
   evidence = {
     schemaVersion: 1,
     runId,
-    serial,
+    serials,
     packageName,
     packageDisplayName: "Idle Weapon Shop Tycoon",
     session: {
       id: created.session.id,
+      devices: created.session.devices,
       createdState: created.state,
       preflightState: preflight.state,
       startedState: started.state,
@@ -109,16 +121,16 @@ try {
     },
     deviceActionResults: resultRows,
     outbox: outboxRow,
-    viewport,
-    appium: { baseUrl, systemPort, mjpegServerPort },
+    viewports: Object.fromEntries(viewports),
+    appium: { baseUrl, systemPort, mjpegServerPort, targetPortOffsets: serials.map((_, i) => i) },
     startedAt,
     completedAt: new Date().toISOString(),
     passed:
       preflight.state === "PREFLIGHT" &&
       started.state === "RUNNING" &&
       action.action.state === "SUCCEEDED" &&
-      resultRows.length === 1 &&
-      resultRows[0].state === "SUCCEEDED" &&
+      resultRows.length === serials.length &&
+      resultRows.every((row) => row.state === "SUCCEEDED") &&
       outboxRow?.state === "ACKED",
     acceptancePath,
   };
@@ -126,10 +138,10 @@ try {
   evidence = {
     schemaVersion: 1,
     runId,
-    serial,
+    serials,
     packageName,
     packageDisplayName: "Idle Weapon Shop Tycoon",
-    viewport,
+    viewports: Object.fromEntries(viewports),
     appium: { baseUrl, systemPort, mjpegServerPort },
     startedAt,
     completedAt: new Date().toISOString(),
@@ -144,6 +156,22 @@ try {
 await writeFile(acceptancePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
 process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
 if (!evidence.passed) process.exitCode = 1;
+
+function parseSerials() {
+  const configured = process.env.ANDROID_SERIALS ?? process.env.ANDROID_SERIAL;
+  const serialList = (configured ?? "R5CX211TXNT")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (process.env.ANDROID_SECONDARY_SERIAL?.trim()) {
+    serialList.push(process.env.ANDROID_SECONDARY_SERIAL.trim());
+  }
+  const unique = [...new Set(serialList)];
+  if (unique.length < 1 || unique.length > 4) {
+    throw new Error("ANDROID_SERIALS must contain 1-4 unique device serials.");
+  }
+  return unique;
+}
 
 function readViewport(deviceSerial) {
   const adbPath =
