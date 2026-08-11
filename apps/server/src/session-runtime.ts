@@ -94,6 +94,14 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     return row === undefined ? undefined : this.toView(row);
   }
 
+  public async preflight(id: string): Promise<SessionView> {
+    return await this.transition(id, "CREATED", "PREFLIGHT", "SESSION_PREFLIGHT");
+  }
+
+  public async start(id: string): Promise<SessionView> {
+    return await this.transition(id, "PREFLIGHT", "RUNNING", "SESSION_STARTED");
+  }
+
   private findByClientRequestId(clientRequestId: string): SessionRow | undefined {
     return this.database
       .prepare(
@@ -121,5 +129,34 @@ export class RuntimeSessionRouteService implements SessionRouteService {
         generation: row.generation,
       },
     };
+  }
+
+  private async transition(
+    id: string,
+    expectedState: SessionView["state"],
+    nextState: SessionView["state"],
+    reason: string,
+  ): Promise<SessionView> {
+    const current = this.get(id);
+    if (current === undefined) throw new Error("Session not found.");
+    if (current.state !== expectedState) throw new Error(`Session state must be ${expectedState}.`);
+    const device = this.registry.get(current.leader.serial);
+    if (device === undefined) throw new Error("Device not found.");
+    if (device.state !== "ONLINE") throw new Error("Device must be online.");
+    const now = new Date().toISOString();
+    const update = this.database.transaction(() => {
+      this.database
+        .prepare("UPDATE test_runs SET state = ?, updated_at = ? WHERE id = ? AND state = ?")
+        .run(nextState, now, id, expectedState);
+      this.database
+        .prepare(
+          "INSERT INTO run_transitions (run_id, from_state, to_state, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run(id, expectedState, nextState, reason, now);
+    });
+    update.immediate();
+    const next = this.get(id);
+    if (next === undefined) throw new Error("Session transition could not be read back.");
+    return next;
   }
 }

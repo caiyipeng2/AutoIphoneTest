@@ -1,7 +1,7 @@
 # M6 Task 5 Session API Acceptance
 
 Date: 2026-08-11
-Scope: create/detail session API for one leader device.
+Scope: create/detail and preflight/start lifecycle API for one leader device.
 
 ## Delivered
 
@@ -11,6 +11,9 @@ Scope: create/detail session API for one leader device.
 - Migration `0009_session_api` adds a unique client request ID and persisted leader-video preference.
 - Repeating the same client request with the same payload returns `DEDUPLICATED`; a different payload is rejected.
 - Offline or missing devices are rejected before a run is created.
+- `POST /api/sessions/:id/preflight` advances `CREATED` to `PREFLIGHT` after an online-device check.
+- `POST /api/sessions/:id/start` advances `PREFLIGHT` to `RUNNING`; stale state transitions are rejected.
+- Both lifecycle mutations require the same session, origin, and CSRF checks as create.
 
 ## Verification
 
@@ -26,4 +29,4 @@ Scope: create/detail session API for one leader device.
 
 ## Boundary
 
-This slice does not implement preflight/start/pause/finish, action submission, evidence registration from session events, WebCodecs viewport input, or console UI changes. Those remain separate atomic slices.
+This slice does not yet run Appium preflight checks, submit actions, pause/finish, register evidence from session events, decode WebCodecs input, or change console UI. Those remain separate atomic slices.

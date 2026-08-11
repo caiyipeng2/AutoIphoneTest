@@ -24,6 +24,8 @@ function service(): SessionRouteService {
   return {
     create: async () => ({ session: view, state: "CREATED" }),
     get: (id) => (id === view.id ? view : undefined),
+    preflight: async () => ({ ...view, state: "PREFLIGHT" }),
+    start: async () => ({ ...view, state: "RUNNING" }),
   };
 }
 
@@ -84,6 +86,27 @@ describe("session create/detail routes", () => {
     expect(created.statusCode).toBe(201);
     expect(created.json()).toMatchObject({ schemaVersion: 1, state: "CREATED", session: view });
 
+    const preflight = await app.inject({
+      method: "POST",
+      url: "/api/sessions/run-1/preflight",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+    });
+    expect(preflight.statusCode).toBe(200);
+    expect(preflight.json()).toMatchObject({
+      schemaVersion: 1,
+      session: { ...view, state: "PREFLIGHT" },
+    });
+    const started = await app.inject({
+      method: "POST",
+      url: "/api/sessions/run-1/start",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+    });
+    expect(started.statusCode).toBe(200);
+    expect(started.json()).toMatchObject({
+      schemaVersion: 1,
+      session: { ...view, state: "RUNNING" },
+    });
+
     const detail = await app.inject({
       method: "GET",
       url: "/api/sessions/run-1",
@@ -102,6 +125,8 @@ describe("session create/detail routes", () => {
       sessionService: {
         create: async () => ({ session: view, state: "DEDUPLICATED" }),
         get: () => undefined,
+        preflight: async () => ({ ...view, state: "PREFLIGHT" }),
+        start: async () => ({ ...view, state: "RUNNING" }),
       },
     });
     const headers = { host: "127.0.0.1:4796", origin: "http://127.0.0.1:4796" };

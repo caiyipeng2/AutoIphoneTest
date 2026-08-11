@@ -57,6 +57,8 @@ export interface SessionRouteService {
     input: SessionCreateInput,
   ): Promise<{ readonly session: SessionView; readonly state: "CREATED" | "DEDUPLICATED" }>;
   get(id: string): SessionView | undefined;
+  preflight(id: string, actorSessionId: string): Promise<SessionView>;
+  start(id: string, actorSessionId: string): Promise<SessionView>;
 }
 
 export async function registerSessionsRoutes(
@@ -98,6 +100,28 @@ export async function registerSessionsRoutes(
     if (session === undefined) return await reply.code(404).send({ error: "Session not found." });
     return { schemaVersion: 1, session };
   });
+
+  for (const phase of ["preflight", "start"] as const) {
+    app.post<{ Params: { id: string } }>(`/api/sessions/:id/${phase}`, async (request, reply) => {
+      try {
+        assertMutationAllowed(request, context);
+        if (context.sessionService === undefined)
+          return await reply.code(503).send({ error: "Session service unavailable." });
+        const auth = requireSession(request, context);
+        if (auth === undefined)
+          return await reply.code(401).send({ error: "Authentication required." });
+        const session = await context.sessionService[phase](
+          decodeURIComponent(request.params.id),
+          auth.sessionId,
+        );
+        return { schemaVersion: 1, session };
+      } catch (error) {
+        return await reply
+          .code(sessionErrorCode(error))
+          .send({ error: error instanceof Error ? error.message : `${phase} rejected.` });
+      }
+    });
+  }
 }
 
 function assertMutationAllowed(request: FastifyRequest, context: ServerContext): void {
@@ -112,6 +136,8 @@ function sessionErrorCode(error: unknown): 400 | 401 | 403 | 404 | 409 | 503 {
   if (error instanceof Error && error.message === "Authentication required.") return 401;
   if (error instanceof Error && error.message.includes("CSRF")) return 403;
   if (error instanceof Error && error.message.includes("already exists")) return 409;
+  if (error instanceof Error && error.message.includes("state")) return 409;
+  if (error instanceof Error && error.message.includes("online")) return 409;
   if (error instanceof Error && error.message.includes("not found")) return 404;
   if (error instanceof Error && error.message.includes("unavailable")) return 503;
   return 400;

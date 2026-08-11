@@ -64,6 +64,11 @@ describe("RuntimeSessionRouteService", () => {
     await expect(service.create({ ...input, packageName: "com.example.other" })).rejects.toThrow(
       "different payload",
     );
+    const preflight = await service.preflight(created.session.id);
+    expect(preflight.state).toBe("PREFLIGHT");
+    const started = await service.start(created.session.id);
+    expect(started.state).toBe("RUNNING");
+    await expect(service.start(created.session.id)).rejects.toThrow("PREFLIGHT");
     expect(database.prepare("SELECT COUNT(*) AS count FROM test_runs").get()).toEqual({ count: 1 });
   });
 
