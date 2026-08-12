@@ -83,14 +83,14 @@ export class AppiumActionExecutor {
         input.packageName,
       );
       const actions =
-        input.command?.type === "back"
+        input.command?.type === "back" || input.command?.type === "activate"
           ? []
           : createPointerActions(
               input.payload ?? { kind: "tap", x: 0.5, y: 0.5 },
               this.options.viewport,
             );
       if (input.command?.type === "back") await client.pressKey(fence, 4);
-      else await client.performActions(fence, actions);
+      else if (input.command?.type !== "activate") await client.performActions(fence, actions);
       return {
         serial: input.serial,
         packageName: input.packageName,
