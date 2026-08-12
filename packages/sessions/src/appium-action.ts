@@ -7,6 +7,7 @@ import {
 } from "@test-center/appium";
 
 import type { ActionPayload } from "./run-repository.js";
+import type { ActionCommand } from "./action-command.js";
 
 export interface ViewportSize {
   readonly width: number;
@@ -118,7 +119,18 @@ export function createPointerActions(
 ): readonly W3cAction[] {
   assertViewport(viewport);
   if (payload.kind === "tap") {
-    const point = toViewportPoint([payload.x, payload.y], viewport);
+    return createCommandPointerActions({ type: "tap", x: payload.x, y: payload.y }, viewport);
+  }
+  return createPathPointerActions(payload.path, payload.durationMs, viewport);
+}
+
+export function createCommandPointerActions(
+  command: Extract<ActionCommand, { type: "tap" | "longPress" | "swipe" | "drag" }>,
+  viewport: ViewportSize,
+): readonly W3cAction[] {
+  assertViewport(viewport);
+  if (command.type === "tap") {
+    const point = toViewportPoint([command.x, command.y], viewport);
     return [
       {
         type: "pointer",
@@ -131,10 +143,33 @@ export function createPointerActions(
       },
     ];
   }
-  const points = payload.path.map((point) => toViewportPoint(point, viewport));
+  if (command.type === "longPress") {
+    const point = toViewportPoint([command.x, command.y], viewport);
+    return [
+      {
+        type: "pointer",
+        id: "test-center-finger",
+        actions: [
+          { type: "pointerMove", duration: 0, origin: "viewport", x: point[0], y: point[1] },
+          { type: "pointerDown", button: 0 },
+          { type: "pause", duration: command.durationMs },
+          { type: "pointerUp", button: 0 },
+        ],
+      },
+    ];
+  }
+  return createPathPointerActions(command.path, command.durationMs, viewport);
+}
+
+function createPathPointerActions(
+  path: readonly (readonly [number, number])[],
+  durationMs: number,
+  viewport: ViewportSize,
+): readonly W3cAction[] {
+  const points = path.map((point) => toViewportPoint(point, viewport));
   const segmentCount = points.length - 1;
-  const baseDuration = Math.floor(payload.durationMs / segmentCount);
-  const remainder = payload.durationMs - baseDuration * segmentCount;
+  const baseDuration = Math.floor(durationMs / segmentCount);
+  const remainder = durationMs - baseDuration * segmentCount;
   const actions: Record<string, unknown>[] = [
     { type: "pointerMove", duration: 0, origin: "viewport", x: points[0]![0], y: points[0]![1] },
     { type: "pointerDown", button: 0 },

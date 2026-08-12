@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { DeviceSessionCapabilities, SessionFence, W3cAction } from "@test-center/appium";
 
-import { AppiumActionExecutor, createPointerActions } from "./appium-action.js";
+import {
+  AppiumActionExecutor,
+  createCommandPointerActions,
+  createPointerActions,
+} from "./appium-action.js";
 
 describe("createPointerActions", () => {
   it("maps a normalized tap to viewport pixels without exceeding bounds", () => {
@@ -39,6 +43,48 @@ describe("createPointerActions", () => {
       { type: "pointerDown", button: 0 },
       { type: "pointerMove", duration: 200, origin: "viewport", x: 50, y: 100 },
       { type: "pointerMove", duration: 201, origin: "viewport", x: 89, y: 40 },
+      { type: "pointerUp", button: 0 },
+    ]);
+  });
+
+  it("maps long press to a bounded W3C hold sequence", () => {
+    expect(
+      createCommandPointerActions(
+        { type: "longPress", x: 0.25, y: 0.5, durationMs: 300 },
+        { width: 100, height: 200 },
+      ),
+    ).toEqual([
+      {
+        type: "pointer",
+        id: "test-center-finger",
+        actions: [
+          { type: "pointerMove", duration: 0, origin: "viewport", x: 25, y: 100 },
+          { type: "pointerDown", button: 0 },
+          { type: "pause", duration: 300 },
+          { type: "pointerUp", button: 0 },
+        ],
+      },
+    ]);
+  });
+
+  it("maps drag paths with the same bounded segmentation as swipe", () => {
+    const actions = createCommandPointerActions(
+      {
+        type: "drag",
+        path: [
+          [0, 0.5],
+          [0.5, 0.5],
+          [1, 0.5],
+        ],
+        durationMs: 501,
+      },
+      { width: 100, height: 200 },
+    );
+    expect(actions[0]?.actions).toEqual([
+      { type: "pointerMove", duration: 0, origin: "viewport", x: 0, y: 100 },
+      { type: "pointerDown", button: 0 },
+      { type: "pointerMove", duration: 250, origin: "viewport", x: 50, y: 100 },
+      { type: "pointerMove", duration: 251, origin: "viewport", x: 99, y: 100 },
       { type: "pointerUp", button: 0 },
     ]);
   });
