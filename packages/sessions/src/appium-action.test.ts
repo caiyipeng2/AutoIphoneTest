@@ -110,6 +110,7 @@ describe("AppiumActionExecutor", () => {
         .fn<() => Promise<string>>()
         .mockResolvedValueOnce("com.qent.probe")
         .mockResolvedValueOnce("com.hg.idleweaponshoptycoon.android"),
+      pressKey: vi.fn(async () => undefined),
       performActions: vi.fn(async () => undefined),
       deleteSession: vi.fn(async () => undefined),
     };
@@ -134,6 +135,37 @@ describe("AppiumActionExecutor", () => {
       fence,
       createPointerActions({ kind: "tap", x: 0.5, y: 0.5 }, { width: 1080, height: 2340 }),
     );
+    expect(client.deleteSession).toHaveBeenCalledWith(fence);
+  });
+
+  it("dispatches Back through Android keycode 4 without pointer actions", async () => {
+    const fence: SessionFence = { sessionId: "session-back", serial: "R5CX211TXNT", generation: 1 };
+    const client = {
+      createSession: vi.fn(async () => fence),
+      activateApp: vi.fn(async () => undefined),
+      currentPackage: vi.fn(async () => "com.hg.idleweaponshoptycoon.android"),
+      pressKey: vi.fn(async () => undefined),
+      performActions: vi.fn(async () => undefined),
+      deleteSession: vi.fn(async () => undefined),
+    };
+    const executor = new AppiumActionExecutor({
+      baseUrl: "http://127.0.0.1:4723",
+      systemPort: 8201,
+      mjpegServerPort: 7811,
+      viewport: { width: 1080, height: 2340 },
+      clientFactory: () => client,
+    });
+
+    const result = await executor.execute({
+      serial: fence.serial,
+      packageName: "com.hg.idleweaponshoptycoon.android",
+      command: { type: "back" },
+      payload: { kind: "tap", x: 0.5, y: 0.5 },
+    });
+
+    expect(result.pointerActionCount).toBe(0);
+    expect(client.pressKey).toHaveBeenCalledWith(fence, 4);
+    expect(client.performActions).not.toHaveBeenCalled();
     expect(client.deleteSession).toHaveBeenCalledWith(fence);
   });
 });

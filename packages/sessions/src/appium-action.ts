@@ -18,6 +18,7 @@ export interface AppiumActionClient {
   createSession(capabilities: DeviceSessionCapabilities): Promise<SessionFence>;
   activateApp(fence: SessionFence, packageName: string): Promise<void>;
   currentPackage(fence: SessionFence): Promise<string>;
+  pressKey(fence: SessionFence, keycode: number, metastate?: number): Promise<void>;
   performActions(fence: SessionFence, actions: readonly W3cAction[]): Promise<void>;
   deleteSession(fence: SessionFence): Promise<void>;
 }
@@ -36,7 +37,8 @@ export interface AppiumActionExecutorOptions {
 export interface AppiumActionInput {
   readonly serial: string;
   readonly packageName: string;
-  readonly payload: ActionPayload;
+  readonly payload?: ActionPayload;
+  readonly command?: ActionCommand;
 }
 
 export interface AppiumActionResult {
@@ -80,8 +82,15 @@ export class AppiumActionExecutor {
         fence,
         input.packageName,
       );
-      const actions = createPointerActions(input.payload, this.options.viewport);
-      await client.performActions(fence, actions);
+      const actions =
+        input.command?.type === "back"
+          ? []
+          : createPointerActions(
+              input.payload ?? { kind: "tap", x: 0.5, y: 0.5 },
+              this.options.viewport,
+            );
+      if (input.command?.type === "back") await client.pressKey(fence, 4);
+      else await client.performActions(fence, actions);
       return {
         serial: input.serial,
         packageName: input.packageName,
