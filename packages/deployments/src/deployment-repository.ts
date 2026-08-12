@@ -136,8 +136,11 @@ export class DeploymentRepository implements DeploymentPersistence {
   public get(): PersistedDeployment {
     const row = this.database
       .prepare<[string, string], DeploymentRow>(
-        `SELECT d.id, dd.serial, d.package_name, d.state, d.current_step,
-                d.failed_step, d.failure_message, d.updated_at
+        `SELECT d.id, dd.serial, d.package_name, dd.state,
+                (SELECT step_kind FROM deployment_steps ds WHERE ds.deployment_id = d.id AND ds.serial = dd.serial AND ds.state = 'RUNNING' ORDER BY ds.id DESC LIMIT 1) AS current_step,
+                (SELECT step_kind FROM deployment_steps ds WHERE ds.deployment_id = d.id AND ds.serial = dd.serial AND ds.state = 'FAILED' ORDER BY ds.id DESC LIMIT 1) AS failed_step,
+                (SELECT error_category FROM deployment_steps ds WHERE ds.deployment_id = d.id AND ds.serial = dd.serial AND ds.state = 'FAILED' ORDER BY ds.id DESC LIMIT 1) AS failure_message,
+                dd.updated_at
          FROM deployments d
          JOIN deployment_devices dd ON dd.deployment_id = d.id
          WHERE d.id = ? AND dd.serial = ?`,

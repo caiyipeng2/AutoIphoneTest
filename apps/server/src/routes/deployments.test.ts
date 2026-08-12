@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseDeviceSerial } from "@test-center/contracts/device";
 import type { DeploymentRouteService } from "./deployments.js";
+import type { DeploymentView } from "@test-center/deployments";
 import { createApp } from "../app.js";
 
 const serial = parseDeviceSerial("R5CX211TXNT");
@@ -12,6 +13,17 @@ function view() {
     clientRequestId: "request-1",
     artifactId: "artifact-1",
     deviceSerial: serial,
+    deviceSerials: [serial],
+    devices: [
+      {
+        serial,
+        role: "LEADER" as const,
+        state: "QUEUED" as const,
+        currentStep: null,
+        failedStep: null,
+        failureMessage: null,
+      },
+    ],
     packageName: "com.example.game",
     mutation: "NONE" as const,
     state: "QUEUED" as const,
@@ -100,6 +112,61 @@ describe("deployment routes", () => {
         })
       ).statusCode,
     ).toBe(200);
+    await app.close();
+  });
+
+  it("passes a selected 1-4 serial set to the deployment service", async () => {
+    const selected = [serial, parseDeviceSerial("R5CWB17PN0Y")];
+    let received: DeploymentView | undefined;
+    const service: DeploymentRouteService = {
+      list: () => [],
+      get: () => view(),
+      issueConfirmation: () => ({ nonce: "nonce-1", expiresAt: "2026-08-06T00:01:00.000Z" }),
+      create: async (input) => {
+        expect(input.deviceSerials).toEqual(selected);
+        expect(input.deviceSerial).toBeUndefined();
+        received = view();
+        return received;
+      },
+      run: async () => view(),
+      cancel: async () => view(),
+      retry: async () => view(),
+    };
+    const app = await createApp({
+      port: 4791,
+      bootstrapCode: "deployment-bootstrap-group",
+      launchSecret: "deployment-secret",
+      deploymentService: service,
+    });
+    const headers = { host: "127.0.0.1:4791", origin: "http://127.0.0.1:4791" };
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers,
+      payload: { code: "deployment-bootstrap-group" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const csrf = Array.isArray(cookies)
+      ? cookies
+          .find((cookie) => cookie.startsWith("tc_csrf="))
+          ?.split("=", 2)[1]
+          ?.split(";", 1)[0]
+      : undefined;
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/deployments",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+      payload: {
+        clientRequestId: "group-request",
+        artifactId: "artifact-1",
+        deviceSerials: selected,
+      },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(received?.deviceSerials).toEqual([serial]);
     await app.close();
   });
 });

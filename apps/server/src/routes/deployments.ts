@@ -24,11 +24,15 @@ const CreateSchema = z
   .object({
     clientRequestId: z.string().min(1).max(128),
     artifactId: z.string().min(1).max(200),
-    deviceSerial: z.string().min(1).max(128),
+    deviceSerial: z.string().min(1).max(128).optional(),
+    deviceSerials: z.array(z.string().min(1).max(128)).min(1).max(4).optional(),
     mutation: z.enum(["NONE", "CLEAR_DATA", "UNINSTALL_REINSTALL"]).default("NONE"),
     confirmationNonce: z.string().min(1).max(256).optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => (value.deviceSerial === undefined) !== (value.deviceSerials === undefined), {
+    message: "Provide exactly one of deviceSerial or deviceSerials.",
+  });
 
 export interface DeploymentRouteService {
   list(): readonly DeploymentView[];
@@ -97,7 +101,9 @@ export async function registerDeploymentsRoutes(
       const result = await context.deployments.create({
         clientRequestId: payload.clientRequestId,
         artifactId: payload.artifactId,
-        deviceSerial: parseDeviceSerial(payload.deviceSerial),
+        ...(payload.deviceSerials === undefined
+          ? { deviceSerial: parseDeviceSerial(payload.deviceSerial!) }
+          : { deviceSerials: payload.deviceSerials.map(parseDeviceSerial) }),
         mutation: payload.mutation,
         sessionId: session.sessionId,
         ...(payload.confirmationNonce === undefined

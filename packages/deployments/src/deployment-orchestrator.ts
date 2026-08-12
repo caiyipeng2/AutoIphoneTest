@@ -85,7 +85,8 @@ export interface InstallationMutationStore {
 export interface DeploymentCreateInput {
   readonly clientRequestId: string;
   readonly artifactId: string;
-  readonly deviceSerial: DeviceSerial;
+  readonly deviceSerial?: DeviceSerial;
+  readonly deviceSerials?: readonly DeviceSerial[];
   readonly mutation?: "NONE" | DestructiveOperationKind;
   readonly confirmationNonce?: string;
   readonly sessionId?: string;
@@ -98,8 +99,19 @@ export interface DeploymentView {
   readonly clientRequestId: string;
   readonly artifactId: string;
   readonly deviceSerial: DeviceSerial;
+  readonly deviceSerials: readonly DeviceSerial[];
+  readonly devices: readonly DeploymentDeviceView[];
   readonly packageName: string;
   readonly mutation: "NONE" | DestructiveOperationKind;
+  readonly state: DeploymentMachineSnapshot["state"];
+  readonly currentStep: DeploymentMachineSnapshot["currentStep"] | null;
+  readonly failedStep: DeploymentMachineSnapshot["failedStep"] | null;
+  readonly failureMessage: string | null;
+}
+
+export interface DeploymentDeviceView {
+  readonly serial: DeviceSerial;
+  readonly role: "LEADER" | "FOLLOWER";
   readonly state: DeploymentMachineSnapshot["state"];
   readonly currentStep: DeploymentMachineSnapshot["currentStep"] | null;
   readonly failedStep: DeploymentMachineSnapshot["failedStep"] | null;
@@ -121,21 +133,24 @@ export class DeploymentOrchestrator {
     if (!input.clientRequestId.trim()) throw new TypeError("clientRequestId is required.");
     const artifact = this.options.artifact(input.artifactId);
     if (artifact === undefined) throw new Error("Artifact not found.");
-    if (!/^[a-f0-9]{64}$/.test(artifact.signerSha256)) throw new Error("Artifact signer identity is invalid.");
-    const serial = input.deviceSerial;
+    if (!/^[a-f0-9]{64}$/.test(artifact.signerSha256))
+      throw new Error("Artifact signer identity is invalid.");
+    const serials = normalizeDeviceSerials(input);
     const mutation = input.mutation ?? "NONE";
     const existing = this.findByRequest(input.clientRequestId);
     if (existing !== undefined) {
       if (
         existing.artifact_id !== input.artifactId ||
-        existing.serial !== serial ||
+        !sameSerials(existing.serials, serials) ||
         existing.mutation_kind !== mutation
       )
         throw new Error("Idempotency key was reused with a different deployment.");
       return this.get(existing.id);
     }
-    if (this.options.deviceState(serial) !== "ONLINE") throw new Error("Device must be online.");
-    if (this.isOccupied(serial)) throw new Error("Device has an active deployment.");
+    for (const serial of serials) {
+      if (this.options.deviceState(serial) !== "ONLINE") throw new Error("Device must be online.");
+      if (this.isOccupied(serial)) throw new Error("Device has an active deployment.");
+    }
     const id = randomUUID();
     const createdAt = this.now();
     const insert = this.database.transaction(() => {
@@ -150,7 +165,7 @@ export class DeploymentOrchestrator {
           sessionId: input.sessionId,
           operationKind: mutation,
           artifactId: input.artifactId,
-          deviceSerial: serial,
+          deviceSerial: serials[0]!,
           packageName: artifact.packageName,
           installGeneration: input.installGeneration ?? 1,
           appDataGeneration: input.appDataGeneration ?? 1,
@@ -170,11 +185,10 @@ export class DeploymentOrchestrator {
           createdAt,
           createdAt,
         );
-      this.database
-        .prepare(
-          "INSERT INTO deployment_devices (deployment_id, serial, state, created_at, updated_at) VALUES (?, ?, 'QUEUED', ?, ?)",
-        )
-        .run(id, serial, createdAt, createdAt);
+      const insertTarget = this.database.prepare(
+        "INSERT INTO deployment_devices (deployment_id, serial, state, created_at, updated_at) VALUES (?, ?, 'QUEUED', ?, ?)",
+      );
+      for (const serial of serials) insertTarget.run(id, serial, createdAt, createdAt);
     });
     insert.immediate();
     return this.publish(id);
@@ -190,21 +204,44 @@ export class DeploymentOrchestrator {
   public get(id: string): DeploymentView {
     const row = this.database
       .prepare(
-        "SELECT d.id, d.client_request_id, d.artifact_id, d.package_name, d.mutation_kind, d.state, d.current_step, d.failed_step, d.failure_message, dd.serial FROM deployments d JOIN deployment_devices dd ON dd.deployment_id = d.id WHERE d.id = ?",
+        "SELECT id, client_request_id, artifact_id, package_name, mutation_kind FROM deployments WHERE id = ?",
       )
-      .get(id) as DeploymentRow | undefined;
+      .get(id) as DeploymentAggregateRow | undefined;
     if (row === undefined) throw new Error(`Deployment '${id}' not found.`);
+    const targets = this.database
+      .prepare(
+        `SELECT dd.serial, dd.state,
+          (SELECT step_kind FROM deployment_steps ds WHERE ds.deployment_id = dd.deployment_id AND ds.serial = dd.serial AND ds.state = 'RUNNING' ORDER BY ds.id DESC LIMIT 1) AS current_step,
+          (SELECT step_kind FROM deployment_steps ds WHERE ds.deployment_id = dd.deployment_id AND ds.serial = dd.serial AND ds.state = 'FAILED' ORDER BY ds.id DESC LIMIT 1) AS failed_step,
+          (SELECT error_category FROM deployment_steps ds WHERE ds.deployment_id = dd.deployment_id AND ds.serial = dd.serial AND ds.state = 'FAILED' ORDER BY ds.id DESC LIMIT 1) AS failure_message
+          FROM deployment_devices dd WHERE dd.deployment_id = ? ORDER BY dd.rowid`,
+      )
+      .all(id) as DeploymentTargetRow[];
+    if (targets.length === 0) throw new Error(`Deployment '${id}' has no targets.`);
+    const state = aggregateState(targets.map((target) => target.state));
     return {
       id: row.id,
       clientRequestId: row.client_request_id,
       artifactId: row.artifact_id,
-      deviceSerial: row.serial as DeviceSerial,
+      deviceSerial: targets[0]!.serial as DeviceSerial,
+      deviceSerials: targets.map((target) => target.serial as DeviceSerial),
       packageName: row.package_name,
       mutation: row.mutation_kind,
-      state: row.state,
-      currentStep: row.current_step,
-      failedStep: row.failed_step,
-      failureMessage: row.failure_message,
+      state,
+      currentStep: targets.every((target) => target.current_step === targets[0]!.current_step)
+        ? targets[0]!.current_step
+        : null,
+      failedStep: targets.find((target) => target.failed_step !== null)?.failed_step ?? null,
+      failureMessage:
+        targets.find((target) => target.failure_message !== null)?.failure_message ?? null,
+      devices: targets.map((target, index) => ({
+        serial: target.serial as DeviceSerial,
+        role: index === 0 ? "LEADER" : "FOLLOWER",
+        state: target.state,
+        currentStep: target.current_step,
+        failedStep: target.failed_step,
+        failureMessage: target.failure_message,
+      })),
     };
   }
 
@@ -212,7 +249,19 @@ export class DeploymentOrchestrator {
     const view = this.get(id);
     const artifact = this.options.artifact(view.artifactId);
     if (artifact === undefined) throw new Error("Artifact not found.");
-    const repository = new DeploymentRepository(this.database, id, view.deviceSerial);
+    await Promise.all(
+      view.deviceSerials.map((serial) => this.runTarget(id, view, artifact, serial)),
+    );
+    return this.get(id);
+  }
+
+  private async runTarget(
+    id: string,
+    view: DeploymentView,
+    artifact: DeploymentArtifact,
+    serial: DeviceSerial,
+  ): Promise<void> {
+    const repository = new DeploymentRepository(this.database, id, serial);
     const machine = new DeploymentMachine({
       persistence: repository,
       initialSnapshot: repository.getSnapshot(),
@@ -226,43 +275,34 @@ export class DeploymentOrchestrator {
         >
       | undefined;
     try {
-      while (
-        snapshot.state !== "COMPLETED" &&
-        snapshot.state !== "FAILED" &&
-        snapshot.state !== "CANCELLED"
-      ) {
+      while (!["COMPLETED", "FAILED", "CANCELLED"].includes(snapshot.state)) {
         if (snapshot.state === "QUEUED") {
           snapshot = machine.dispatch({ type: "START_OR_ADVANCE" });
-          this.publish(id);
         } else if (snapshot.state === "PRECHECK") {
-          if (this.options.deviceState(view.deviceSerial) !== "ONLINE")
+          if (this.options.deviceState(serial) !== "ONLINE")
             throw new Error("Device went offline during precheck.");
           snapshot = machine.dispatch({ type: "START_OR_ADVANCE" });
-          this.publish(id);
         } else if (snapshot.state === "PREPARE") {
           let mutationId: string | undefined;
           if (view.mutation !== "NONE" && this.options.installation !== undefined) {
-            const mutation = this.options.installation.recordDataMutation({
-              serial: view.deviceSerial,
-              packageName: artifact.packageName,
-              kind: view.mutation,
-            });
-            mutationId = mutation.lastMutationId ?? undefined;
+            mutationId =
+              this.options.installation.recordDataMutation({
+                serial,
+                packageName: artifact.packageName,
+                kind: view.mutation,
+              }).lastMutationId ?? undefined;
           }
           try {
             if (view.mutation === "CLEAR_DATA")
-              await this.options.actions.clearData({
-                serial: view.deviceSerial,
-                packageName: artifact.packageName,
-              });
+              await this.options.actions.clearData({ serial, packageName: artifact.packageName });
             if (view.mutation === "UNINSTALL_REINSTALL")
               await this.options.actions.uninstallReinstall({
-                serial: view.deviceSerial,
+                serial,
                 packageName: artifact.packageName,
               });
             if (mutationId !== undefined)
               this.options.installation?.recordMutationResult(
-                view.deviceSerial,
+                serial,
                 artifact.packageName,
                 mutationId,
                 "SUCCEEDED",
@@ -270,7 +310,7 @@ export class DeploymentOrchestrator {
           } catch (error) {
             if (mutationId !== undefined)
               this.options.installation?.recordMutationResult(
-                view.deviceSerial,
+                serial,
                 artifact.packageName,
                 mutationId,
                 "FAILED",
@@ -279,16 +319,13 @@ export class DeploymentOrchestrator {
             throw error;
           }
           snapshot = machine.dispatch({ type: "START_OR_ADVANCE" });
-          this.publish(id);
         } else if (snapshot.state === "INSTALL") {
-          if (artifact.kind === "APK")
-            await this.options.actions.installApk({ serial: view.deviceSerial, artifact });
-          else await this.options.actions.installAab({ serial: view.deviceSerial, artifact });
+          if (artifact.kind === "APK") await this.options.actions.installApk({ serial, artifact });
+          else await this.options.actions.installAab({ serial, artifact });
           snapshot = machine.dispatch({ type: "START_OR_ADVANCE" });
-          this.publish(id);
         } else if (snapshot.state === "VERIFY") {
           const identity = await this.options.actions.collectIdentity({
-            serial: view.deviceSerial,
+            serial,
             packageName: artifact.packageName,
           });
           if (
@@ -302,7 +339,6 @@ export class DeploymentOrchestrator {
             throw new Error("Installed launch activity is unavailable.");
           verifiedIdentity = identity;
           snapshot = machine.dispatch({ type: "START_OR_ADVANCE" });
-          this.publish(id);
         } else if (snapshot.state === "LAUNCH") {
           const activity = verifiedIdentity?.launchActivity ?? artifact.launchActivity;
           if (activity === undefined) throw new Error("Launch activity is unavailable.");
@@ -315,15 +351,13 @@ export class DeploymentOrchestrator {
               })()
             : activity;
           await this.options.actions.startActivity({
-            serial: view.deviceSerial,
+            serial,
             packageName: artifact.packageName,
             activityName,
           });
-          const foreground = await this.options.actions.foregroundActivity({
-            serial: view.deviceSerial,
-          });
+          const foreground = await this.options.actions.foregroundActivity({ serial });
           const pid = await this.options.actions.packagePid({
-            serial: view.deviceSerial,
+            serial,
             packageName: artifact.packageName,
           });
           if (
@@ -333,8 +367,8 @@ export class DeploymentOrchestrator {
           )
             throw new Error("Foreground verification failed.");
           snapshot = machine.dispatch({ type: "START_OR_ADVANCE" });
-          this.publish(id);
         }
+        this.publish(id);
       }
     } catch (error) {
       if (machine.snapshot.state !== "FAILED") {
@@ -346,31 +380,36 @@ export class DeploymentOrchestrator {
         this.publish(id);
       }
     }
-    return this.get(id);
   }
 
   public async retry(id: string): Promise<DeploymentView> {
     const view = this.get(id);
-    const repository = new DeploymentRepository(this.database, id, view.deviceSerial);
-    const machine = new DeploymentMachine({
-      persistence: repository,
-      initialSnapshot: repository.getSnapshot(),
-      now: this.now,
-    });
-    machine.dispatch({ type: "RETRY" });
+    for (const target of view.devices.filter((device) => device.state === "FAILED")) {
+      const repository = new DeploymentRepository(this.database, id, target.serial);
+      const machine = new DeploymentMachine({
+        persistence: repository,
+        initialSnapshot: repository.getSnapshot(),
+        now: this.now,
+      });
+      machine.dispatch({ type: "RETRY" });
+    }
     this.publish(id);
     return await this.run(id);
   }
 
   public async cancel(id: string): Promise<DeploymentView> {
     const view = this.get(id);
-    const repository = new DeploymentRepository(this.database, id, view.deviceSerial);
-    const machine = new DeploymentMachine({
-      persistence: repository,
-      initialSnapshot: repository.getSnapshot(),
-      now: this.now,
-    });
-    machine.dispatch({ type: "CANCEL" });
+    for (const target of view.devices.filter(
+      (device) => !["COMPLETED", "FAILED", "CANCELLED"].includes(device.state),
+    )) {
+      const repository = new DeploymentRepository(this.database, id, target.serial);
+      const machine = new DeploymentMachine({
+        persistence: repository,
+        initialSnapshot: repository.getSnapshot(),
+        now: this.now,
+      });
+      machine.dispatch({ type: "CANCEL" });
+    }
     return this.publish(id);
   }
 
@@ -382,26 +421,58 @@ export class DeploymentOrchestrator {
   public recoverInterrupted(): readonly DeploymentView[] {
     const rows = this.database
       .prepare(
-        "SELECT id FROM deployments WHERE state IN ('PRECHECK', 'PREPARE', 'INSTALL', 'VERIFY', 'LAUNCH')",
+        "SELECT DISTINCT d.id, d.state AS aggregate_state, d.current_step AS aggregate_step FROM deployments d JOIN deployment_devices dd ON dd.deployment_id = d.id WHERE (d.state IN ('PRECHECK', 'PREPARE', 'INSTALL', 'VERIFY', 'LAUNCH') OR dd.state IN ('PRECHECK', 'PREPARE', 'INSTALL', 'VERIFY', 'LAUNCH'))",
       )
-      .all() as Array<{ id: string }>;
+      .all() as Array<{
+      id: string;
+      aggregate_state: DeploymentView["state"];
+      aggregate_step: DeploymentView["currentStep"];
+    }>;
     const recovered: DeploymentView[] = [];
     for (const row of rows) {
       const view = this.get(row.id);
-      const repository = new DeploymentRepository(this.database, row.id, view.deviceSerial);
-      const machine = new DeploymentMachine({
-        persistence: repository,
-        initialSnapshot: repository.getSnapshot(),
-        now: this.now,
-      });
-      if (machine.snapshot.currentStep !== undefined) {
-        machine.dispatch({
-          type: "FAIL",
-          step: machine.snapshot.currentStep,
-          message: "Deployment interrupted by server restart.",
+      for (const target of view.devices) {
+        if (target.currentStep === null && row.aggregate_step !== null) {
+          this.database
+            .prepare(
+              "UPDATE deployment_devices SET state = ? WHERE deployment_id = ? AND serial = ?",
+            )
+            .run(row.aggregate_state, row.id, target.serial);
+          this.database
+            .prepare(
+              "INSERT OR IGNORE INTO deployment_steps (deployment_id, serial, step_kind, attempt_number, state, started_at) VALUES (?, ?, ?, 1, 'RUNNING', ?)",
+            )
+            .run(row.id, target.serial, row.aggregate_step, this.now());
+          const legacyRepository = new DeploymentRepository(this.database, row.id, target.serial);
+          const legacyMachine = new DeploymentMachine({
+            persistence: legacyRepository,
+            initialSnapshot: legacyRepository.getSnapshot(),
+            now: this.now,
+          });
+          legacyMachine.dispatch({
+            type: "FAIL",
+            step: row.aggregate_step!,
+            message: "Deployment interrupted by server restart.",
+          });
+          continue;
+        }
+        if (!["PRECHECK", "PREPARE", "INSTALL", "VERIFY", "LAUNCH"].includes(target.state))
+          continue;
+        const repository = new DeploymentRepository(this.database, row.id, target.serial);
+        const machine = new DeploymentMachine({
+          persistence: repository,
+          initialSnapshot: repository.getSnapshot(),
+          now: this.now,
         });
-        recovered.push(this.publish(row.id));
+        if (machine.snapshot.currentStep !== undefined) {
+          machine.dispatch({
+            type: "FAIL",
+            step: machine.snapshot.currentStep,
+            message: "Deployment interrupted by server restart.",
+          });
+        }
       }
+      recovered.push(this.publish(row.id));
     }
     return recovered;
   }
@@ -416,11 +487,16 @@ export class DeploymentOrchestrator {
   }
 
   private findByRequest(clientRequestId: string): ExistingDeployment | undefined {
-    return this.database
-      .prepare(
-        "SELECT d.id, d.artifact_id, dd.serial, d.mutation_kind FROM deployments d JOIN deployment_devices dd ON dd.deployment_id = d.id WHERE d.client_request_id = ?",
-      )
-      .get(clientRequestId) as ExistingDeployment | undefined;
+    const row = this.database
+      .prepare("SELECT id, artifact_id, mutation_kind FROM deployments WHERE client_request_id = ?")
+      .get(clientRequestId) as
+      { id: string; artifact_id: string; mutation_kind: DeploymentView["mutation"] } | undefined;
+    if (row === undefined) return undefined;
+    const serials = this.database
+      .prepare("SELECT serial FROM deployment_devices WHERE deployment_id = ? ORDER BY rowid")
+      .all(row.id)
+      .map((target) => String((target as { serial: string }).serial));
+    return { ...row, serials };
   }
 
   private publish(id: string): DeploymentView {
@@ -433,18 +509,48 @@ export class DeploymentOrchestrator {
 interface ExistingDeployment {
   id: string;
   artifact_id: string;
-  serial: string;
+  serials: readonly string[];
   mutation_kind: DeploymentView["mutation"];
 }
-interface DeploymentRow {
+interface DeploymentAggregateRow {
   id: string;
   client_request_id: string;
   artifact_id: string;
   package_name: string;
   mutation_kind: DeploymentView["mutation"];
+}
+interface DeploymentTargetRow {
+  serial: string;
   state: DeploymentView["state"];
   current_step: DeploymentView["currentStep"];
   failed_step: DeploymentView["failedStep"];
   failure_message: string | null;
-  serial: string;
+}
+
+function normalizeDeviceSerials(input: DeploymentCreateInput): DeviceSerial[] {
+  if (input.deviceSerial !== undefined && input.deviceSerials !== undefined)
+    throw new Error("Use deviceSerial or deviceSerials, not both.");
+  const serials = [
+    ...(input.deviceSerials ?? (input.deviceSerial === undefined ? [] : [input.deviceSerial])),
+  ];
+  if (serials.length < 1) throw new Error("At least one device is required.");
+  if (serials.length > 4) throw new Error("A deployment supports at most four devices.");
+  if (new Set(serials).size !== serials.length)
+    throw new Error("Deployment devices must be unique.");
+  return serials;
+}
+
+function sameSerials(left: readonly string[], right: readonly DeviceSerial[]): boolean {
+  return left.length === right.length && left.every((serial, index) => serial === right[index]);
+}
+
+function aggregateState(states: readonly DeploymentView["state"][]): DeploymentView["state"] {
+  if (states.every((state) => state === "COMPLETED")) return "COMPLETED";
+  if (states.every((state) => state === "CANCELLED")) return "CANCELLED";
+  if (
+    states.some((state) => state === "FAILED") &&
+    states.every((state) => ["COMPLETED", "FAILED", "CANCELLED"].includes(state))
+  )
+    return "FAILED";
+  return states.find((state) => !["COMPLETED", "FAILED", "CANCELLED"].includes(state)) ?? "QUEUED";
 }
