@@ -1,6 +1,7 @@
 import { win32 } from "node:path";
+import { join } from "node:path";
 
-import { AdbClient } from "@test-center/adb";
+import { AdbClient, LogcatStream } from "@test-center/adb";
 import {
   ArtifactMetadataParser,
   collectInstalledIdentity,
@@ -48,6 +49,14 @@ import {
   AppiumPreflightProbe,
   RunActionRepository,
 } from "@test-center/sessions";
+import { DeviceWorker } from "@test-center/sessions";
+import {
+  AppiumService,
+  AppiumW3cClient,
+  JsonFilePortLeaseStore,
+  PortAllocator,
+} from "@test-center/appium";
+import { WorkerResourceManager } from "@test-center/sessions";
 import {
   DeploymentOrchestrator,
   type DeploymentArtifact,
@@ -57,6 +66,7 @@ import type { DeploymentRouteService } from "./routes/deployments.js";
 import type { ArtifactRouteService, InstalledRegistrationResult } from "./routes/artifacts.js";
 import type { SessionRouteService } from "./routes/sessions.js";
 import { RuntimeSessionRouteService } from "./session-runtime.js";
+import { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
 
 export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
@@ -64,7 +74,8 @@ export interface RuntimeDeviceRegistry {
   readonly deploymentService: DeploymentRouteService;
   readonly uidService: UidService;
   readonly sessionService: SessionRouteService;
-  readonly close: () => void;
+  readonly workerCoordinator: RuntimeWorkerCoordinator;
+  readonly close: () => Promise<void>;
 }
 
 export async function createRuntimeDeviceRegistry(
@@ -100,6 +111,7 @@ export async function createRuntimeDeviceRegistry(
     new DeviceRepository(database),
     createAdbDiscoverySource(client),
   );
+  const workerCoordinator = createRuntimeWorkerCoordinator(paths, projectRoot, adbPath, registry);
   const uidService = new UidService(database);
   const actionRepository = new RunActionRepository(database);
   const actionOutbox = new ActionOutbox(database);
@@ -109,6 +121,7 @@ export async function createRuntimeDeviceRegistry(
     createConfiguredPreflightProbe(),
     actionRepository,
     createConfiguredActionDispatcher(actionRepository, actionOutbox, registry),
+    workerCoordinator,
   );
   const deploymentService = new RuntimeDeploymentRouteService(
     database,
@@ -123,8 +136,80 @@ export async function createRuntimeDeviceRegistry(
     deploymentService,
     uidService,
     sessionService,
-    close: () => database.close(),
+    workerCoordinator,
+    close: async () => {
+      await workerCoordinator.stopAll().catch(() => undefined);
+      database.close();
+    },
   };
+}
+
+function createRuntimeWorkerCoordinator(
+  paths: ReturnType<typeof createRuntimePaths>,
+  projectRoot: string,
+  adbPath: string,
+  registry: DeviceRegistry,
+): RuntimeWorkerCoordinator {
+  const ownerPid = process.pid;
+  const allocator = new PortAllocator({
+    store: new JsonFilePortLeaseStore(join(paths.dataRoot, "port-leases.json")),
+    ranges: {
+      appium: { start: 4723, end: 4730 },
+      system: { start: 8200, end: 8207 },
+      mjpeg: { start: 7810, end: 7817 },
+    },
+  });
+  const resources = new WorkerResourceManager({
+    allocator,
+    bridgeRange: { start: 17501, end: 17508 },
+    rootPath: paths.runsRoot,
+    ownerPid,
+  });
+  // Spawn Node directly on Windows. The .cmd shim cannot be launched with
+  // shell:false, which is required by AppiumService for predictable process
+  // ownership and cleanup. Environment overrides keep portable toolchains
+  // possible while the default uses the Node runtime executing this server.
+  const appiumExecutable = process.env.TEST_CENTER_APPIUM_NODE ?? process.execPath;
+  const appiumEntry =
+    process.env.TEST_CENTER_APPIUM_ENTRY ??
+    win32.join(projectRoot, "node_modules", "appium", "build", "lib", "main.js");
+  const appiumHome =
+    process.env.TEST_CENTER_APPIUM_HOME ?? win32.join(paths.dataRoot, "appium-home");
+  return new RuntimeWorkerCoordinator(({ runId, serial, packageName }) => {
+    const workerOwner = { ownerPid, ownerToken: `server-${String(ownerPid)}` };
+    return new DeviceWorker({
+      serial,
+      packageName,
+      owner: workerOwner,
+      runId,
+      resourceManager: resources,
+      allocator,
+      identityProbe: async () => {
+        const device = registry.get(serial);
+        if (device === undefined || device.state !== "ONLINE")
+          throw new Error(`Device must be online: ${serial}.`);
+        return { serial, packageName };
+      },
+      clientFactory: ({ serial: clientSerial, generation, baseUrl }) =>
+        new AppiumW3cClient({ baseUrl, serial: clientSerial, generation }),
+      appiumServiceFactory: ({ port, logPath }) =>
+        new AppiumService({
+          executablePath: appiumExecutable,
+          executableArgs: [appiumEntry],
+          appiumHome,
+          port,
+          logPath: win32.join(logPath, "appium.log"),
+          cwd: projectRoot,
+        }),
+      logcatFactory: ({ serial: logSerial, resourceLease }) =>
+        new LogcatStream({
+          serial: logSerial,
+          adbPath,
+          cwd: projectRoot,
+          runDirectory: resourceLease?.paths.logs ?? paths.logsRoot,
+        }),
+    });
+  });
 }
 
 function createConfiguredPreflightProbe(): AppiumPreflightProbe | undefined {

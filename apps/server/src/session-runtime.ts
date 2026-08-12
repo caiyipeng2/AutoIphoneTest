@@ -5,6 +5,7 @@ import type { DeviceRegistry } from "@test-center/devices";
 import { parseAndroidPackageName } from "@test-center/contracts/artifact";
 import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/device";
 import { RunActionRepository, type ActionDispatcher } from "@test-center/sessions";
+import type { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
 
 import type {
   SessionCreateInput,
@@ -43,6 +44,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     private readonly preflightProbe?: SessionPreflightProbe,
     private readonly actionRepository = new RunActionRepository(database),
     private readonly actionDispatcher?: Pick<ActionDispatcher, "dispatch">,
+    private readonly workerCoordinator?: Pick<RuntimeWorkerCoordinator, "start" | "stop">,
   ) {}
 
   public async create(
@@ -121,7 +123,22 @@ export class RuntimeSessionRouteService implements SessionRouteService {
   }
 
   public async start(id: string): Promise<SessionView> {
-    return await this.transition(id, "PREFLIGHT", "RUNNING", "SESSION_STARTED");
+    const current = this.get(id);
+    if (current === undefined) throw new Error("Session not found.");
+    if (current.state !== "PREFLIGHT") throw new Error("Session state must be PREFLIGHT.");
+    if (this.workerCoordinator !== undefined) {
+      await this.workerCoordinator.start(
+        current.id,
+        current.devices.map((device) => device.serial),
+        current.packageName,
+      );
+    }
+    try {
+      return await this.transition(id, "PREFLIGHT", "RUNNING", "SESSION_STARTED");
+    } catch (error) {
+      await this.workerCoordinator?.stop(id).catch(() => undefined);
+      throw error;
+    }
   }
 
   public async submitAction(

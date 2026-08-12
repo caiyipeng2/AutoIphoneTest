@@ -32,6 +32,7 @@ export interface DeviceWorkerLogcatFactoryInput {
   readonly serial: string;
   readonly generation: number;
   readonly lease: PortLease;
+  readonly resourceLease?: WorkerResourceLease;
 }
 
 export interface AppiumServiceLike {
@@ -185,7 +186,12 @@ export class DeviceWorker {
         baseUrl: this.appiumBaseUrl(lease),
       });
       fence = await client.createSession(this.createCapabilities(lease));
-      logcat = this.logcatFactory({ serial: this.serial, generation: this._generation, lease });
+      logcat = this.logcatFactory({
+        serial: this.serial,
+        generation: this._generation,
+        lease,
+        ...(resourceLease === undefined ? {} : { resourceLease }),
+      });
       await logcat.start();
       logcatStarted = true;
       this.lease = lease;
@@ -201,7 +207,7 @@ export class DeviceWorker {
       if (logcatStarted) await logcat?.stop().catch(() => undefined);
       if (appiumStarted) await appium?.stop().catch(() => undefined);
       if (resourceLease !== undefined)
-        await this.resourceManager!.release(resourceLease, this.owner.ownerToken).catch(
+        await this.resourceManager!.release(resourceLease, resourceLease.ownerToken).catch(
           () => undefined,
         );
       else if (lease !== undefined)
@@ -245,7 +251,7 @@ export class DeviceWorker {
     }
     try {
       if (resourceLease !== undefined)
-        await this.resourceManager!.release(resourceLease, this.owner.ownerToken);
+        await this.resourceManager!.release(resourceLease, resourceLease.ownerToken);
       else if (lease !== undefined) await this.allocator!.release(lease.leaseId, this.owner);
     } catch (error) {
       firstError ??= error;

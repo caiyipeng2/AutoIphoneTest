@@ -156,7 +156,7 @@ describe("DeviceWorker", () => {
 
     expect(client.createSession).not.toHaveBeenCalled();
     expect(appium.stop).not.toHaveBeenCalled();
-    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, "run-a");
+    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, resourceLease.ownerToken);
     expect(worker.state).toBe("ERROR");
   });
 
@@ -169,7 +169,7 @@ describe("DeviceWorker", () => {
     expect(client.deleteSession).toHaveBeenCalledTimes(1);
     expect(logcat.stop).toHaveBeenCalledTimes(1);
     expect(appium.stop).toHaveBeenCalledTimes(1);
-    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, "run-a");
+    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, resourceLease.ownerToken);
     expect(worker.state).toBe("STOPPED");
   });
 
@@ -180,7 +180,7 @@ describe("DeviceWorker", () => {
     await worker.start();
     await expect(worker.stop()).rejects.toMatchObject({ code: "STOP_FAILED" });
 
-    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, "run-a");
+    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, resourceLease.ownerToken);
     expect(worker.state).toBe("ERROR");
     expect(worker.generation).toBe(2);
   });

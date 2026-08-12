@@ -28,7 +28,7 @@ const app = await createApp(
 );
 app.addHook("onClose", async () => {
   runtimeDevices.registry.stop();
-  runtimeDevices.close();
+  await runtimeDevices.close();
 });
 await app.listen({ host: "127.0.0.1", port });
 void runtimeDevices.registry.start();

@@ -202,6 +202,78 @@ describe("RuntimeSessionRouteService", () => {
         .get(created.session.id),
     ).toEqual({ count: 2 });
   });
+
+  it("starts managed workers before committing RUNNING", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const coordinator = {
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      undefined,
+      undefined,
+      coordinator,
+    );
+    const created = await service.create({
+      clientRequestId: "request-worker-start",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    const started = await service.start(created.session.id);
+    expect(started.state).toBe("RUNNING");
+    expect(coordinator.start).toHaveBeenCalledWith(
+      created.session.id,
+      [serial],
+      "com.example.game",
+    );
+  });
+
+  it("keeps PREFLIGHT when managed worker startup fails", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const coordinator = {
+      start: vi.fn(async () => {
+        throw new Error("worker start failed");
+      }),
+      stop: vi.fn(async () => undefined),
+    };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      undefined,
+      undefined,
+      coordinator,
+    );
+    const created = await service.create({
+      clientRequestId: "request-worker-fail",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await expect(service.start(created.session.id)).rejects.toThrow("worker start failed");
+    expect(service.get(created.session.id)?.state).toBe("PREFLIGHT");
+    expect(coordinator.stop).not.toHaveBeenCalled();
+  });
 });
 
 async function createDatabase(): Promise<Database.Database> {
