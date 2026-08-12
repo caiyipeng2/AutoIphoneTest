@@ -4,9 +4,11 @@ import type { AppiumW3cClient, PortLease, SessionFence } from "@test-center/appi
 import type { LogcatStream } from "@test-center/adb";
 import {
   DeviceWorker,
+  type AppiumServiceLike,
   type DeviceWorkerIdentity,
   type DeviceWorkerState,
 } from "./device-worker.js";
+import type { WorkerResourceLease } from "./worker-resource-manager.js";
 
 const lease: PortLease = {
   leaseId: "lease-a",
@@ -19,12 +21,27 @@ const lease: PortLease = {
   createdAt: 1,
 };
 
+const resourceLease: WorkerResourceLease = {
+  leaseId: "worker-lease-a",
+  identity: { runId: "run-a", serial: "serial-a", generation: 1 },
+  ownerToken: "run-a",
+  ports: { appium: 4727, system: 8207, mjpeg: 7817, bridge: 17507 },
+  paths: {
+    logs: "E:/runs/run-a/serial-a/generation-1/logs",
+    preview: "E:/runs/run-a/serial-a/generation-1/preview",
+    evidence: "E:/runs/run-a/serial-a/generation-1/evidence",
+  },
+  appiumLeaseId: "lease-a",
+};
+
 function createHarness() {
   const fence: SessionFence = { sessionId: "session-a", serial: "serial-a", generation: 1 };
   const client = {
     createSession: vi.fn(async () => fence),
     deleteSession: vi.fn(async () => undefined),
-  } as unknown as AppiumW3cClient;
+  } as unknown as AppiumW3cClient & {
+    createSession: ReturnType<typeof vi.fn>;
+  };
   const logcat = {
     start: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
@@ -46,7 +63,142 @@ function createHarness() {
   return { worker, client, logcat, allocator, identity };
 }
 
+function createManagedHarness() {
+  const fence: SessionFence = { sessionId: "session-a", serial: "serial-a", generation: 1 };
+  const client = {
+    createSession: vi.fn(async () => fence),
+    deleteSession: vi.fn(async () => undefined),
+  } as unknown as AppiumW3cClient & {
+    createSession: ReturnType<typeof vi.fn>;
+  };
+  const logcat = {
+    start: vi.fn(async () => undefined),
+    stop: vi.fn(async () => undefined),
+  } as unknown as LogcatStream;
+  const appium = {
+    start: vi.fn(async () => ({ pid: 501 })),
+    stop: vi.fn(async () => undefined),
+  } satisfies AppiumServiceLike;
+  const appiumServiceFactory = vi.fn(() => appium);
+  const resourceManager = {
+    allocate: vi.fn(async (identity: WorkerResourceLease["identity"]) => ({
+      ...resourceLease,
+      identity,
+      paths: {
+        ...resourceLease.paths,
+        logs: resourceLease.paths.logs.replace(
+          /generation-\d+/,
+          `generation-${identity.generation}`,
+        ),
+      },
+    })),
+    release: vi.fn(async () => undefined),
+  };
+  const identity: DeviceWorkerIdentity = { serial: "serial-a", packageName: "com.example.game" };
+  const worker = new DeviceWorker({
+    serial: "serial-a",
+    packageName: "com.example.game",
+    owner: { ownerPid: 100, ownerToken: "run-a" },
+    runId: "run-a",
+    resourceManager,
+    appiumServiceFactory,
+    identityProbe: vi.fn(async () => identity),
+    clientFactory: vi.fn(() => client),
+    logcatFactory: vi.fn(() => logcat),
+  });
+  return { worker, client, logcat, appium, appiumServiceFactory, resourceManager, identity };
+}
+
 describe("DeviceWorker", () => {
+  it("starts managed Appium from the resource lease before creating the session", async () => {
+    const { worker, client, logcat, appium, appiumServiceFactory, resourceManager } =
+      createManagedHarness();
+
+    await worker.start();
+
+    expect(worker.state).toBe("READY");
+    expect(resourceManager.allocate).toHaveBeenCalledWith({
+      runId: "run-a",
+      serial: "serial-a",
+      generation: 1,
+    });
+    expect(appium.start).toHaveBeenCalledTimes(1);
+    expect(appiumServiceFactory).toHaveBeenCalledWith({
+      serial: "serial-a",
+      generation: 1,
+      port: 4727,
+      logPath: resourceLease.paths.logs,
+      resourceLease,
+    });
+    expect(client.createSession).toHaveBeenCalledWith({
+      platformName: "Android",
+      automationName: "UiAutomator2",
+      udid: "serial-a",
+      systemPort: 8207,
+      mjpegServerPort: 7817,
+      noReset: true,
+      newCommandTimeout: 60,
+    });
+    expect(logcat.start).toHaveBeenCalledTimes(1);
+    expect(resourceManager.allocate.mock.invocationCallOrder[0]).toBeLessThan(
+      appium.start.mock.invocationCallOrder[0]!,
+    );
+    expect(appium.start.mock.invocationCallOrder[0]).toBeLessThan(
+      client.createSession.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("releases the managed lease when Appium startup fails", async () => {
+    const { worker, client, appium, resourceManager } = createManagedHarness();
+    appium.start.mockRejectedValueOnce(new Error("appium unavailable"));
+
+    await expect(worker.start()).rejects.toThrow("appium unavailable");
+
+    expect(client.createSession).not.toHaveBeenCalled();
+    expect(appium.stop).not.toHaveBeenCalled();
+    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, "run-a");
+    expect(worker.state).toBe("ERROR");
+  });
+
+  it("stops managed resources after the session and logcat", async () => {
+    const { worker, client, logcat, appium, resourceManager } = createManagedHarness();
+
+    await worker.start();
+    await worker.stop();
+
+    expect(client.deleteSession).toHaveBeenCalledTimes(1);
+    expect(logcat.stop).toHaveBeenCalledTimes(1);
+    expect(appium.stop).toHaveBeenCalledTimes(1);
+    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, "run-a");
+    expect(worker.state).toBe("STOPPED");
+  });
+
+  it("releases the managed lease when Appium stop fails", async () => {
+    const { worker, appium, resourceManager } = createManagedHarness();
+    appium.stop.mockRejectedValueOnce(new Error("appium stop failed"));
+
+    await worker.start();
+    await expect(worker.stop()).rejects.toMatchObject({ code: "STOP_FAILED" });
+
+    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, "run-a");
+    expect(worker.state).toBe("ERROR");
+    expect(worker.generation).toBe(2);
+  });
+
+  it("requests the next resource generation after a managed restart", async () => {
+    const { worker, resourceManager } = createManagedHarness();
+
+    await worker.start();
+    await worker.stop();
+    await worker.start();
+
+    expect(resourceManager.allocate).toHaveBeenNthCalledWith(2, {
+      runId: "run-a",
+      serial: "serial-a",
+      generation: 2,
+    });
+  });
+
   it("checks identity, allocates ports, starts Appium and logcat, then becomes READY", async () => {
     const { worker, client, logcat, allocator } = createHarness();
     const states: DeviceWorkerState[] = [];

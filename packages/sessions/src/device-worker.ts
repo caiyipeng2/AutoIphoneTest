@@ -6,6 +6,7 @@ import type {
   SessionFence,
 } from "@test-center/appium";
 import type { LogcatStream } from "@test-center/adb";
+import type { WorkerResourceLease, WorkerResourceManager } from "./worker-resource-manager.js";
 
 export type DeviceWorkerState =
   "DISCONNECTED" | "STARTING" | "READY" | "STOPPING" | "STOPPED" | "ERROR";
@@ -33,14 +34,32 @@ export interface DeviceWorkerLogcatFactoryInput {
   readonly lease: PortLease;
 }
 
+export interface AppiumServiceLike {
+  start(): Promise<{ readonly pid: number }>;
+  stop(): Promise<void>;
+}
+
+export interface DeviceWorkerAppiumServiceFactoryInput {
+  readonly serial: string;
+  readonly generation: number;
+  readonly port: number;
+  readonly logPath: string;
+  readonly resourceLease: WorkerResourceLease;
+}
+
 export interface DeviceWorkerOptions {
   readonly serial: string;
   readonly packageName: string;
   readonly owner: DeviceWorkerOwner;
-  readonly allocator: Pick<PortAllocator, "allocate" | "release">;
+  readonly allocator?: Pick<PortAllocator, "allocate" | "release">;
   readonly identityProbe: () => Promise<DeviceWorkerIdentity>;
   readonly clientFactory: (input: DeviceWorkerClientFactoryInput) => AppiumW3cClient;
   readonly logcatFactory: (input: DeviceWorkerLogcatFactoryInput) => LogcatStream;
+  readonly runId?: string;
+  readonly resourceManager?: Pick<WorkerResourceManager, "allocate" | "release">;
+  readonly appiumServiceFactory?: (
+    input: DeviceWorkerAppiumServiceFactoryInput,
+  ) => AppiumServiceLike;
   readonly appiumBaseUrl?: (lease: PortLease) => string;
 }
 
@@ -66,6 +85,9 @@ export class DeviceWorker {
   private readonly identityProbe: DeviceWorkerOptions["identityProbe"];
   private readonly clientFactory: DeviceWorkerOptions["clientFactory"];
   private readonly logcatFactory: DeviceWorkerOptions["logcatFactory"];
+  private readonly runId: string | undefined;
+  private readonly resourceManager: DeviceWorkerOptions["resourceManager"];
+  private readonly appiumServiceFactory: DeviceWorkerOptions["appiumServiceFactory"];
   private readonly appiumBaseUrl: (lease: PortLease) => string;
   private readonly stateListeners = new Set<(state: DeviceWorkerState) => void>();
   private _state: DeviceWorkerState = "DISCONNECTED";
@@ -74,6 +96,8 @@ export class DeviceWorker {
   private client: AppiumW3cClient | undefined;
   private fence: SessionFence | undefined;
   private logcat: LogcatStream | undefined;
+  private appium: AppiumServiceLike | undefined;
+  private resourceLease: WorkerResourceLease | undefined;
 
   public constructor(options: DeviceWorkerOptions) {
     if (!options.serial.trim() || !options.packageName.trim())
@@ -85,6 +109,15 @@ export class DeviceWorker {
     this.identityProbe = options.identityProbe;
     this.clientFactory = options.clientFactory;
     this.logcatFactory = options.logcatFactory;
+    if ((options.runId === undefined) !== (options.resourceManager === undefined))
+      throw new TypeError("runId and resourceManager must be configured together.");
+    if ((options.runId !== undefined) !== (options.appiumServiceFactory !== undefined))
+      throw new TypeError("Managed workers require an Appium service factory.");
+    if (options.runId === undefined && options.allocator === undefined)
+      throw new TypeError("Legacy workers require a port allocator.");
+    this.runId = options.runId;
+    this.resourceManager = options.resourceManager;
+    this.appiumServiceFactory = options.appiumServiceFactory;
     this.appiumBaseUrl =
       options.appiumBaseUrl ?? ((lease) => `http://127.0.0.1:${String(lease.appiumPort)}`);
   }
@@ -111,6 +144,9 @@ export class DeviceWorker {
     }
     this.setState("STARTING");
     let lease: PortLease | undefined;
+    let resourceLease: WorkerResourceLease | undefined;
+    let appium: AppiumServiceLike | undefined;
+    let appiumStarted = false;
     let client: AppiumW3cClient | undefined;
     let fence: SessionFence | undefined;
     let logcat: LogcatStream | undefined;
@@ -123,7 +159,25 @@ export class DeviceWorker {
           `Device identity mismatch for ${this.serial}.`,
         );
       }
-      lease = await this.allocator.allocate(this.serial, this.owner);
+      if (this.isManaged()) {
+        resourceLease = await this.resourceManager!.allocate({
+          runId: this.runId!,
+          serial: this.serial,
+          generation: this._generation,
+        });
+        lease = toPortLease(resourceLease, this.owner);
+        appium = this.appiumServiceFactory!({
+          serial: this.serial,
+          generation: this._generation,
+          port: resourceLease.ports.appium,
+          logPath: resourceLease.paths.logs,
+          resourceLease,
+        });
+        await appium.start();
+        appiumStarted = true;
+      } else {
+        lease = await this.allocator!.allocate(this.serial, this.owner);
+      }
       client = this.clientFactory({
         serial: this.serial,
         generation: this._generation,
@@ -138,13 +192,20 @@ export class DeviceWorker {
       this.client = client;
       this.fence = fence;
       this.logcat = logcat;
+      this.appium = appium;
+      this.resourceLease = resourceLease;
       this.setState("READY");
     } catch (error) {
-      if (logcatStarted) await logcat?.stop().catch(() => undefined);
       if (fence !== undefined && client !== undefined)
         await client.deleteSession(fence).catch(() => undefined);
-      if (lease !== undefined)
-        await this.allocator.release(lease.leaseId, this.owner).catch(() => undefined);
+      if (logcatStarted) await logcat?.stop().catch(() => undefined);
+      if (appiumStarted) await appium?.stop().catch(() => undefined);
+      if (resourceLease !== undefined)
+        await this.resourceManager!.release(resourceLease, this.owner.ownerToken).catch(
+          () => undefined,
+        );
+      else if (lease !== undefined)
+        await this.allocator!.release(lease.leaseId, this.owner).catch(() => undefined);
       this.setState("ERROR");
       if (error instanceof DeviceWorkerError) throw error;
       throw new DeviceWorkerError(
@@ -164,6 +225,8 @@ export class DeviceWorker {
     const client = this.client;
     const fence = this.fence;
     const lease = this.lease;
+    const appium = this.appium;
+    const resourceLease = this.resourceLease;
     let firstError: unknown;
     try {
       await logcat?.stop();
@@ -176,7 +239,14 @@ export class DeviceWorker {
       firstError ??= error;
     }
     try {
-      if (lease !== undefined) await this.allocator.release(lease.leaseId, this.owner);
+      if (appium !== undefined) await appium.stop();
+    } catch (error) {
+      firstError ??= error;
+    }
+    try {
+      if (resourceLease !== undefined)
+        await this.resourceManager!.release(resourceLease, this.owner.ownerToken);
+      else if (lease !== undefined) await this.allocator!.release(lease.leaseId, this.owner);
     } catch (error) {
       firstError ??= error;
     }
@@ -184,6 +254,8 @@ export class DeviceWorker {
     this.client = undefined;
     this.fence = undefined;
     this.lease = undefined;
+    this.appium = undefined;
+    this.resourceLease = undefined;
     this._generation += 1;
     this.setState(firstError === undefined ? "STOPPED" : "ERROR");
     if (firstError !== undefined)
@@ -208,4 +280,21 @@ export class DeviceWorker {
     this._state = state;
     for (const listener of this.stateListeners) listener(state);
   }
+
+  private isManaged(): boolean {
+    return this.runId !== undefined;
+  }
+}
+
+function toPortLease(resourceLease: WorkerResourceLease, owner: DeviceWorkerOwner): PortLease {
+  return {
+    leaseId: resourceLease.appiumLeaseId,
+    serial: resourceLease.identity.serial,
+    appiumPort: resourceLease.ports.appium,
+    systemPort: resourceLease.ports.system,
+    mjpegPort: resourceLease.ports.mjpeg,
+    ownerPid: owner.ownerPid,
+    ownerToken: owner.ownerToken,
+    createdAt: Date.now(),
+  };
 }
