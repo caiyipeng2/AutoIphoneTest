@@ -5,6 +5,7 @@ import { actionCompletionPolicy } from "./action-command.js";
 import type { ActionBarrierFactory } from "./action-barrier.js";
 import type { ActionPayload, ActionView, RunActionRepository } from "./run-repository.js";
 import type { ActionOutbox } from "./action-outbox.js";
+import type { TextFocusBarrier, TextFocusVerificationInput } from "./text-focus-barrier.js";
 
 export interface ActionDeviceExecutor {
   execute(input: {
@@ -29,6 +30,7 @@ export class ActionDispatcher {
     private readonly executorFactory: ActionDeviceExecutorFactory,
     private readonly ownerToken = `dispatcher-${randomUUID()}`,
     private readonly barrierFactory?: ActionBarrierFactory,
+    private readonly textFocusBarrier?: Pick<TextFocusBarrier, "verify">,
   ) {}
 
   public async dispatch(input: ActionDispatchInput): Promise<ActionView> {
@@ -39,6 +41,35 @@ export class ActionDispatcher {
     const lease = this.outbox.leaseAction(input.actionId, this.ownerToken);
     if (lease === undefined) throw new Error("Action is not available for dispatch.");
     this.outbox.markDispatching(input.actionId, lease.leaseToken);
+
+    const command = queued.command;
+    if (command?.type === "text" && this.textFocusBarrier !== undefined) {
+      const verification: TextFocusVerificationInput = {
+        serials: queued.targets.map((target) => target.serial),
+        metricsEpoch: queued.sourceMetricsEpoch,
+        runId: queued.runId,
+      };
+      try {
+        await this.textFocusBarrier.verify(verification);
+      } catch (error) {
+        await Promise.all(
+          queued.targets.map(async (target) =>
+            this.outbox.completeTarget(
+              input.actionId,
+              lease.leaseToken,
+              target.serial,
+              "FAILED",
+              JSON.stringify({ ok: false, error: serializeError(error) }),
+            ),
+          ),
+        );
+        const rejected = this.repository.get(input.actionId);
+        if (rejected === undefined) {
+          throw new Error("Rejected action could not be read back.", { cause: error });
+        }
+        return rejected;
+      }
+    }
 
     await Promise.all(
       queued.targets.map(async (target) => {

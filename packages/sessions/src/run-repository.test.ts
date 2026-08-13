@@ -381,6 +381,31 @@ describe("ActionOutbox", () => {
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
+  it("does not call any executor when trusted text focus fails", async () => {
+    const { repository, outbox } = createHarness();
+    const created = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-dispatch-text-focus",
+      type: "text",
+      command: { type: "text", text: "金币" },
+      sourceMetricsEpoch: 4,
+    });
+    const execute = vi.fn(async () => ({ accepted: true }));
+    const dispatcher = new ActionDispatcher(
+      repository,
+      outbox,
+      () => ({ execute }),
+      "worker-text-focus",
+      undefined,
+      { verify: vi.fn(async () => { throw new Error("TEXT_FOCUS_MISMATCH"); }) },
+    );
+
+    const result = await dispatcher.dispatch({ actionId: created.action.id, packageName: "com.example.game" });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ state: "FAILED", targets: [{ serial: "leader-a", state: "FAILED" }] });
+  });
+
   it("dispatches all active targets concurrently", async () => {
     const { repository, outbox, database } = createHarness();
     database

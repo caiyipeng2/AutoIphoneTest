@@ -83,6 +83,22 @@
 
 当前边界：生产游戏包是否包含 Unity QA Bridge 组件仍需用带 `UNITY_MULTI_DEVICE_QA` 的验收包确认；当前 `normalizedShape` 使用会话动作规范，需与游戏侧 `QaActionDescriptor` 约定一致后才能得到真实 QA_ACK。现有 `com.hg.idleweaponshoptycoon.android` 包未完成该 bridge 闭环验收。
 
+## M9 Task 6：同步文本可信焦点 barrier
+
+- 文本动作在 dispatcher 进入 Appium 前，要求所有目标设备两次采样均存在非空可信焦点。
+- 两次采样必须保持各设备自己的 bridge instance、view、focused control 和 metrics epoch；不同设备允许拥有不同 bridge instance，但单设备重连/漂移会被拒绝。
+- barrier 失败时整组目标均记录 `FAILED`，不发送 ARM、不调用 Appium，也不自动重试。
+- runtime coordinator 从 READY worker 暴露 state snapshot，dispatcher 按真实 `runId + serial` 查询，避免使用占位 session 或跨运行数据。
+
+| 检查 | 结果 |
+| --- | --- |
+| 文本焦点 barrier、失败矩阵、dispatcher 不发送动作 | 21 个 focused 测试通过 |
+| 全量自动化测试 | 78 个文件、329 个测试通过 |
+| TypeScript project build | 通过 |
+| 本切片文件级 ESLint、Prettier、diff check | 通过 |
+
+当前边界：文本明文默认脱敏、故障 incident/policy、控制台动作/故障 UI 和 M10 默认 HTML/ZIP 报告仍未实现；生产游戏包也仍需启用 Unity QA Bridge 后才能进行真实文本 QA_ACK 验收。
+
 ## 当前边界
 
 本 Task 1 切片未接入 bridge arm/ACK、失败策略或控制台 UI。命令持久化与 dispatcher 传递已在下方 Task 2 切片完成；真实 bridge ACK 和故障策略仍按 M9 计划逐步扩展。

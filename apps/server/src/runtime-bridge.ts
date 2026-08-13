@@ -9,7 +9,12 @@ import {
   hashBridgeDescriptor,
 } from "@test-center/bridge";
 import type { BridgeHash } from "@test-center/contracts/bridge";
-import { actionDescriptor, type ActionBarrier, type ActionCommand } from "@test-center/sessions";
+import {
+  actionDescriptor,
+  type ActionBarrier,
+  type ActionCommand,
+  type TextFocusSnapshot,
+} from "@test-center/sessions";
 
 export interface RuntimeBridgeSessionOptions {
   readonly hostPort: number;
@@ -24,6 +29,7 @@ export interface RuntimeBridgeSession {
   readonly actionBarrier: ActionBarrier;
   connect(): Promise<void>;
   close(): Promise<void>;
+  getTextFocusSnapshot(): TextFocusSnapshot | undefined;
 }
 
 export function createRuntimeBridgeSession(
@@ -87,6 +93,20 @@ export function createRuntimeBridgeSession(
     close: async () => {
       controller.dispose();
       await client.close();
+    },
+    getTextFocusSnapshot: () => {
+      const snapshot = client.getSnapshot();
+      const state = snapshot.state;
+      if (snapshot.status !== "ready" || state === undefined || snapshot.hello === undefined) {
+        return undefined;
+      }
+      return {
+        serial: "runtime",
+        bridgeInstanceId: snapshot.hello.bridgeInstanceId,
+        view: state.view,
+        focusedControlId: state.focusedControlId ?? null,
+        metricsEpoch: state.metricsEpoch,
+      };
     },
   };
 }

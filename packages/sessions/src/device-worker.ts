@@ -8,6 +8,7 @@ import type {
 import type { LogcatStream } from "@test-center/adb";
 import type { WorkerResourceLease, WorkerResourceManager } from "./worker-resource-manager.js";
 import type { ActionBarrier } from "./action-barrier.js";
+import type { TextFocusSnapshot } from "./text-focus-barrier.js";
 
 export type DeviceWorkerState =
   "DISCONNECTED" | "STARTING" | "READY" | "STOPPING" | "STOPPED" | "ERROR";
@@ -45,6 +46,7 @@ export interface DeviceWorkerBridgeSession {
   connect(): Promise<void>;
   close(): Promise<void>;
   readonly actionBarrier: ActionBarrier;
+  getTextFocusSnapshot?(): TextFocusSnapshot | undefined;
 }
 
 export interface DeviceWorkerBridgeSessionFactoryInput {
@@ -363,6 +365,11 @@ export class DeviceWorker {
   public getActionBarrier(): ActionBarrier | undefined {
     if (this._state !== "READY") return undefined;
     return this.bridgeSession?.actionBarrier;
+  }
+
+  public getTextFocusSnapshot(): TextFocusSnapshot | undefined {
+    if (this._state !== "READY") return undefined;
+    return this.bridgeSession?.getTextFocusSnapshot?.();
   }
 
   private createCapabilities(lease: PortLease): DeviceSessionCapabilities {

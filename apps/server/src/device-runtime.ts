@@ -50,6 +50,7 @@ import {
   AppiumActionExecutor,
   AppiumPreflightProbe,
   RunActionRepository,
+  TextFocusBarrier,
 } from "@test-center/sessions";
 import { DeviceWorker } from "@test-center/sessions";
 import {
@@ -261,7 +262,7 @@ function createConfiguredActionDispatcher(
   actionRepository: RunActionRepository,
   actionOutbox: ActionOutbox,
   registry: DeviceRegistry,
-  workerCoordinator: Pick<RuntimeWorkerCoordinator, "getActionBarrier">,
+  workerCoordinator: Pick<RuntimeWorkerCoordinator, "getActionBarrier" | "getTextFocusSnapshot">,
 ): ActionDispatcher | undefined {
   const baseUrl = process.env.TEST_CENTER_APPIUM_URL;
   if (baseUrl === undefined || baseUrl.trim() === "") return undefined;
@@ -297,6 +298,14 @@ function createConfiguredActionDispatcher(
       if (barrier === undefined) throw new Error(`Worker bridge is not ready: ${serial}.`);
       return barrier;
     },
+    new TextFocusBarrier({
+      sample: async (serial, runId) => {
+        if (runId === undefined) throw new Error("Text action run id is required.");
+        const snapshot = workerCoordinator.getTextFocusSnapshot(runId, parseDeviceSerial(serial));
+        if (snapshot === undefined) throw new Error(`Worker bridge state is not ready: ${serial}.`);
+        return snapshot;
+      },
+    }),
   );
 }
 

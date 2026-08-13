@@ -18,6 +18,7 @@ function createFactory(
       start: ReturnType<typeof vi.fn>;
       stop: ReturnType<typeof vi.fn>;
       getActionBarrier: ReturnType<typeof vi.fn>;
+      getTextFocusSnapshot: ReturnType<typeof vi.fn>;
     }
   >();
   const factory: RuntimeWorkerFactory = (input) => {
@@ -27,6 +28,7 @@ function createFactory(
       }),
       stop: vi.fn(async () => undefined),
       getActionBarrier: vi.fn(() => ({ arm: vi.fn() })),
+      getTextFocusSnapshot: vi.fn(() => undefined),
     };
     workers.set(input.serial, worker);
     return worker;
@@ -47,6 +49,7 @@ describe("RuntimeWorkerCoordinator", () => {
     expect(coordinator.getActionBarrier("run-1", serials[0]!)).toMatchObject({
       arm: expect.any(Function),
     });
+    expect(coordinator.getTextFocusSnapshot("run-1", serials[0]!)).toBeUndefined();
 
     await coordinator.stop("run-1");
     expect([...workers.values()].every((worker) => worker.stop.mock.calls.length === 1)).toBe(true);

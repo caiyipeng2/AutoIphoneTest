@@ -1,7 +1,7 @@
 import type { DeviceSerial } from "@test-center/contracts/device";
 
 import type { DeviceWorker } from "@test-center/sessions";
-import type { ActionBarrier } from "@test-center/sessions";
+import type { ActionBarrier, TextFocusSnapshot } from "@test-center/sessions";
 
 export interface RuntimeWorkerFactoryInput {
   readonly runId: string;
@@ -12,7 +12,8 @@ export interface RuntimeWorkerFactoryInput {
 
 export type RuntimeWorkerFactory = (
   input: RuntimeWorkerFactoryInput,
-) => Pick<DeviceWorker, "start" | "stop"> & Partial<Pick<DeviceWorker, "getActionBarrier">>;
+) => Pick<DeviceWorker, "start" | "stop"> &
+  Partial<Pick<DeviceWorker, "getActionBarrier" | "getTextFocusSnapshot">>;
 
 export class RuntimeWorkerCoordinator {
   private readonly runs = new Map<string, Map<DeviceSerial, RuntimeWorkerFactoryReturn>>();
@@ -67,6 +68,11 @@ export class RuntimeWorkerCoordinator {
     return this.runs.get(runId)?.get(serial)?.getActionBarrier?.();
   }
 
+  public getTextFocusSnapshot(runId: string, serial: DeviceSerial): TextFocusSnapshot | undefined {
+    const snapshot = this.runs.get(runId)?.get(serial)?.getTextFocusSnapshot?.();
+    return snapshot === undefined ? undefined : { ...snapshot, serial };
+  }
+
   private async stopWorkers(workers: Map<DeviceSerial, RuntimeWorkerFactoryReturn>): Promise<void> {
     const results = await Promise.allSettled([...workers.values()].map((worker) => worker.stop()));
     const failure = results.find(
@@ -77,4 +83,4 @@ export class RuntimeWorkerCoordinator {
 }
 
 type RuntimeWorkerFactoryReturn = Pick<DeviceWorker, "start" | "stop"> &
-  Partial<Pick<DeviceWorker, "getActionBarrier">>;
+  Partial<Pick<DeviceWorker, "getActionBarrier" | "getTextFocusSnapshot">>;

@@ -7,3 +7,4 @@ export * from "./appium-action.js";
 export * from "./worker-resource-manager.js";
 export * from "./action-command.js";
 export * from "./action-barrier.js";
+export * from "./text-focus-barrier.js";
