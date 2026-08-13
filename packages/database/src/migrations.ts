@@ -379,6 +379,50 @@ export const ACTION_COMMANDS_MIGRATION: Migration = {
   sql: `ALTER TABLE actions ADD COLUMN command_json TEXT;`.trim(),
 };
 
+export const INCIDENTS_MIGRATION: Migration = {
+  id: "0011_incidents_recovery",
+  sql: `
+CREATE TABLE IF NOT EXISTS incidents (
+  incident_id TEXT PRIMARY KEY NOT NULL,
+  run_id TEXT NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+  serial TEXT REFERENCES devices(serial),
+  schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+  category TEXT NOT NULL CHECK (category IN (
+    'ADB_DISCONNECTED', 'APPIUM_SESSION_LOST', 'APP_CRASH_OR_ANR', 'WRONG_FOREGROUND',
+    'BRIDGE_TIMEOUT', 'BRIDGE_STATE_MISMATCH', 'TEXT_FOCUS_MISMATCH', 'METRICS_CHANGED', 'LOW_DISK'
+  )),
+  generation INTEGER CHECK (generation IS NULL OR generation > 0),
+  detected_at_realtime_ms REAL NOT NULL CHECK (detected_at_realtime_ms >= 0),
+  detected_at TEXT NOT NULL,
+  source TEXT NOT NULL,
+  evidence_ref TEXT,
+  details_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_incidents_run_detected
+  ON incidents(run_id, detected_at_realtime_ms, incident_id);
+
+CREATE TABLE IF NOT EXISTS recovery_attempts (
+  id TEXT PRIMARY KEY NOT NULL,
+  incident_id TEXT NOT NULL REFERENCES incidents(incident_id) ON DELETE CASCADE,
+  run_id TEXT NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+  action TEXT NOT NULL CHECK (action IN ('PAUSE_ALL', 'QUARANTINE_DEVICE')),
+  target_serial TEXT REFERENCES devices(serial),
+  reason TEXT NOT NULL,
+  deadline_realtime_ms REAL NOT NULL CHECK (deadline_realtime_ms >= 0),
+  status TEXT NOT NULL CHECK (status IN ('STARTED', 'SUCCEEDED', 'FAILED')),
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  error_message TEXT,
+  CHECK ((status = 'STARTED' AND completed_at IS NULL) OR (status <> 'STARTED' AND completed_at IS NOT NULL))
+);
+
+CREATE INDEX IF NOT EXISTS idx_recovery_attempts_run_status
+  ON recovery_attempts(run_id, status, started_at);
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");

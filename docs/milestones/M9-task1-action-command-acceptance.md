@@ -199,4 +199,20 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 
 当前边界：本切片只有纯逻辑决策器，尚未写入 incidents/recovery 数据库、驱动真实 fault monitor、暂停 session action API 或提供控制台故障时间线。
 
+## M9 Task 9：incident 与 recovery 持久化
+
+- 新增 `0011_incidents_recovery` 校验和迁移：保存版本化 incident、可选设备串号、检测时钟、证据引用和结构化详情。
+- 新增 `IncidentRepository`：incident 按 `incidentId` 幂等写入，内容冲突拒绝；按 run 以检测时钟排序读取，并在读回时重新通过 typed schema 校验。
+- 新增 recovery attempt 记录：保存 `PAUSE_ALL` / `QUARANTINE_DEVICE` 执行动作、目标设备、deadline、完成状态和错误；服务重启可查询 `STARTED` 未完成尝试。
+- server runtime 启动迁移已包含 `INCIDENTS_MIGRATION`，后续 fault monitor 可直接使用同一数据库契约。
+
+| 检查                                       | 结果                      |
+| ------------------------------------------ | ------------------------- |
+| incident/recovery repository focused tests | 3 个测试通过              |
+| 全量自动化测试                             | 81 个文件、342 个测试通过 |
+| TypeScript project build                   | 通过                      |
+| 本切片 ESLint、Prettier、diff check        | 通过                      |
+
+当前边界：本切片只完成持久化和恢复查询，尚未接入真实 fault monitor、暂停 session action API、策略执行器或控制台故障时间线。
+
 当前改动仍未提交、未推送，等待用户验收后再创建提交并推送 `origin/main`。
