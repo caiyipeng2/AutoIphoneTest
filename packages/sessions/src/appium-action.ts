@@ -17,6 +17,7 @@ export interface ViewportSize {
 export interface AppiumActionClient {
   createSession(capabilities: DeviceSessionCapabilities): Promise<SessionFence>;
   activateApp(fence: SessionFence, packageName: string): Promise<void>;
+  terminateApp(fence: SessionFence, packageName: string): Promise<void>;
   currentPackage(fence: SessionFence): Promise<string>;
   pressKey(fence: SessionFence, keycode: number, metastate?: number): Promise<void>;
   performActions(fence: SessionFence, actions: readonly W3cAction[]): Promise<void>;
@@ -31,6 +32,7 @@ export interface AppiumActionExecutorOptions {
   readonly requestTimeoutMs?: number;
   readonly foregroundTimeoutMs?: number;
   readonly foregroundPollIntervalMs?: number;
+  readonly processProbe?: (serial: string, packageName: string) => Promise<boolean>;
   readonly clientFactory?: (options: AppiumW3cClientOptions) => AppiumActionClient;
 }
 
@@ -82,6 +84,16 @@ export class AppiumActionExecutor {
         fence,
         input.packageName,
       );
+      if (input.command?.type === "terminate") {
+        await client.terminateApp(fence, input.packageName);
+        await this.waitForProcessAbsent(input.serial, input.packageName);
+        return {
+          serial: input.serial,
+          packageName: input.packageName,
+          foregroundPackage,
+          pointerActionCount: 0,
+        };
+      }
       const actions =
         input.command?.type === "back" || input.command?.type === "activate"
           ? []
@@ -99,6 +111,18 @@ export class AppiumActionExecutor {
       };
     } finally {
       if (fence !== undefined) await client.deleteSession(fence).catch(() => undefined);
+    }
+  }
+
+  private async waitForProcessAbsent(serial: string, packageName: string): Promise<void> {
+    if (this.options.processProbe === undefined)
+      throw new Error("Terminate action requires a process probe.");
+    const timeoutMs = this.options.foregroundTimeoutMs ?? 5_000;
+    const pollIntervalMs = this.options.foregroundPollIntervalMs ?? 100;
+    const deadline = Date.now() + timeoutMs;
+    while (await this.options.processProbe(serial, packageName)) {
+      if (Date.now() >= deadline) throw new Error("Terminated app process did not exit in time.");
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
   }
 
