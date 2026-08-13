@@ -215,4 +215,19 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 
 当前边界：本切片只完成持久化和恢复查询，尚未接入真实 fault monitor、暂停 session action API、策略执行器或控制台故障时间线。
 
+## M9 Task 10：受保护暂停执行 API
+
+- 新增受保护的 `POST /api/sessions/:id/pause`，要求现有 session cookie、同源和 CSRF 校验；暂停原因限制为非空、最多 128 字符。
+- `RuntimeSessionRouteService.pause` 只允许 `RUNNING` 会话进入 `PAUSED`，先停止 managed workers，再记录 `RUNNING -> PAUSED` transition；故障场景不要求设备仍在线。
+- 暂停时仅取消该 run 中 `QUEUED/LEASED` 的动作和目标结果；已经进入 `DISPATCHING` 的动作保持原状态，不伪造完成或取消。
+
+| 检查                                | 结果          |
+| ----------------------------------- | ------------- |
+| pause service / route focused tests | 14 个测试通过 |
+| 全量自动化测试                      | 待最终验证    |
+| TypeScript project build            | 通过          |
+| 本切片 ESLint、Prettier、diff check | 待最终验证    |
+
+当前边界：本切片完成人工/监控可调用的暂停入口，尚未把 incident detector 自动连接到 pause、实现 quarantine 执行、恢复 API 或控制台故障时间线。
+
 当前改动仍未提交、未推送，等待用户验收后再创建提交并推送 `origin/main`。

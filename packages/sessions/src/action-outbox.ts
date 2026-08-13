@@ -215,6 +215,50 @@ export class ActionOutbox {
     transaction();
   }
 
+  public cancelQueuedForRun(runId: string, reason: string, now = new Date().toISOString()): void {
+    if (!runId.trim()) throw new TypeError("Action runId is required.");
+    if (!reason.trim()) throw new TypeError("Action cancellation reason is required.");
+    const transaction = this.database.transaction(() => {
+      const rows = this.database
+        .prepare(
+          `SELECT outbox.action_id
+           FROM action_outbox AS outbox
+           JOIN actions ON actions.id = outbox.action_id
+           WHERE actions.run_id = ? AND outbox.state IN ('QUEUED', 'LEASED')`,
+        )
+        .all(runId) as readonly { action_id: string }[];
+      for (const row of rows) {
+        this.database
+          .prepare(
+            "UPDATE action_outbox SET state = 'CANCELLED', lease_token = NULL, updated_at = ? WHERE action_id = ? AND state IN ('QUEUED', 'LEASED')",
+          )
+          .run(now, row.action_id);
+        this.database
+          .prepare(
+            "UPDATE actions SET state = 'CANCELLED', updated_at = ? WHERE id = ? AND state IN ('QUEUED', 'LEASED')",
+          )
+          .run(now, row.action_id);
+        this.database
+          .prepare(
+            "UPDATE action_targets SET state = 'CANCELLED', updated_at = ? WHERE action_id = ? AND state IN ('QUEUED', 'DISPATCHING')",
+          )
+          .run(now, row.action_id);
+        this.database
+          .prepare(
+            "UPDATE device_action_results SET state = 'CANCELLED', result_json = ?, updated_at = ? WHERE action_id = ? AND state = 'PENDING'",
+          )
+          .run(JSON.stringify({ reason }), now, row.action_id);
+        this.database
+          .prepare(
+            `INSERT INTO action_transitions (action_id, from_state, to_state, reason, created_at)
+             VALUES (?, NULL, 'CANCELLED', ?, ?)`,
+          )
+          .run(row.action_id, reason, now);
+      }
+    });
+    transaction();
+  }
+
   private leaseQueuedRow(
     row: QueuedOutboxRow,
     ownerToken: string,

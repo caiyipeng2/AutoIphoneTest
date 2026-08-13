@@ -50,6 +50,7 @@ function service(): SessionRouteService {
     preflight: async () => ({ ...view, state: "PREFLIGHT" }),
     start: async () => ({ ...view, state: "RUNNING" }),
     submitAction: async () => ({ state: "CREATED", action }),
+    pause: async () => ({ ...view, state: "PAUSED" }),
   };
 }
 
@@ -166,6 +167,7 @@ describe("session create/detail routes", () => {
         preflight: async () => ({ ...view, state: "PREFLIGHT" }),
         start: async () => ({ ...view, state: "RUNNING" }),
         submitAction: async () => ({ state: "DEDUPLICATED", action }),
+        pause: async () => ({ ...view, state: "PAUSED" }),
       },
     });
     const headers = { host: "127.0.0.1:4796", origin: "http://127.0.0.1:4796" };
@@ -206,6 +208,42 @@ describe("session create/detail routes", () => {
         })
       ).statusCode,
     ).toBe(404);
+    await app.close();
+  });
+
+  it("exposes a protected pause endpoint", async () => {
+    const pause = { pause: async () => ({ ...view, state: "PAUSED" as const }) };
+    const app = await createApp({
+      port: 4797,
+      bootstrapCode: "session-bootstrap-3",
+      launchSecret: "session-secret-3",
+      sessionService: { ...service(), ...pause },
+    });
+    const headers = { host: "127.0.0.1:4797", origin: "http://127.0.0.1:4797" };
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers,
+      payload: { code: "session-bootstrap-3" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const csrf = Array.isArray(cookies)
+      ? cookies
+          .find((cookie) => cookie.startsWith("tc_csrf="))
+          ?.split("=", 2)[1]
+          ?.split(";", 1)[0]
+      : undefined;
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/sessions/run-1/pause",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+      payload: { reason: "fault-monitor" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ schemaVersion: 1, session: { state: "PAUSED" } });
     await app.close();
   });
 });

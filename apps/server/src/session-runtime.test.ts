@@ -21,6 +21,7 @@ import {
 import { RuntimeSessionRouteService } from "./session-runtime.js";
 import type { ActionView } from "@test-center/sessions";
 import { RunActionRepository } from "@test-center/sessions";
+import { ActionOutbox } from "@test-center/sessions";
 
 const databases: Database.Database[] = [];
 const roots: string[] = [];
@@ -32,6 +33,97 @@ afterEach(async () => {
 });
 
 describe("RuntimeSessionRouteService", () => {
+  it("pauses a running session, stops workers, and records the transition", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const coordinator = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      undefined,
+      undefined,
+      coordinator,
+    );
+    const created = await service.create({
+      clientRequestId: "request-pause",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+
+    const paused = await service.pause(created.session.id, "fault-monitor");
+
+    expect(paused.state).toBe("PAUSED");
+    expect(coordinator.stop).toHaveBeenCalledWith(created.session.id);
+    expect(
+      database
+        .prepare(
+          "SELECT from_state, to_state, reason FROM run_transitions WHERE run_id = ? ORDER BY id DESC LIMIT 1",
+        )
+        .get(created.session.id),
+    ).toEqual({
+      from_state: "RUNNING",
+      to_state: "PAUSED",
+      reason: "SESSION_PAUSED:fault-monitor",
+    });
+  });
+
+  it("cancels queued actions when pausing a running session", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const repository = new RunActionRepository(database);
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      repository,
+      undefined,
+      undefined,
+      new ActionOutbox(database),
+    );
+    const created = await service.create({
+      clientRequestId: "request-pause-queued",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    const queued = await service.submitAction(created.session.id, "session-1", {
+      clientRequestId: "action-pause-queued",
+      type: "tap",
+      payload: { kind: "tap", x: 0.5, y: 0.5 },
+      sourceMetricsEpoch: 1,
+    });
+
+    await service.pause(created.session.id, "fault-monitor");
+
+    expect(repository.get(queued.action.id)?.state).toBe("CANCELLED");
+  });
+
+  it("rejects pausing a session that is not running", async () => {
+    const database = await createDatabase();
+    const service = new RuntimeSessionRouteService(database, { get: () => undefined } as never);
+    await expect(service.pause("missing-run", "fault-monitor")).rejects.toThrow(
+      "Session not found",
+    );
+  });
+
   it("passes the persisted run nonce hash to managed workers", async () => {
     const database = await createDatabase();
     const serial = parseDeviceSerial("R5CX211TXNT");

@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 import type { DeviceRegistry } from "@test-center/devices";
 import { parseAndroidPackageName } from "@test-center/contracts/artifact";
 import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/device";
-import { RunActionRepository, type ActionDispatcher } from "@test-center/sessions";
+import { ActionOutbox, RunActionRepository, type ActionDispatcher } from "@test-center/sessions";
 import type { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
 
 import type {
@@ -46,6 +46,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     private readonly actionRepository = new RunActionRepository(database),
     private readonly actionDispatcher?: Pick<ActionDispatcher, "dispatch">,
     private readonly workerCoordinator?: Pick<RuntimeWorkerCoordinator, "start" | "stop">,
+    private readonly actionOutbox = new ActionOutbox(database),
   ) {}
 
   public async create(
@@ -141,6 +142,33 @@ export class RuntimeSessionRouteService implements SessionRouteService {
       await this.workerCoordinator?.stop(id).catch(() => undefined);
       throw error;
     }
+  }
+
+  public async pause(id: string, reason: string): Promise<SessionView> {
+    if (!reason.trim() || reason.length > 128) throw new TypeError("Pause reason is invalid.");
+    const current = this.get(id);
+    if (current === undefined) throw new Error("Session not found.");
+    if (current.state !== "RUNNING") throw new Error("Session state must be RUNNING.");
+    await this.workerCoordinator?.stop(id);
+    this.actionOutbox.cancelQueuedForRun(id, "SESSION_PAUSED");
+    const now = new Date().toISOString();
+    const update = this.database.transaction(() => {
+      const changed = this.database
+        .prepare(
+          "UPDATE test_runs SET state = 'PAUSED', updated_at = ? WHERE id = ? AND state = 'RUNNING'",
+        )
+        .run(now, id) as { changes: number };
+      if (changed.changes !== 1) throw new Error("Session state changed while pausing.");
+      this.database
+        .prepare(
+          "INSERT INTO run_transitions (run_id, from_state, to_state, reason, created_at) VALUES (?, 'RUNNING', 'PAUSED', ?, ?)",
+        )
+        .run(id, `SESSION_PAUSED:${reason}`, now);
+    });
+    update.immediate();
+    const paused = this.get(id);
+    if (paused === undefined) throw new Error("Paused session could not be read back.");
+    return paused;
   }
 
   public async submitAction(

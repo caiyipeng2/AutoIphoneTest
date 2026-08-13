@@ -109,6 +109,10 @@ const ActionSubmitSchema = z
   ])
   .transform((value) => value as SessionActionInput);
 
+const PauseSessionSchema = z
+  .object({ reason: z.string().trim().min(1).max(128).default("operator") })
+  .strict();
+
 export interface SessionLeaderView {
   readonly serial: DeviceSerial;
   readonly role: "LEADER";
@@ -171,6 +175,7 @@ export interface SessionRouteService {
   get(id: string): SessionView | undefined;
   preflight(id: string, actorSessionId: string): Promise<SessionView>;
   start(id: string, actorSessionId: string): Promise<SessionView>;
+  pause(id: string, reason: string): Promise<SessionView>;
   submitAction(
     id: string,
     actorSessionId: string,
@@ -239,6 +244,26 @@ export async function registerSessionsRoutes(
       }
     });
   }
+
+  app.post<{ Params: { id: string } }>("/api/sessions/:id/pause", async (request, reply) => {
+    try {
+      assertMutationAllowed(request, context);
+      if (context.sessionService === undefined)
+        return await reply.code(503).send({ error: "Session service unavailable." });
+      if (requireSession(request, context) === undefined)
+        return await reply.code(401).send({ error: "Authentication required." });
+      const payload = PauseSessionSchema.parse(request.body ?? {});
+      const session = await context.sessionService.pause(
+        decodeURIComponent(request.params.id),
+        payload.reason,
+      );
+      return { schemaVersion: 1, session };
+    } catch (error) {
+      return await reply
+        .code(sessionErrorCode(error))
+        .send({ error: error instanceof Error ? error.message : "Pause rejected." });
+    }
+  });
 
   app.post<{ Params: { id: string } }>("/api/sessions/:id/actions", async (request, reply) => {
     try {
