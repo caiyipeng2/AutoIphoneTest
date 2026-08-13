@@ -311,6 +311,76 @@ describe("ActionOutbox", () => {
     });
   });
 
+  it("arms input actions before Appium and waits for the matching ACK", async () => {
+    const { repository, outbox } = createHarness();
+    const created = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-dispatch-ack",
+      type: "tap",
+      payload: { kind: "tap", x: 0.25, y: 0.75 },
+      sourceMetricsEpoch: 4,
+    });
+    const order: string[] = [];
+    const dispatcher = new ActionDispatcher(
+      repository,
+      outbox,
+      () => ({
+        execute: async () => {
+          order.push("appium");
+          return { accepted: true };
+        },
+      }),
+      "worker-ack",
+      () => ({
+        arm: async () => {
+          order.push("arm");
+          return {
+            waitForAck: async () => {
+              order.push("ack");
+            },
+            cancel: async () => undefined,
+          };
+        },
+      }),
+    );
+
+    await dispatcher.dispatch({ actionId: created.action.id, packageName: "com.example.game" });
+
+    expect(order).toEqual(["arm", "appium", "ack"]);
+  });
+
+  it("cancels the bridge arm when Appium fails before ACK", async () => {
+    const { repository, outbox } = createHarness();
+    const created = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-dispatch-arm-failure",
+      type: "tap",
+      payload: { kind: "tap", x: 0.25, y: 0.75 },
+      sourceMetricsEpoch: 4,
+    });
+    const cancel = vi.fn(async () => undefined);
+    const dispatcher = new ActionDispatcher(
+      repository,
+      outbox,
+      () => ({
+        execute: async () => {
+          throw new Error("appium failed");
+        },
+      }),
+      "worker-arm-failure",
+      () => ({
+        arm: async () => ({
+          waitForAck: async () => undefined,
+          cancel,
+        }),
+      }),
+    );
+
+    await dispatcher.dispatch({ actionId: created.action.id, packageName: "com.example.game" });
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
   it("dispatches all active targets concurrently", async () => {
     const { repository, outbox, database } = createHarness();
     database

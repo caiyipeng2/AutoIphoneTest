@@ -40,6 +40,20 @@
 
 当前边界：bridge arm/ACK、文本可信焦点屏障、故障 incident/policy 和控制台命令控件仍未接入；本次只完成 API 到持久化和 dispatcher 的命令传递闭环。
 
+## M9 Task 3：输入动作 ARM/ACK barrier
+
+- 新增可注入的 `ActionBarrier` 接口，输入类动作按 `ARM → Appium → ACK` 顺序完成。
+- `activate`、`terminate`、`restart` 等 lifecycle 命令不会错误触发输入 arm。
+- Appium 失败或 ACK 失败时自动取消 arm，并将目标结果记为失败。
+- barrier 请求携带 action、设备 serial、规范化 command、metrics epoch 和可选 source frame；真实 BridgeClient/ADB forward 绑定留在 managed worker 接线切片。
+
+| 检查                                    | 结果          |
+| --------------------------------------- | ------------- |
+| ARM/Appium/ACK 顺序与清理 focused tests | 12 个测试通过 |
+| TypeScript project build                | 通过          |
+
+当前边界：本切片完成 dispatcher barrier 契约和失败清理，尚未把真实 Unity QA Bridge 连接绑定到每个 managed worker，也未实现文本可信焦点屏障。
+
 ## 当前边界
 
 本 Task 1 切片未接入 bridge arm/ACK、失败策略或控制台 UI。命令持久化与 dispatcher 传递已在下方 Task 2 切片完成；真实 bridge ACK 和故障策略仍按 M9 计划逐步扩展。

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import type { ActionCommand } from "./action-command.js";
+import { actionCompletionPolicy } from "./action-command.js";
+import type { ActionBarrierFactory } from "./action-barrier.js";
 import type { ActionPayload, ActionView, RunActionRepository } from "./run-repository.js";
 import type { ActionOutbox } from "./action-outbox.js";
 
@@ -26,6 +28,7 @@ export class ActionDispatcher {
     private readonly outbox: ActionOutbox,
     private readonly executorFactory: ActionDeviceExecutorFactory,
     private readonly ownerToken = `dispatcher-${randomUUID()}`,
+    private readonly barrierFactory?: ActionBarrierFactory,
   ) {}
 
   public async dispatch(input: ActionDispatchInput): Promise<ActionView> {
@@ -40,20 +43,41 @@ export class ActionDispatcher {
     await Promise.all(
       queued.targets.map(async (target) => {
         try {
+          const command = queued.command;
+          const barrier =
+            command !== undefined &&
+            actionCompletionPolicy(command).armBridge &&
+            this.barrierFactory !== undefined
+              ? await this.barrierFactory(target.serial).arm({
+                  actionId: queued.id,
+                  serial: target.serial,
+                  command,
+                  metricsEpoch: queued.sourceMetricsEpoch,
+                  ...(queued.sourceFrameId === undefined
+                    ? {}
+                    : { sourceFrameId: queued.sourceFrameId }),
+                })
+              : undefined;
           const executorInput = {
             serial: target.serial,
             packageName: input.packageName,
             ...(queued.command === undefined ? {} : { command: queued.command }),
             ...(queued.payload === undefined ? {} : { payload: queued.payload }),
           };
-          const result = await this.executorFactory(target.serial).execute(executorInput);
-          this.outbox.completeTarget(
-            input.actionId,
-            lease.leaseToken,
-            target.serial,
-            "SUCCEEDED",
-            JSON.stringify({ ok: true, result }),
-          );
+          try {
+            const result = await this.executorFactory(target.serial).execute(executorInput);
+            if (barrier !== undefined) await barrier.waitForAck();
+            this.outbox.completeTarget(
+              input.actionId,
+              lease.leaseToken,
+              target.serial,
+              "SUCCEEDED",
+              JSON.stringify({ ok: true, result }),
+            );
+          } catch (error) {
+            await barrier?.cancel().catch(() => undefined);
+            throw error;
+          }
         } catch (error) {
           this.outbox.completeTarget(
             input.actionId,
