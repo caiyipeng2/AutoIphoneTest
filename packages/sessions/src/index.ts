@@ -11,3 +11,4 @@ export * from "./text-focus-barrier.js";
 export * from "./failure-policy.js";
 export * from "./incident-repository.js";
 export * from "./incident-monitor.js";
+export * from "./run-membership.js";

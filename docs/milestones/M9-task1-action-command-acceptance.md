@@ -246,4 +246,21 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 
 当前边界：本切片完成 incident 到 recovery 的编排层，尚未接入 ADB/logcat/Appium/Bridge 真实监控源、quarantine 数据库状态更新和控制台故障时间线。
 
+## M9 Task 12：quarantine 成员状态执行
+
+- 新增 `0012_run_membership_transitions` 迁移，记录设备成员从 `ACTIVE` 到 `QUARANTINED` 的审计历史。
+- 新增 `RunMembershipRepository.quarantine`：只允许当前 run epoch 的 active follower 被隔离；leader、未知设备和不可转换状态会拒绝。
+- 已隔离 follower 再次执行返回 `DEDUPLICATED`，不会重复写状态或重复生成成员 transition。
+- 新增 `RunMembershipIncidentExecutor` 适配器，将 quarantine 持久化接入 `IncidentMonitor` 执行器契约；pauseAll 继续由 runtime pause 回调注入。
+- server runtime 启动迁移已包含 `RUN_MEMBERSHIP_MIGRATION`。
+
+| 检查                                           | 结果                      |
+| ---------------------------------------------- | ------------------------- |
+| quarantine repository / executor focused tests | 3 个测试通过              |
+| 全量自动化测试                                 | 83 个文件、351 个测试通过 |
+| TypeScript project build                       | 通过                      |
+| 本切片 ESLint、Prettier、diff check            | 通过                      |
+
+当前边界：真实 ADB/logcat/Appium/Bridge 监控源、自动 incident 采集、恢复 API 和控制台故障时间线仍未接入。
+
 当前改动仍未提交、未推送，等待用户验收后再创建提交并推送 `origin/main`。

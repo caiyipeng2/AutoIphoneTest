@@ -423,6 +423,25 @@ CREATE INDEX IF NOT EXISTS idx_recovery_attempts_run_status
 `.trim(),
 };
 
+export const RUN_MEMBERSHIP_MIGRATION: Migration = {
+  id: "0012_run_membership_transitions",
+  sql: `
+CREATE TABLE IF NOT EXISTS run_device_transitions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+  serial TEXT NOT NULL REFERENCES devices(serial),
+  epoch INTEGER NOT NULL CHECK (epoch > 0),
+  from_state TEXT NOT NULL CHECK (from_state IN ('ACTIVE', 'QUARANTINED', 'RECOVERING', 'LEFT')),
+  to_state TEXT NOT NULL CHECK (to_state IN ('ACTIVE', 'QUARANTINED', 'RECOVERING', 'LEFT')),
+  reason TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_device_transitions_lookup
+  ON run_device_transitions(run_id, serial, created_at);
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
