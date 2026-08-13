@@ -263,4 +263,21 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 
 当前边界：真实 ADB/logcat/Appium/Bridge 监控源、自动 incident 采集、恢复 API 和控制台故障时间线仍未接入。
 
+## M9 Task 13：ADB 连接故障事件接线
+
+- 新增 `DeviceConnectionFaultMonitor`，订阅 `DeviceRegistry` 的 `device.connectionChanged` 事件。
+- `OFFLINE` / `UNAUTHORIZED` 连接变化会按当前 RUNNING run 生成稳定 `ADB_DISCONNECTED` incident；ONLINE 事件忽略。
+- incidentId 使用 run、设备 serial 和 connectionSeq 组成，重复事件不会重复调用 `IncidentMonitor`；支持同一设备同时属于多个 run。
+- server runtime 已接入 fault monitor：设备事件 -> typed incident -> IncidentMonitor -> pause/quarantine 执行器；启动和关闭生命周期均已接线。
+- 当前默认策略沿用方案 A 的 `PAUSE_ALL`，后续可从 run 配置读取可选 quarantine 策略。
+
+| 检查                                          | 结果                      |
+| --------------------------------------------- | ------------------------- |
+| device connection fault monitor focused tests | 2 个测试通过              |
+| 全量自动化测试                                | 84 个文件、353 个测试通过 |
+| TypeScript project build                      | 通过                      |
+| 本切片 ESLint、Prettier、diff check           | 通过                      |
+
+当前边界：已接入 ADB 连接状态故障源；logcat 崩溃/ANR、Appium/Bridge 状态故障、运行时配置化策略和控制台故障时间线仍待后续切片。
+
 当前改动仍未提交、未推送，等待用户验收后再创建提交并推送 `origin/main`。

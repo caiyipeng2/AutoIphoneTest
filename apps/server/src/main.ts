@@ -23,11 +23,13 @@ export async function main(): Promise<void> {
     sessionService: runtimeDevices.sessionService,
   });
   app.addHook("onClose", async () => {
+    runtimeDevices.faultMonitor.stop();
     runtimeDevices.registry.stop();
     await runtimeDevices.close();
   });
   await app.listen({ host: "127.0.0.1", port });
   void runtimeDevices.registry.start();
+  runtimeDevices.faultMonitor.start();
   process.stdout.write(
     `${JSON.stringify(createReadinessRecord(launcherInit.launchSecret, port, process.pid))}\n`,
   );

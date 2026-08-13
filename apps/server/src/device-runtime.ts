@@ -51,7 +51,12 @@ import {
   ActionOutbox,
   AppiumActionExecutor,
   AppiumPreflightProbe,
+  DeviceConnectionFaultMonitor,
+  IncidentMonitor,
+  IncidentRepository,
   RunActionRepository,
+  RunMembershipIncidentExecutor,
+  RunMembershipRepository,
   TextFocusBarrier,
 } from "@test-center/sessions";
 import { DeviceWorker } from "@test-center/sessions";
@@ -80,6 +85,7 @@ export interface RuntimeDeviceRegistry {
   readonly uidService: UidService;
   readonly sessionService: SessionRouteService;
   readonly workerCoordinator: RuntimeWorkerCoordinator;
+  readonly faultMonitor: DeviceConnectionFaultMonitor;
   readonly close: () => Promise<void>;
 }
 
@@ -131,6 +137,28 @@ export async function createRuntimeDeviceRegistry(
     createConfiguredActionDispatcher(actionRepository, actionOutbox, registry, workerCoordinator),
     workerCoordinator,
   );
+  const incidentMonitor = new IncidentMonitor(
+    new IncidentRepository(database),
+    new RunMembershipIncidentExecutor(new RunMembershipRepository(database), {
+      pauseAll: async (runId, reason) => {
+        await sessionService.pause(runId, reason);
+      },
+    }),
+  );
+  const faultMonitor = new DeviceConnectionFaultMonitor({
+    subscribe: (listener) =>
+      registry.subscribe((event) => {
+        if (event.type !== "device.connectionChanged") return;
+        listener({
+          serial: event.device.serial,
+          state: event.device.state,
+          connectionSeq: event.device.connectionSeq,
+          observedAt: event.device.lastSeenAt,
+        });
+      }),
+    listRuns: () => readRunningFaultRuns(database),
+    handleIncident: async (input) => await incidentMonitor.handle(input),
+  });
   const deploymentService = new RuntimeDeploymentRouteService(
     database,
     registry,
@@ -145,11 +173,42 @@ export async function createRuntimeDeviceRegistry(
     uidService,
     sessionService,
     workerCoordinator,
+    faultMonitor,
     close: async () => {
       await workerCoordinator.stopAll().catch(() => undefined);
       database.close();
     },
   };
+}
+
+function readRunningFaultRuns(database: Database.Database) {
+  const runs = database
+    .prepare("SELECT id, current_epoch FROM test_runs WHERE state = 'RUNNING' ORDER BY id ASC")
+    .all() as readonly { id: string; current_epoch: number }[];
+  return runs.map((run) => ({
+    runId: run.id,
+    policy: "PAUSE_ALL" as const,
+    members: database
+      .prepare(
+        `SELECT serial, role, membership_state
+         FROM run_devices WHERE run_id = ? AND epoch = ?
+         ORDER BY role = 'LEADER' DESC, serial ASC`,
+      )
+      .all(run.id, run.current_epoch)
+      .map((member) => {
+        const row = member as {
+          serial: string;
+          role: "LEADER" | "FOLLOWER";
+          membership_state: "ACTIVE" | "RECOVERING" | "QUARANTINED" | "LEFT";
+        };
+        return {
+          serial: row.serial,
+          role: row.role,
+          membershipState: row.membership_state === "RECOVERING" ? "RECOVERING" : "ACTIVE",
+        } as const;
+      })
+      .filter((member) => member.membershipState === "ACTIVE"),
+  }));
 }
 
 function createRuntimeWorkerCoordinator(
