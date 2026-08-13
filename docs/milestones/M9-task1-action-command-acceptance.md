@@ -230,4 +230,20 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 
 当前边界：本切片完成人工/监控可调用的暂停入口，尚未把 incident detector 自动连接到 pause、实现 quarantine 执行、恢复 API 或控制台故障时间线。
 
+## M9 Task 11：incident recovery 执行协调器
+
+- 新增可注入的 `IncidentMonitor`，将 typed incident 记录、failure policy 决策、recovery attempt 持久化和执行器调用串成一条闭环。
+- 首次 incident 按决策执行 `pauseAll` 或 `quarantineDevice`；相同 `incidentId` 会复用最近 recovery 记录，不重复触发设备动作。
+- 执行器异常会保留 incident 证据，并把 recovery attempt 完成状态写为 `FAILED` 与错误消息；不会吞掉故障事实。
+- pause/quarantine 执行器保持接口注入，后续可分别绑定 `RuntimeSessionRouteService.pause` 和 run-device membership 更新，不在本切片猜测具体监控源。
+
+| 检查                                | 结果         |
+| ----------------------------------- | ------------ |
+| incident monitor focused tests      | 2 个测试通过 |
+| 全量自动化测试                      | 待最终验证   |
+| TypeScript project build            | 通过         |
+| 本切片 ESLint、Prettier、diff check | 待最终验证   |
+
+当前边界：本切片完成 incident 到 recovery 的编排层，尚未接入 ADB/logcat/Appium/Bridge 真实监控源、quarantine 数据库状态更新和控制台故障时间线。
+
 当前改动仍未提交、未推送，等待用户验收后再创建提交并推送 `origin/main`。

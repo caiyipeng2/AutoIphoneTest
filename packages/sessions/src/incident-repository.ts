@@ -188,6 +188,18 @@ export class IncidentRepository {
     return rows.map((row) => this.toRecovery(row));
   }
 
+  public getLatestRecoveryForIncident(incidentId: string): RecoveryAttempt | undefined {
+    const row = this.database
+      .prepare(
+        `SELECT * FROM recovery_attempts
+         WHERE incident_id = ?
+         ORDER BY started_at DESC, id DESC
+         LIMIT 1`,
+      )
+      .get(incidentId) as RecoveryRow | undefined;
+    return row === undefined ? undefined : this.toRecovery(row);
+  }
+
   private readRecovery(id: string): RecoveryAttempt | undefined {
     const row = this.database.prepare("SELECT * FROM recovery_attempts WHERE id = ?").get(id) as
       RecoveryRow | undefined;
