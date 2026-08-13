@@ -298,3 +298,19 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 当前边界：已接入 Logcat 崩溃/ANR 识别和 runtime record sink；Appium/Bridge 故障源、真实游戏包崩溃现场验收、运行时策略配置和控制台故障时间线仍待后续切片。
 
 当前改动仍未提交、未推送，等待用户验收后再创建提交并推送 `origin/main`。
+
+## M9 Task 15：Appium/Bridge worker typed fault 接线
+
+- 新增 `RuntimeFaultMonitor`，只接收带 run、serial、generation 和 faultId 的运行时故障事件，统一映射为 `APPIUM_SESSION_LOST`、`BRIDGE_TIMEOUT` 或 `BRIDGE_STATE_MISMATCH` incident。
+- `DeviceWorker` 新增可选 fault sink：仅明确的 Appium session/fence、Bridge handshake/transport/clock/arm 错误会生成事件；未知启动异常和正常 stop 不会伪装成 incident。
+- `RuntimeWorkerCoordinator` 新增 fault 订阅转发，server/dev 生命周期接入 monitor；已有 `IncidentMonitor`、pause/quarantine 执行逻辑保持不变。
+- incidentId、faultId 对 run/serial/错误文本做字符清洗并限制长度；同一 run、设备、faultId 只处理一次，非 active 成员忽略。
+
+| 检查                                                       | 结果                                                              |
+| ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| runtime fault monitor / worker / coordinator focused tests | 3 个文件、17 个测试通过                                           |
+| 全量自动化测试                                             | 受本机依赖目录被 pnpm 整理造成 React 多副本影响，待依赖恢复后复验 |
+| TypeScript project build                                   | 通过                                                              |
+| 本切片 ESLint、Prettier、diff check                        | 待最终验证                                                        |
+
+当前边界：已完成 Appium/Bridge worker 到 typed incident 的基础适配；尚未实现真实运行中 Appium 请求失败的持续监听、策略配置化和控制台故障时间线。

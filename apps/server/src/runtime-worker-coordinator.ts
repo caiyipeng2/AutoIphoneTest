@@ -1,7 +1,7 @@
 import type { DeviceSerial } from "@test-center/contracts/device";
 
 import type { DeviceWorker } from "@test-center/sessions";
-import type { ActionBarrier, TextFocusSnapshot } from "@test-center/sessions";
+import type { ActionBarrier, RuntimeFaultEvent, TextFocusSnapshot } from "@test-center/sessions";
 import type { LogcatRecord } from "@test-center/contracts/logcat";
 
 export interface RuntimeWorkerFactoryInput {
@@ -10,6 +10,7 @@ export interface RuntimeWorkerFactoryInput {
   readonly packageName: string;
   readonly runNonceHash: string;
   readonly logcatRecordSink: (record: LogcatRecord) => void;
+  readonly faultSink: (event: RuntimeFaultEvent) => void;
 }
 
 export type RuntimeWorkerFactory = (
@@ -20,6 +21,7 @@ export type RuntimeWorkerFactory = (
 export class RuntimeWorkerCoordinator {
   private readonly runs = new Map<string, Map<DeviceSerial, RuntimeWorkerFactoryReturn>>();
   private readonly logcatListeners = new Set<(record: LogcatRecord) => void>();
+  private readonly faultListeners = new Set<(event: RuntimeFaultEvent) => void>();
 
   public constructor(private readonly factory: RuntimeWorkerFactory) {}
 
@@ -41,6 +43,7 @@ export class RuntimeWorkerCoordinator {
             packageName,
             runNonceHash,
             logcatRecordSink: (record) => this.emitLogcat(record),
+            faultSink: (event) => this.emitFault(event),
           });
           workers.set(serial, worker);
           await worker.start();
@@ -87,8 +90,17 @@ export class RuntimeWorkerCoordinator {
     return () => this.logcatListeners.delete(listener);
   }
 
+  public subscribeFault(listener: (event: RuntimeFaultEvent) => void): () => void {
+    this.faultListeners.add(listener);
+    return () => this.faultListeners.delete(listener);
+  }
+
   private emitLogcat(record: LogcatRecord): void {
     for (const listener of this.logcatListeners) listener(record);
+  }
+
+  private emitFault(event: RuntimeFaultEvent): void {
+    for (const listener of this.faultListeners) listener(event);
   }
 
   private async stopWorkers(workers: Map<DeviceSerial, RuntimeWorkerFactoryReturn>): Promise<void> {

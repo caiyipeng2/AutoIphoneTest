@@ -10,6 +10,7 @@ import type { LogcatRecord } from "@test-center/contracts/logcat";
 import type { WorkerResourceLease, WorkerResourceManager } from "./worker-resource-manager.js";
 import type { ActionBarrier } from "./action-barrier.js";
 import type { TextFocusSnapshot } from "./text-focus-barrier.js";
+import type { RuntimeFaultCategory, RuntimeFaultEvent } from "./runtime-fault-monitor.js";
 
 export type DeviceWorkerState =
   "DISCONNECTED" | "STARTING" | "READY" | "STOPPING" | "STOPPED" | "ERROR";
@@ -81,6 +82,7 @@ export interface DeviceWorkerOptions {
   readonly clientFactory: (input: DeviceWorkerClientFactoryInput) => AppiumW3cClient;
   readonly logcatFactory: (input: DeviceWorkerLogcatFactoryInput) => LogcatStream;
   readonly logcatRecordSink?: (record: LogcatRecord) => void;
+  readonly faultSink?: (event: RuntimeFaultEvent) => void;
   readonly runId?: string;
   readonly resourceManager?: Pick<WorkerResourceManager, "allocate" | "release">;
   readonly appiumServiceFactory?: (
@@ -118,6 +120,7 @@ export class DeviceWorker {
   private readonly clientFactory: DeviceWorkerOptions["clientFactory"];
   private readonly logcatFactory: DeviceWorkerOptions["logcatFactory"];
   private readonly logcatRecordSink: DeviceWorkerOptions["logcatRecordSink"];
+  private readonly faultSink: DeviceWorkerOptions["faultSink"];
   private readonly runId: string | undefined;
   private readonly resourceManager: DeviceWorkerOptions["resourceManager"];
   private readonly appiumServiceFactory: DeviceWorkerOptions["appiumServiceFactory"];
@@ -149,6 +152,7 @@ export class DeviceWorker {
     this.clientFactory = options.clientFactory;
     this.logcatFactory = options.logcatFactory;
     this.logcatRecordSink = options.logcatRecordSink;
+    this.faultSink = options.faultSink;
     if ((options.runId === undefined) !== (options.resourceManager === undefined))
       throw new TypeError("runId and resourceManager must be configured together.");
     if ((options.runId !== undefined) !== (options.appiumServiceFactory !== undefined))
@@ -280,6 +284,12 @@ export class DeviceWorker {
       this.bridgeForwarded = bridgeForwarded;
       this.setState("READY");
     } catch (error) {
+      const fault = toRuntimeFaultEvent(error, {
+        runId: this.runId,
+        serial: this.serial,
+        generation: this._generation,
+      });
+      if (fault !== undefined) this.faultSink?.(fault);
       if (fence !== undefined && client !== undefined)
         await client.deleteSession(fence).catch(() => undefined);
       await bridgeSession?.close().catch(() => undefined);
@@ -398,6 +408,58 @@ export class DeviceWorker {
   private isManaged(): boolean {
     return this.runId !== undefined;
   }
+}
+
+function toRuntimeFaultEvent(
+  error: unknown,
+  input: {
+    readonly runId: string | undefined;
+    readonly serial: string;
+    readonly generation: number;
+  },
+): RuntimeFaultEvent | undefined {
+  const code = readErrorCode(error);
+  if (
+    code !== "SESSION_NOT_FOUND" &&
+    code !== "HANDSHAKE_TIMEOUT" &&
+    code !== "TRANSPORT_CLOSED" &&
+    code !== "TIMEOUT" &&
+    code !== "FENCE_MISMATCH" &&
+    code !== "BRIDGE_NOT_READY" &&
+    code !== "PING_TIMEOUT" &&
+    code !== "BRIDGE_CHANGED" &&
+    code !== "ARM_TIMEOUT" &&
+    code !== "ARM_DESCRIPTOR_MISMATCH"
+  )
+    return undefined;
+  const category: RuntimeFaultCategory =
+    code === "SESSION_NOT_FOUND"
+      ? "APPIUM_SESSION_LOST"
+      : code === "HANDSHAKE_TIMEOUT" ||
+          code === "TRANSPORT_CLOSED" ||
+          code === "TIMEOUT" ||
+          code === "PING_TIMEOUT" ||
+          code === "ARM_TIMEOUT"
+        ? "BRIDGE_TIMEOUT"
+        : "BRIDGE_STATE_MISMATCH";
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    runId: input.runId ?? "unmanaged",
+    serial: input.serial,
+    generation: input.generation,
+    faultId: `${category.toLowerCase()}-${input.serial}-${input.generation}-${message.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 96)}`,
+    category,
+    source: "device-worker",
+    message,
+    detectedAt: new Date().toISOString(),
+    detectedAtRealtimeMs: Math.max(0, Date.now()),
+  };
+}
+
+function readErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
 }
 
 function toPortLease(resourceLease: WorkerResourceLease, owner: DeviceWorkerOwner): PortLease {

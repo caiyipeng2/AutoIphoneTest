@@ -55,6 +55,7 @@ import {
   IncidentMonitor,
   IncidentRepository,
   LogcatFaultMonitor,
+  RuntimeFaultMonitor,
   RunActionRepository,
   RunMembershipIncidentExecutor,
   RunMembershipRepository,
@@ -88,6 +89,7 @@ export interface RuntimeDeviceRegistry {
   readonly workerCoordinator: RuntimeWorkerCoordinator;
   readonly faultMonitor: DeviceConnectionFaultMonitor;
   readonly logcatFaultMonitor: LogcatFaultMonitor;
+  readonly runtimeFaultMonitor: RuntimeFaultMonitor;
   readonly close: () => Promise<void>;
 }
 
@@ -166,6 +168,11 @@ export async function createRuntimeDeviceRegistry(
     listRuns: () => readRunningLogcatFaultRuns(database),
     handleIncident: async (input) => await incidentMonitor.handle(input),
   });
+  const runtimeFaultMonitor = new RuntimeFaultMonitor({
+    subscribe: (listener) => workerCoordinator.subscribeFault(listener),
+    listRuns: () => readRunningLogcatFaultRuns(database),
+    handleIncident: async (input) => await incidentMonitor.handle(input),
+  });
   const deploymentService = new RuntimeDeploymentRouteService(
     database,
     registry,
@@ -182,6 +189,7 @@ export async function createRuntimeDeviceRegistry(
     workerCoordinator,
     faultMonitor,
     logcatFaultMonitor,
+    runtimeFaultMonitor,
     close: async () => {
       await workerCoordinator.stopAll().catch(() => undefined);
       database.close();
@@ -306,7 +314,7 @@ function createRuntimeWorkerCoordinator(
     },
   };
   return new RuntimeWorkerCoordinator(
-    ({ runId, serial, packageName, runNonceHash, logcatRecordSink }) => {
+    ({ runId, serial, packageName, runNonceHash, logcatRecordSink, faultSink }) => {
       const workerOwner = { ownerPid, ownerToken: `server-${String(ownerPid)}` };
       return new DeviceWorker({
         serial,
@@ -351,6 +359,7 @@ function createRuntimeWorkerCoordinator(
             recordSink: logcatRecordSink,
           }),
         logcatRecordSink,
+        faultSink,
       });
     },
   );

@@ -25,6 +25,7 @@ export async function main(): Promise<void> {
   app.addHook("onClose", async () => {
     runtimeDevices.faultMonitor.stop();
     runtimeDevices.logcatFaultMonitor.stop();
+    runtimeDevices.runtimeFaultMonitor.stop();
     runtimeDevices.registry.stop();
     await runtimeDevices.close();
   });
@@ -32,6 +33,7 @@ export async function main(): Promise<void> {
   void runtimeDevices.registry.start();
   runtimeDevices.faultMonitor.start();
   runtimeDevices.logcatFaultMonitor.start();
+  runtimeDevices.runtimeFaultMonitor.start();
   process.stdout.write(
     `${JSON.stringify(createReadinessRecord(launcherInit.launchSecret, port, process.pid))}\n`,
   );
