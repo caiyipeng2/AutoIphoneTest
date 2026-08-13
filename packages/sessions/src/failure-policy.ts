@@ -5,7 +5,7 @@ export type FailurePolicyAction = "PAUSE_ALL" | "QUARANTINE_DEVICE";
 export interface FailurePolicyMember {
   readonly serial: string;
   readonly role: "LEADER" | "FOLLOWER";
-  readonly membershipState: "ACTIVE" | "RECOVERING";
+  readonly membershipState: "ACTIVE" | "RECOVERING" | "QUARANTINED" | "LEFT";
 }
 
 export interface FailurePolicyInput {

@@ -6,6 +6,7 @@ import type {
   SessionFence,
 } from "@test-center/appium";
 import type { LogcatStream } from "@test-center/adb";
+import type { LogcatRecord } from "@test-center/contracts/logcat";
 import type { WorkerResourceLease, WorkerResourceManager } from "./worker-resource-manager.js";
 import type { ActionBarrier } from "./action-barrier.js";
 import type { TextFocusSnapshot } from "./text-focus-barrier.js";
@@ -35,6 +36,7 @@ export interface DeviceWorkerLogcatFactoryInput {
   readonly generation: number;
   readonly lease: PortLease;
   readonly resourceLease?: WorkerResourceLease;
+  readonly recordSink?: (record: LogcatRecord) => void;
 }
 
 export interface DeviceWorkerBridgeForwarder {
@@ -78,6 +80,7 @@ export interface DeviceWorkerOptions {
   readonly identityProbe: () => Promise<DeviceWorkerIdentity>;
   readonly clientFactory: (input: DeviceWorkerClientFactoryInput) => AppiumW3cClient;
   readonly logcatFactory: (input: DeviceWorkerLogcatFactoryInput) => LogcatStream;
+  readonly logcatRecordSink?: (record: LogcatRecord) => void;
   readonly runId?: string;
   readonly resourceManager?: Pick<WorkerResourceManager, "allocate" | "release">;
   readonly appiumServiceFactory?: (
@@ -114,6 +117,7 @@ export class DeviceWorker {
   private readonly identityProbe: DeviceWorkerOptions["identityProbe"];
   private readonly clientFactory: DeviceWorkerOptions["clientFactory"];
   private readonly logcatFactory: DeviceWorkerOptions["logcatFactory"];
+  private readonly logcatRecordSink: DeviceWorkerOptions["logcatRecordSink"];
   private readonly runId: string | undefined;
   private readonly resourceManager: DeviceWorkerOptions["resourceManager"];
   private readonly appiumServiceFactory: DeviceWorkerOptions["appiumServiceFactory"];
@@ -144,6 +148,7 @@ export class DeviceWorker {
     this.identityProbe = options.identityProbe;
     this.clientFactory = options.clientFactory;
     this.logcatFactory = options.logcatFactory;
+    this.logcatRecordSink = options.logcatRecordSink;
     if ((options.runId === undefined) !== (options.resourceManager === undefined))
       throw new TypeError("runId and resourceManager must be configured together.");
     if ((options.runId !== undefined) !== (options.appiumServiceFactory !== undefined))
@@ -261,6 +266,7 @@ export class DeviceWorker {
         generation: this._generation,
         lease,
         ...(resourceLease === undefined ? {} : { resourceLease }),
+        ...(this.logcatRecordSink === undefined ? {} : { recordSink: this.logcatRecordSink }),
       });
       await logcat.start();
       logcatStarted = true;

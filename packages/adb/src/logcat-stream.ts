@@ -37,6 +37,10 @@ export interface LogcatSegmentSink {
   (event: LogcatSegmentClosed): void;
 }
 
+export interface LogcatRecordSink {
+  (record: LogcatRecord): void;
+}
+
 export interface LogcatStreamOptions {
   readonly serial: string;
   readonly adbPath: string;
@@ -49,6 +53,7 @@ export interface LogcatStreamOptions {
   readonly maxSegmentDurationMs?: number;
   readonly processFactory?: (spec: LogcatProcessSpec) => LogcatProcess;
   readonly segmentSink?: LogcatSegmentSink;
+  readonly recordSink?: LogcatRecordSink;
   readonly now?: () => number;
 }
 
@@ -108,6 +113,7 @@ export class LogcatStream {
   private readonly maxSegmentDurationMs: number;
   private readonly processFactory: (spec: LogcatProcessSpec) => LogcatProcess;
   private readonly segmentSink: LogcatSegmentSink;
+  private readonly recordSink: LogcatRecordSink;
   private readonly now: () => number;
   private readonly ring: LogcatRecord[] = [];
   private ringBytes = 0;
@@ -150,6 +156,7 @@ export class LogcatStream {
     }
     this.processFactory = options.processFactory ?? createLogcatProcess;
     this.segmentSink = options.segmentSink ?? (() => undefined);
+    this.recordSink = options.recordSink ?? (() => undefined);
     this.now = options.now ?? (() => performance.now());
   }
 
@@ -233,6 +240,7 @@ export class LogcatStream {
   private async appendRecord(record: LogcatRecord): Promise<void> {
     const recordBytes = Buffer.byteLength(`${record.rawLine}\n`, "utf8");
     this.ring.push(record);
+    this.recordSink(record);
     this.ringBytes += recordBytes;
     while (this.ring.length > this.maxRingRecords || this.ringBytes > this.maxRingBytes) {
       const removed = this.ring.shift();

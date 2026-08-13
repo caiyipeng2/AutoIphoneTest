@@ -280,4 +280,21 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 
 当前边界：已接入 ADB 连接状态故障源；logcat 崩溃/ANR、Appium/Bridge 状态故障、运行时配置化策略和控制台故障时间线仍待后续切片。
 
+## M9 Task 14：Logcat 崩溃/ANR 故障事件接线
+
+- 新增 `LogcatFaultMonitor`，识别明确的 `AndroidRuntime + FATAL EXCEPTION` 与 `ActivityManager + ANR in` 记录，统一生成 `APP_CRASH_OR_ANR` incident。
+- 普通 Unity 错误日志不自动升级为 incident；仅当前 run 中仍为 active 的设备成员参与处理。
+- 同一 run、设备、monotonic 时间和原始日志记录只处理一次；monitor 可停止并解除订阅。
+- `LogcatStream` 新增可选 record sink，managed worker/coordinator 将解析记录转给 fault monitor；server/dev 启停生命周期已接线。
+- 现有日志 segment/evidence 写入路径不变，fault monitor 只消费结构化记录，不读取或复制明文日志文件。
+
+| 检查                                         | 结果                      |
+| -------------------------------------------- | ------------------------- |
+| logcat crash/ANR fault monitor focused tests | 2 个测试通过              |
+| 全量自动化测试                               | 85 个文件、355 个测试通过 |
+| TypeScript project build                     | 通过                      |
+| 本切片 ESLint、Prettier、diff check          | 通过                      |
+
+当前边界：已接入 Logcat 崩溃/ANR 识别和 runtime record sink；Appium/Bridge 故障源、真实游戏包崩溃现场验收、运行时策略配置和控制台故障时间线仍待后续切片。
+
 当前改动仍未提交、未推送，等待用户验收后再创建提交并推送 `origin/main`。

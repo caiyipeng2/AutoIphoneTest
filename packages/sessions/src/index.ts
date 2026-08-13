@@ -13,3 +13,4 @@ export * from "./incident-repository.js";
 export * from "./incident-monitor.js";
 export * from "./run-membership.js";
 export * from "./device-fault-monitor.js";
+export * from "./logcat-fault-monitor.js";

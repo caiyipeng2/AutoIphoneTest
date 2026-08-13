@@ -28,10 +28,12 @@ const app = await createApp(
 );
 app.addHook("onClose", async () => {
   runtimeDevices.faultMonitor.stop();
+  runtimeDevices.logcatFaultMonitor.stop();
   runtimeDevices.registry.stop();
   await runtimeDevices.close();
 });
 await app.listen({ host: "127.0.0.1", port });
 void runtimeDevices.registry.start();
 runtimeDevices.faultMonitor.start();
+runtimeDevices.logcatFaultMonitor.start();
 process.stdout.write(`DEV_READY ${port}\n`);

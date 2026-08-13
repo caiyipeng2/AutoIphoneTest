@@ -54,6 +54,7 @@ import {
   DeviceConnectionFaultMonitor,
   IncidentMonitor,
   IncidentRepository,
+  LogcatFaultMonitor,
   RunActionRepository,
   RunMembershipIncidentExecutor,
   RunMembershipRepository,
@@ -86,6 +87,7 @@ export interface RuntimeDeviceRegistry {
   readonly sessionService: SessionRouteService;
   readonly workerCoordinator: RuntimeWorkerCoordinator;
   readonly faultMonitor: DeviceConnectionFaultMonitor;
+  readonly logcatFaultMonitor: LogcatFaultMonitor;
   readonly close: () => Promise<void>;
 }
 
@@ -159,6 +161,11 @@ export async function createRuntimeDeviceRegistry(
     listRuns: () => readRunningFaultRuns(database),
     handleIncident: async (input) => await incidentMonitor.handle(input),
   });
+  const logcatFaultMonitor = new LogcatFaultMonitor({
+    subscribe: (listener) => workerCoordinator.subscribeLogcat(listener),
+    listRuns: () => readRunningLogcatFaultRuns(database),
+    handleIncident: async (input) => await incidentMonitor.handle(input),
+  });
   const deploymentService = new RuntimeDeploymentRouteService(
     database,
     registry,
@@ -174,11 +181,43 @@ export async function createRuntimeDeviceRegistry(
     sessionService,
     workerCoordinator,
     faultMonitor,
+    logcatFaultMonitor,
     close: async () => {
       await workerCoordinator.stopAll().catch(() => undefined);
       database.close();
     },
   };
+}
+
+function readRunningLogcatFaultRuns(database: Database.Database) {
+  const runs = database
+    .prepare("SELECT id, current_epoch FROM test_runs WHERE state = 'RUNNING' ORDER BY id ASC")
+    .all() as readonly { id: string; current_epoch: number }[];
+  return runs.flatMap((run) => {
+    const members = database
+      .prepare(
+        `SELECT serial, role, membership_state
+         FROM run_devices WHERE run_id = ? AND epoch = ?
+         ORDER BY role = 'LEADER' DESC, serial ASC`,
+      )
+      .all(run.id, run.current_epoch) as readonly {
+      serial: string;
+      role: "LEADER" | "FOLLOWER";
+      membership_state: "ACTIVE" | "RECOVERING" | "QUARANTINED" | "LEFT";
+    }[];
+    return members
+      .filter((member) => member.membership_state === "ACTIVE")
+      .map((member) => ({
+        runId: run.id,
+        serial: member.serial,
+        policy: "PAUSE_ALL" as const,
+        members: members.map((item) => ({
+          serial: item.serial,
+          role: item.role,
+          membershipState: item.membership_state,
+        })),
+      }));
+  });
 }
 
 function readRunningFaultRuns(database: Database.Database) {
@@ -266,51 +305,55 @@ function createRuntimeWorkerCoordinator(
       );
     },
   };
-  return new RuntimeWorkerCoordinator(({ runId, serial, packageName, runNonceHash }) => {
-    const workerOwner = { ownerPid, ownerToken: `server-${String(ownerPid)}` };
-    return new DeviceWorker({
-      serial,
-      packageName,
-      owner: workerOwner,
-      runId,
-      resourceManager: resources,
-      bridgeForwarder,
-      bridgeSessionFactory: ({ hostPort, runNonceHash: workerNonce }) => {
-        if (workerNonce === undefined) throw new Error("Managed worker run nonce is required.");
-        const bridge = createRuntimeBridgeSession({
-          hostPort,
-          runNonceHash: workerNonce,
-        });
-        return bridge;
-      },
-      runNonceHash,
-      allocator,
-      identityProbe: async () => {
-        const device = registry.get(serial);
-        if (device === undefined || device.state !== "ONLINE")
-          throw new Error(`Device must be online: ${serial}.`);
-        return { serial, packageName };
-      },
-      clientFactory: ({ serial: clientSerial, generation, baseUrl }) =>
-        new AppiumW3cClient({ baseUrl, serial: clientSerial, generation }),
-      appiumServiceFactory: ({ port, logPath }) =>
-        new AppiumService({
-          executablePath: appiumExecutable,
-          executableArgs: [appiumEntry],
-          appiumHome,
-          port,
-          logPath: win32.join(logPath, "appium.log"),
-          cwd: projectRoot,
-        }),
-      logcatFactory: ({ serial: logSerial, resourceLease }) =>
-        new LogcatStream({
-          serial: logSerial,
-          adbPath,
-          cwd: projectRoot,
-          runDirectory: resourceLease?.paths.logs ?? paths.logsRoot,
-        }),
-    });
-  });
+  return new RuntimeWorkerCoordinator(
+    ({ runId, serial, packageName, runNonceHash, logcatRecordSink }) => {
+      const workerOwner = { ownerPid, ownerToken: `server-${String(ownerPid)}` };
+      return new DeviceWorker({
+        serial,
+        packageName,
+        owner: workerOwner,
+        runId,
+        resourceManager: resources,
+        bridgeForwarder,
+        bridgeSessionFactory: ({ hostPort, runNonceHash: workerNonce }) => {
+          if (workerNonce === undefined) throw new Error("Managed worker run nonce is required.");
+          const bridge = createRuntimeBridgeSession({
+            hostPort,
+            runNonceHash: workerNonce,
+          });
+          return bridge;
+        },
+        runNonceHash,
+        allocator,
+        identityProbe: async () => {
+          const device = registry.get(serial);
+          if (device === undefined || device.state !== "ONLINE")
+            throw new Error(`Device must be online: ${serial}.`);
+          return { serial, packageName };
+        },
+        clientFactory: ({ serial: clientSerial, generation, baseUrl }) =>
+          new AppiumW3cClient({ baseUrl, serial: clientSerial, generation }),
+        appiumServiceFactory: ({ port, logPath }) =>
+          new AppiumService({
+            executablePath: appiumExecutable,
+            executableArgs: [appiumEntry],
+            appiumHome,
+            port,
+            logPath: win32.join(logPath, "appium.log"),
+            cwd: projectRoot,
+          }),
+        logcatFactory: ({ serial: logSerial, resourceLease }) =>
+          new LogcatStream({
+            serial: logSerial,
+            adbPath,
+            cwd: projectRoot,
+            runDirectory: resourceLease?.paths.logs ?? paths.logsRoot,
+            recordSink: logcatRecordSink,
+          }),
+        logcatRecordSink,
+      });
+    },
+  );
 }
 
 function createConfiguredPreflightProbe(): AppiumPreflightProbe | undefined {
