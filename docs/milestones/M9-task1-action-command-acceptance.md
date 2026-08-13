@@ -359,3 +359,17 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 | Sessions 页面自动化测试      | 受本机 React/ReactDOM 多副本 `Invalid hook call` 阻断，待依赖恢复后复验 |
 
 当前边界：已完成控制台只读故障时间线；尚未实现分页/筛选、故障详情抽屉和恢复操作入口。
+
+## M9 Task 19：故障时间线筛选与详情展开
+
+- 时间线新增故障类别筛选，实时显示当前筛选结果数量；无匹配记录时保留明确空态。
+- 每条 incident 新增只读详情展开，可查看证据引用和结构化 details；长文本支持换行，不改变页面宽度。
+- 详情按钮使用 Lucide 图标和明确的 `aria-expanded`/`aria-label`，不引入恢复或重试副作用。
+
+| 检查                         | 结果                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| TypeScript project build     | 通过                                                                    |
+| ESLint、Prettier、diff check | 通过                                                                    |
+| IncidentTimeline UI 测试     | 受本机 React/ReactDOM 多副本 `Invalid hook call` 阻断，待依赖恢复后复验 |
+
+当前边界：已完成故障类别筛选和详情展开；尚未实现分页、设备筛选和恢复操作入口。

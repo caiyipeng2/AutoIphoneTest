@@ -1,4 +1,11 @@
-import { CircleAlert, CircleCheck, Clock3, RefreshCw, ShieldAlert } from "lucide-react";
+import {
+  ChevronDown,
+  CircleAlert,
+  CircleCheck,
+  Clock3,
+  RefreshCw,
+  ShieldAlert,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { fetchIncidentTimeline, type IncidentTimeline as TimelineData } from "../../state/api";
 
@@ -18,6 +25,10 @@ export function IncidentTimeline({ sessionId }: { sessionId: string }) {
   const [timeline, setTimeline] = useState<TimelineData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<
+    "ALL" | TimelineData["incidents"][number]["category"]
+  >("ALL");
+  const [expandedIncidentId, setExpandedIncidentId] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -37,6 +48,13 @@ export function IncidentTimeline({ sessionId }: { sessionId: string }) {
   const recoveriesByIncident = useMemo(
     () => new Map((timeline?.recoveries ?? []).map((recovery) => [recovery.incidentId, recovery])),
     [timeline],
+  );
+  const filteredIncidents = useMemo(
+    () =>
+      (timeline?.incidents ?? []).filter(
+        (incident) => categoryFilter === "ALL" || incident.category === categoryFilter,
+      ),
+    [categoryFilter, timeline],
   );
 
   return (
@@ -75,9 +93,38 @@ export function IncidentTimeline({ sessionId }: { sessionId: string }) {
         </div>
       )}
       {!loading && !error && timeline && timeline.incidents.length > 0 && (
+        <>
+          <div className="incident-timeline-filters">
+            <label>
+              <span>故障类别</span>
+              <select
+                aria-label="故障类别"
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value as typeof categoryFilter)}
+              >
+                <option value="ALL">全部故障</option>
+                {Object.entries(categoryLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="incident-timeline-count">{filteredIncidents.length} 条记录</span>
+          </div>
+          {filteredIncidents.length === 0 && (
+            <div className="timeline-empty">
+              <CircleCheck size={17} />
+              <span>没有符合筛选条件的故障。</span>
+            </div>
+          )}
+        </>
+      )}
+      {!loading && !error && timeline && filteredIncidents.length > 0 && (
         <div className="incident-timeline-list">
-          {timeline.incidents.map((incident) => {
+          {filteredIncidents.map((incident) => {
             const recovery = recoveriesByIncident.get(incident.incidentId);
+            const expanded = expandedIncidentId === incident.incidentId;
             return (
               <article className="incident-timeline-item" key={incident.incidentId}>
                 <span className="incident-timeline-marker">
@@ -98,6 +145,28 @@ export function IncidentTimeline({ sessionId }: { sessionId: string }) {
                       incident.details.connectionState ??
                       "检测到运行时故障"}
                   </p>
+                  <button
+                    className="incident-detail-toggle"
+                    aria-label={`${expanded ? "收起" : "展开"}故障详情 ${incident.incidentId}`}
+                    aria-expanded={expanded}
+                    onClick={() => setExpandedIncidentId(expanded ? null : incident.incidentId)}
+                  >
+                    <ChevronDown size={14} />
+                    {expanded ? "收起详情" : "查看详情"}
+                  </button>
+                  {expanded && (
+                    <dl className="incident-detail-grid">
+                      {incident.evidenceRef && (
+                        <>
+                          <dt>证据引用</dt>
+                          <dd>{incident.evidenceRef}</dd>
+                        </>
+                      )}
+                      {Object.entries(incident.details).map(([key, value]) => (
+                        <ReactDetail key={key} label={key} value={value} />
+                      ))}
+                    </dl>
+                  )}
                   {recovery && (
                     <div className="incident-recovery-row">
                       <span
@@ -122,6 +191,15 @@ export function IncidentTimeline({ sessionId }: { sessionId: string }) {
         </div>
       )}
     </section>
+  );
+}
+
+function ReactDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd>{`${label}：${value}`}</dd>
+    </>
   );
 }
 

@@ -945,6 +945,33 @@ main {
   display: grid;
   padding: 4px 0 2px;
 }
+.incident-timeline-filters {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 2px 0 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ebe6dc;
+}
+.incident-timeline-filters label {
+  display: grid;
+  gap: 5px;
+  color: #697877;
+  font-size: 11px;
+}
+.incident-timeline-filters select {
+  min-height: 32px;
+  padding: 0 28px 0 9px;
+  border: 1px solid #cfc8bc;
+  border-radius: 3px;
+  background: #fffdf8;
+  color: #28383a;
+}
+.incident-timeline-count {
+  margin-left: auto;
+  color: #899392;
+  font-size: 12px;
+}
 .incident-timeline-item {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr);
@@ -1018,6 +1045,41 @@ main {
 }
 .incident-recovery-error {
   color: #a13b32;
+  overflow-wrap: anywhere;
+}
+.incident-detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid #ded8ce;
+  border-radius: 3px;
+  background: transparent;
+  color: #697877;
+  font-size: 11px;
+  cursor: pointer;
+}
+.incident-detail-toggle:hover {
+  border-color: #9ca9a5;
+  color: #28383a;
+}
+.incident-detail-grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 12px;
+  margin: 9px 0 0;
+  padding: 9px 10px;
+  border-left: 2px solid #ded8ce;
+  background: #faf7f1;
+  font-size: 11px;
+}
+.incident-detail-grid dt {
+  color: #899392;
+}
+.incident-detail-grid dd {
+  margin: 0;
+  color: #4b5b5d;
   overflow-wrap: anywhere;
 }
 .session-preview-controls {
