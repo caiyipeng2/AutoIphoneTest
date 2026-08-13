@@ -4,6 +4,7 @@ import type { ArtifactRouteService } from "./artifacts.js";
 import type { DeploymentRouteService } from "./deployments.js";
 import type { ViewProvider } from "@test-center/video";
 import type { SessionRouteService } from "./sessions.js";
+import type { IncidentRouteService } from "./incidents.js";
 
 export interface ServerSession {
   readonly csrfToken: string;
@@ -26,4 +27,5 @@ export interface ServerContext {
   readonly deployments?: DeploymentRouteService;
   readonly views?: ReadonlyMap<string, ViewProvider>;
   readonly sessionService?: SessionRouteService;
+  readonly incidentService?: IncidentRouteService;
 }

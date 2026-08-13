@@ -188,6 +188,17 @@ export class IncidentRepository {
     return rows.map((row) => this.toRecovery(row));
   }
 
+  public listRecoveries(runId: string): readonly RecoveryAttempt[] {
+    const rows = this.database
+      .prepare(
+        `SELECT * FROM recovery_attempts
+         WHERE run_id = ?
+         ORDER BY started_at ASC, id ASC`,
+      )
+      .all(runId) as readonly RecoveryRow[];
+    return rows.map((row) => this.toRecovery(row));
+  }
+
   public getLatestRecoveryForIncident(incidentId: string): RecoveryAttempt | undefined {
     const row = this.database
       .prepare(

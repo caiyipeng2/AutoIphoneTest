@@ -329,3 +329,18 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 | ESLint、Prettier、diff check | 待最终验证              |
 
 当前边界：已接入动作期间明确 Appium 请求故障的 typed incident 回写；尚未实现真实设备上的长时间网络抖动压测、策略配置化和控制台故障时间线。
+
+## M9 Task 17：incident/recovery 时间线只读 API
+
+- 新增受 bootstrap session 保护的 `GET /api/sessions/:id/incidents`，返回 run 对应的 incidents 与 recovery attempts。
+- `IncidentRepository` 新增按 run 查询全部 recovery attempts 的只读方法；incident/recovery 数据保持原有排序和 typed schema 校验。
+- server runtime 将只读 timeline service 接到实际 SQLite repository；无服务返回 503，不存在的 run 返回 404，未认证返回 401。
+- API 只提供查询，不新增恢复、重试或动作副作用，为后续控制台故障时间线提供稳定数据契约。
+
+| 检查                                      | 结果           |
+| ----------------------------------------- | -------------- |
+| incident route / repository focused tests | 2 个文件、5 个测试通过 |
+| TypeScript project build                  | 通过           |
+| ESLint、Prettier、diff check              | 通过           |
+
+当前边界：已提供 incident/recovery 查询接口；尚未实现控制台时间线 UI、分页/筛选和恢复操作入口。

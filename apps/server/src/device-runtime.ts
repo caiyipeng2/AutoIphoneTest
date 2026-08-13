@@ -62,6 +62,7 @@ import {
   TextFocusBarrier,
   type AppiumActionFaultEvent,
 } from "@test-center/sessions";
+import type { IncidentRouteService } from "./routes/incidents.js";
 import { DeviceWorker } from "@test-center/sessions";
 import {
   AppiumService,
@@ -91,6 +92,7 @@ export interface RuntimeDeviceRegistry {
   readonly faultMonitor: DeviceConnectionFaultMonitor;
   readonly logcatFaultMonitor: LogcatFaultMonitor;
   readonly runtimeFaultMonitor: RuntimeFaultMonitor;
+  readonly incidentService: IncidentRouteService;
   readonly close: () => Promise<void>;
 }
 
@@ -150,6 +152,18 @@ export async function createRuntimeDeviceRegistry(
       },
     }),
   );
+  const incidentRepository = new IncidentRepository(database);
+  const incidentService: IncidentRouteService = {
+    getTimeline: (runId) => {
+      const session = sessionService.get(runId);
+      if (session === undefined) return undefined;
+      return {
+        runId,
+        incidents: incidentRepository.list(runId),
+        recoveries: incidentRepository.listRecoveries(runId),
+      };
+    },
+  };
   const faultMonitor = new DeviceConnectionFaultMonitor({
     subscribe: (listener) =>
       registry.subscribe((event) => {
@@ -191,6 +205,7 @@ export async function createRuntimeDeviceRegistry(
     faultMonitor,
     logcatFaultMonitor,
     runtimeFaultMonitor,
+    incidentService,
     close: async () => {
       await workerCoordinator.stopAll().catch(() => undefined);
       database.close();
