@@ -2,7 +2,12 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { AndroidPackageNameSchema } from "@test-center/contracts/artifact";
-import type { ActionPayload, ActionView } from "@test-center/sessions";
+import {
+  parseActionCommand,
+  type ActionCommand,
+  type ActionPayload,
+  type ActionView,
+} from "@test-center/sessions";
 import {
   DeviceSerialSchema,
   parseDeviceSerial,
@@ -88,6 +93,19 @@ const ActionSubmitSchema = z
         sourceFrameId: z.string().trim().min(1).max(128).optional(),
       })
       .strict(),
+    z
+      .object({
+        clientRequestId: z.string().trim().min(1).max(128),
+        type: z.enum(["longPress", "drag", "text", "back", "activate", "terminate", "restart"]),
+        command: z.unknown(),
+        sourceMetricsEpoch: z.number().int().nonnegative(),
+        sourceFrameId: z.string().trim().min(1).max(128).optional(),
+      })
+      .strict()
+      .transform((value) => ({
+        ...value,
+        command: parseActionCommand(value.command),
+      })),
   ])
   .transform((value) => value as SessionActionInput);
 
@@ -134,8 +152,9 @@ export interface SessionPreflightProbe {
 
 export interface SessionActionInput {
   readonly clientRequestId: string;
-  readonly type: "tap" | "swipe";
-  readonly payload: ActionPayload;
+  readonly type: ActionCommand["type"];
+  readonly payload?: ActionPayload;
+  readonly command?: ActionCommand;
   readonly sourceMetricsEpoch: number;
   readonly sourceFrameId?: string;
 }

@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import type Database from "better-sqlite3";
 import type { DeviceSerial } from "@test-center/contracts/device";
+import { parseActionCommand, type ActionCommand } from "./action-command.js";
 
-export type ActionType = "tap" | "swipe";
+export type ActionType = ActionCommand["type"];
 
 export interface TapActionPayload {
   readonly kind: "tap";
@@ -23,7 +24,8 @@ export interface CreateActionInput {
   readonly runId: string;
   readonly clientRequestId: string;
   readonly type: ActionType;
-  readonly payload: ActionPayload;
+  readonly payload?: ActionPayload;
+  readonly command?: ActionCommand;
   readonly sourceMetricsEpoch: number;
   readonly sourceFrameId?: string;
 }
@@ -39,7 +41,8 @@ export interface ActionView {
   readonly clientRequestId: string;
   readonly actionSeq: number;
   readonly type: ActionType;
-  readonly payload: ActionPayload;
+  readonly payload?: ActionPayload;
+  readonly command?: ActionCommand;
   readonly sourceMetricsEpoch: number;
   readonly sourceFrameId?: string;
   readonly state:
@@ -57,8 +60,9 @@ interface ActionRow {
   readonly run_id: string;
   readonly client_request_id: string;
   readonly action_seq: number;
-  readonly action_type: ActionType;
+  readonly action_type: "tap" | "swipe";
   readonly payload_json: string;
+  readonly command_json: string | null;
   readonly state: ActionView["state"];
   readonly metrics_epoch: number;
 }
@@ -75,20 +79,21 @@ export class RunActionRepository {
 
   public create(input: CreateActionInput): CreateActionResult {
     validateCreateAction(input);
+    const command = normalizeCommand(input);
     const payloadJson = canonicalJson({
-      payload: input.payload,
+      payload: input.payload ?? null,
       sourceFrameId: input.sourceFrameId ?? null,
     });
     const transaction = this.database.transaction(() => {
       const existing = this.database
         .prepare(
-          `SELECT id, run_id, client_request_id, action_seq, action_type, payload_json, state, metrics_epoch
+          `SELECT id, run_id, client_request_id, action_seq, action_type, payload_json, command_json, state, metrics_epoch
            FROM actions WHERE run_id = ? AND client_request_id = ?`,
         )
         .get(input.runId, input.clientRequestId) as ActionRow | undefined;
       if (existing !== undefined) {
         if (
-          existing.action_type !== input.type ||
+          existing.action_type !== legacyActionType(command) ||
           existing.payload_json !== payloadJson ||
           existing.metrics_epoch !== input.sourceMetricsEpoch
         ) {
@@ -129,16 +134,17 @@ export class RunActionRepository {
       this.database
         .prepare(
           `INSERT INTO actions
-           (id, run_id, action_seq, client_request_id, action_type, payload_json, state, metrics_epoch, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)`,
+           (id, run_id, action_seq, client_request_id, action_type, payload_json, command_json, state, metrics_epoch, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)`,
         )
         .run(
           actionId,
           input.runId,
           sequence.action_seq + 1,
           input.clientRequestId,
-          input.type,
+          legacyActionType(command),
           payloadJson,
+          JSON.stringify(command),
           input.sourceMetricsEpoch,
           now,
           now,
@@ -178,7 +184,7 @@ export class RunActionRepository {
   public get(actionId: string): ActionView | undefined {
     const row = this.database
       .prepare(
-        `SELECT id, run_id, client_request_id, action_seq, action_type, payload_json, state, metrics_epoch
+        `SELECT id, run_id, client_request_id, action_seq, action_type, payload_json, command_json, state, metrics_epoch
          FROM actions WHERE id = ?`,
       )
       .get(actionId) as ActionRow | undefined;
@@ -188,15 +194,19 @@ export class RunActionRepository {
   private readAction(actionId: string): ActionView {
     const row = this.database
       .prepare(
-        `SELECT id, run_id, client_request_id, action_seq, action_type, payload_json, state, metrics_epoch
+        `SELECT id, run_id, client_request_id, action_seq, action_type, payload_json, command_json, state, metrics_epoch
          FROM actions WHERE id = ?`,
       )
       .get(actionId) as ActionRow | undefined;
     if (row === undefined) throw new Error("Action could not be read back.");
     const envelope = JSON.parse(row.payload_json) as {
-      payload: ActionPayload;
+      payload: ActionPayload | null;
       sourceFrameId: string | null;
     };
+    const command =
+      row.command_json === null
+        ? legacyCommand(row.action_type, envelope.payload)
+        : parseActionCommand(JSON.parse(row.command_json));
     const targets = this.database
       .prepare("SELECT serial, state FROM action_targets WHERE action_id = ? ORDER BY serial ASC")
       .all(actionId) as readonly TargetRow[];
@@ -205,8 +215,9 @@ export class RunActionRepository {
       runId: row.run_id,
       clientRequestId: row.client_request_id,
       actionSeq: row.action_seq,
-      type: row.action_type,
-      payload: envelope.payload,
+      type: command.type,
+      command,
+      ...(envelope.payload === null ? {} : { payload: envelope.payload }),
       sourceMetricsEpoch: row.metrics_epoch,
       ...(envelope.sourceFrameId === null ? {} : { sourceFrameId: envelope.sourceFrameId }),
       state: row.state,
@@ -226,13 +237,14 @@ function validateCreateAction(input: CreateActionInput): void {
   if (!Number.isSafeInteger(input.sourceMetricsEpoch) || input.sourceMetricsEpoch < 0) {
     throw new TypeError("Action sourceMetricsEpoch must be a non-negative integer.");
   }
-  if (input.type === "tap") {
-    if (input.payload.kind !== "tap")
+  const command = normalizeCommand(input);
+  if (command.type === "tap") {
+    if (input.payload?.kind !== "tap")
       throw new TypeError("Tap action payload does not match its type.");
     assertCoordinate(input.payload.x, "tap.x");
     assertCoordinate(input.payload.y, "tap.y");
-  } else {
-    if (input.payload.kind !== "swipe")
+  } else if (command.type === "swipe" || command.type === "drag") {
+    if (input.payload?.kind !== "swipe")
       throw new TypeError("Swipe action payload does not match its type.");
     if (input.payload.path.length < 2 || input.payload.path.length > 64)
       throw new TypeError("Swipe path must contain 2-64 points.");
@@ -248,12 +260,43 @@ function validateCreateAction(input: CreateActionInput): void {
       throw new TypeError("Swipe durationMs must be an integer from 1 to 60000.");
     }
   }
+  if (command.type !== "tap" && command.type !== "swipe" && input.payload !== undefined) {
+    throw new TypeError("Lifecycle action must not contain a payload.");
+  }
   if (
     input.sourceFrameId !== undefined &&
     (!input.sourceFrameId.trim() || input.sourceFrameId.length > 128)
   ) {
     throw new TypeError("Action sourceFrameId is invalid.");
   }
+}
+
+function normalizeCommand(input: CreateActionInput): ActionCommand {
+  const command =
+    input.command ??
+    (input.payload === undefined
+      ? parseActionCommand({ type: input.type })
+      : input.payload.kind === "tap"
+        ? parseActionCommand({ type: "tap", x: input.payload.x, y: input.payload.y })
+        : parseActionCommand({
+            type: "swipe",
+            path: input.payload.path,
+            durationMs: input.payload.durationMs,
+          }));
+  if (command.type !== input.type)
+    throw new TypeError("Action command type does not match action type.");
+  return command;
+}
+
+function legacyActionType(command: ActionCommand): "tap" | "swipe" {
+  return command.type === "swipe" ? "swipe" : "tap";
+}
+
+function legacyCommand(_type: "tap" | "swipe", payload: ActionPayload | null): ActionCommand {
+  if (payload === null) throw new Error("Legacy action payload is missing.");
+  return payload.kind === "tap"
+    ? parseActionCommand({ type: "tap", x: payload.x, y: payload.y })
+    : parseActionCommand({ type: "swipe", path: payload.path, durationMs: payload.durationMs });
 }
 
 function assertCoordinate(value: number, field: string): void {

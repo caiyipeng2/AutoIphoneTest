@@ -15,6 +15,7 @@ import {
   DEVICES_MIGRATION,
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
+  ACTION_COMMANDS_MIGRATION,
 } from "@test-center/database";
 
 import { RuntimeSessionRouteService } from "./session-runtime.js";
@@ -156,6 +157,56 @@ describe("RuntimeSessionRouteService", () => {
     expect(result.action.state).toBe("SUCCEEDED");
   });
 
+  it("passes a lifecycle command from the session service into persistence and dispatch", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const repository = new RunActionRepository(database);
+    const dispatcher = {
+      dispatch: vi.fn(async () => {
+        throw new Error("stop-after-persistence");
+      }),
+    };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      repository,
+      dispatcher,
+    );
+    const created = await service.create({
+      clientRequestId: "request-command-session",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+
+    await expect(
+      service.submitAction(created.session.id, "session-1", {
+        clientRequestId: "action-command-session",
+        type: "restart",
+        command: { type: "restart" },
+        sourceMetricsEpoch: 1,
+      }),
+    ).rejects.toThrow("stop-after-persistence");
+    expect(dispatcher.dispatch).toHaveBeenCalledTimes(1);
+    const action = repository.get(
+      (
+        database
+          .prepare("SELECT id FROM actions WHERE client_request_id = ?")
+          .get("action-command-session") as { id: string }
+      ).id,
+    );
+    expect(action).toMatchObject({ type: "restart", command: { type: "restart" } });
+  });
+
   it("creates a variable-size session with a leader and follower members", async () => {
     const database = await createDatabase();
     const serials = [parseDeviceSerial("R5CX211TXNT"), parseDeviceSerial("R5CRC342PRF")];
@@ -291,6 +342,7 @@ async function createDatabase(): Promise<Database.Database> {
     DEVICES_MIGRATION,
     RUN_ACTIONS_MIGRATION,
     SESSION_API_MIGRATION,
+    ACTION_COMMANDS_MIGRATION,
   ]);
   return database;
 }

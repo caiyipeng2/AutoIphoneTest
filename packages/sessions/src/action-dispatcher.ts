@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import type { ActionCommand } from "./action-command.js";
 import type { ActionPayload, ActionView, RunActionRepository } from "./run-repository.js";
 import type { ActionOutbox } from "./action-outbox.js";
 
@@ -7,7 +8,8 @@ export interface ActionDeviceExecutor {
   execute(input: {
     readonly serial: string;
     readonly packageName: string;
-    readonly payload: ActionPayload;
+    readonly payload?: ActionPayload;
+    readonly command?: ActionCommand;
   }): Promise<unknown>;
 }
 
@@ -38,11 +40,13 @@ export class ActionDispatcher {
     await Promise.all(
       queued.targets.map(async (target) => {
         try {
-          const result = await this.executorFactory(target.serial).execute({
+          const executorInput = {
             serial: target.serial,
             packageName: input.packageName,
-            payload: queued.payload,
-          });
+            ...(queued.command === undefined ? {} : { command: queued.command }),
+            ...(queued.payload === undefined ? {} : { payload: queued.payload }),
+          };
+          const result = await this.executorFactory(target.serial).execute(executorInput);
           this.outbox.completeTarget(
             input.actionId,
             lease.leaseToken,

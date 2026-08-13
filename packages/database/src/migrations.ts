@@ -374,6 +374,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_test_runs_client_request
 `.trim(),
 };
 
+export const ACTION_COMMANDS_MIGRATION: Migration = {
+  id: "0010_action_commands",
+  sql: `ALTER TABLE actions ADD COLUMN command_json TEXT;`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");

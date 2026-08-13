@@ -1,11 +1,12 @@
 import Database from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   configureDatabase,
   DEVICES_MIGRATION,
   FOUNDATION_MIGRATION,
   migrate,
+  ACTION_COMMANDS_MIGRATION,
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
 } from "@test-center/database";
@@ -28,6 +29,7 @@ function createHarness() {
     DEVICES_MIGRATION,
     RUN_ACTIONS_MIGRATION,
     SESSION_API_MIGRATION,
+    ACTION_COMMANDS_MIGRATION,
   ]);
   database
     .prepare(
@@ -135,6 +137,24 @@ describe("RunActionRepository", () => {
         sourceMetricsEpoch: 4,
       }),
     ).toThrow("in flight");
+  });
+
+  it("persists a lifecycle command without requiring a pointer payload", () => {
+    const { repository } = createHarness();
+
+    const result = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-restart",
+      type: "restart",
+      command: { type: "restart" },
+      sourceMetricsEpoch: 4,
+    });
+
+    expect(result.action).toMatchObject({
+      type: "restart",
+      command: { type: "restart" },
+      targets: [{ serial: "leader-a", state: "QUEUED" }],
+    });
   });
 });
 
@@ -262,6 +282,32 @@ describe("ActionOutbox", () => {
         ok: false,
         error: { name: "Error", message: "device action failed" },
       }),
+    });
+  });
+
+  it("passes the persisted lifecycle command to each device executor", async () => {
+    const { repository, outbox } = createHarness();
+    const created = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-dispatch-restart",
+      type: "restart",
+      command: { type: "restart" },
+      sourceMetricsEpoch: 4,
+    });
+    const execute = vi.fn(async () => ({ restarted: true }));
+    const dispatcher = new ActionDispatcher(
+      repository,
+      outbox,
+      () => ({ execute }),
+      "worker-command",
+    );
+
+    await dispatcher.dispatch({ actionId: created.action.id, packageName: "com.example.game" });
+
+    expect(execute).toHaveBeenCalledWith({
+      serial: "leader-a",
+      packageName: "com.example.game",
+      command: { type: "restart" },
     });
   });
 

@@ -25,9 +25,24 @@
 | `git diff --check`                   | 通过                       |
 | Android 真机 long press/drag         | Appium `/actions` HTTP 200 |
 
+## M9 Task 2：命令持久化与 dispatcher 接入
+
+- `actions.command_json` 通过 `0010_action_commands` 增量迁移保存规范化 `ActionCommand`；旧 `tap/swipe` 行仍可回读。
+- session action schema 现在允许 `longPress`、`drag`、`text`、`back`、`activate`、`terminate`、`restart` 命令进入 repository/outbox/dispatcher。
+- dispatcher 为每个目标传递同一条规范化命令；生命周期命令不伪造 pointer payload。
+
+| 检查                                   | 结果          |
+| -------------------------------------- | ------------- |
+| repository / outbox 命令 focused tests | 14 个测试通过 |
+| session runtime 命令闭环测试           | 7 个测试通过  |
+| 数据库迁移测试                         | 4 个测试通过  |
+| TypeScript project build               | 通过          |
+
+当前边界：bridge arm/ACK、文本可信焦点屏障、故障 incident/policy 和控制台命令控件仍未接入；本次只完成 API 到持久化和 dispatcher 的命令传递闭环。
+
 ## 当前边界
 
-本切片尚未把新动作接入 SQLite 持久化、DeviceWorker/Appium dispatch、bridge arm/ACK、失败策略或控制台 UI。现有 session API 仍只接受 tap/swipe；本次执行层增量只提供 long press/drag 的 W3C pointer 映射函数，后续切片将按 M9 计划逐步扩展。
+本 Task 1 切片未接入 bridge arm/ACK、失败策略或控制台 UI。命令持久化与 dispatcher 传递已在下方 Task 2 切片完成；真实 bridge ACK 和故障策略仍按 M9 计划逐步扩展。
 
 ## 真机验收
 

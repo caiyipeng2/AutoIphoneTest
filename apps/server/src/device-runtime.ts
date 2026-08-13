@@ -27,6 +27,7 @@ import {
   INSTALL_SETS_MIGRATION,
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
+  ACTION_COMMANDS_MIGRATION,
   UID_BRIDGE_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
@@ -95,6 +96,7 @@ export async function createRuntimeDeviceRegistry(
     UID_BRIDGE_MIGRATION,
     RUN_ACTIONS_MIGRATION,
     SESSION_API_MIGRATION,
+    ACTION_COMMANDS_MIGRATION,
   ]);
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??

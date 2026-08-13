@@ -7,6 +7,7 @@ import {
   FOUNDATION_MIGRATION,
   migrate,
   RUN_ACTIONS_MIGRATION,
+  ACTION_COMMANDS_MIGRATION,
 } from "./migrations.js";
 
 const databases: Database.Database[] = [];
@@ -18,7 +19,12 @@ afterEach(() => {
 function openRunsDatabase(): Database.Database {
   const database = new Database(":memory:");
   configureDatabase(database);
-  migrate(database, [FOUNDATION_MIGRATION, DEVICES_MIGRATION, RUN_ACTIONS_MIGRATION]);
+  migrate(database, [
+    FOUNDATION_MIGRATION,
+    DEVICES_MIGRATION,
+    RUN_ACTIONS_MIGRATION,
+    ACTION_COMMANDS_MIGRATION,
+  ]);
   databases.push(database);
   return database;
 }
@@ -30,10 +36,20 @@ describe("M6 runs/actions migration", () => {
     databases.push(database);
 
     expect(
-      migrate(database, [FOUNDATION_MIGRATION, DEVICES_MIGRATION, RUN_ACTIONS_MIGRATION]).applied,
-    ).toEqual(["0001_foundation", "0002_devices", "0008_runs_actions"]);
+      migrate(database, [
+        FOUNDATION_MIGRATION,
+        DEVICES_MIGRATION,
+        RUN_ACTIONS_MIGRATION,
+        ACTION_COMMANDS_MIGRATION,
+      ]).applied,
+    ).toEqual(["0001_foundation", "0002_devices", "0008_runs_actions", "0010_action_commands"]);
     expect(
-      migrate(database, [FOUNDATION_MIGRATION, DEVICES_MIGRATION, RUN_ACTIONS_MIGRATION]).applied,
+      migrate(database, [
+        FOUNDATION_MIGRATION,
+        DEVICES_MIGRATION,
+        RUN_ACTIONS_MIGRATION,
+        ACTION_COMMANDS_MIGRATION,
+      ]).applied,
     ).toEqual([]);
 
     const tables = database

@@ -36,6 +36,7 @@ const action: ActionView = {
   clientRequestId: "action-1",
   actionSeq: 1,
   type: "tap",
+  command: { type: "tap", x: 0.5, y: 0.5 },
   payload: { kind: "tap", x: 0.5, y: 0.5 },
   sourceMetricsEpoch: 1,
   state: "QUEUED",
