@@ -99,6 +99,21 @@
 
 当前边界：文本明文默认脱敏、故障 incident/policy、控制台动作/故障 UI 和 M10 默认 HTML/ZIP 报告仍未实现；生产游戏包也仍需启用 Unity QA Bridge 后才能进行真实文本 QA_ACK 验收。
 
+## M9 Task 7：默认文本脱敏基础层
+
+- 新增 `TextRedactor`，默认只输出 `masked=true`、Unicode code point 长度、类别摘要和 run-salted SHA-256。
+- `redact` 同时替换日志中的精确明文和 JSON 字符串形式，避免诊断文本直接泄漏测试输入。
+- 空文本和过短 run salt 被拒绝；该层不改变现有动作持久化 schema，后续 evidence/report 发布器将复用同一契约。
+
+| 检查 | 结果 |
+| --- | --- |
+| text redactor focused tests | 3 个测试通过 |
+| 全量自动化测试 | 79 个文件、332 个测试通过 |
+| TypeScript project build | 通过 |
+| 本切片 ESLint、Prettier、diff check | 通过 |
+
+当前边界：`TextRedactor` 已完成安全输出基础契约，但尚未接入 M10 evidence/report 发布流水线；故障 incident/policy、控制台动作/故障 UI 和生产包 QA_ACK 真机验收仍待后续切片。
+
 ## 当前边界
 
 本 Task 1 切片未接入 bridge arm/ACK、失败策略或控制台 UI。命令持久化与 dispatcher 传递已在下方 Task 2 切片完成；真实 bridge ACK 和故障策略仍按 M9 计划逐步扩展。
