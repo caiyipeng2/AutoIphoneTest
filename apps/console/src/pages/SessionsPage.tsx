@@ -12,6 +12,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { PageFrame } from "../components/PageFrame";
 import { VideoViewport } from "../features/sessions/VideoViewport";
+import { IncidentTimeline } from "../features/sessions/IncidentTimeline";
 import {
   createSession,
   fetchDevices,
@@ -297,6 +298,8 @@ export function SessionsPage() {
       </section>
 
       {activeSerial !== null && <VideoViewport serial={activeSerial} />}
+
+      {session && <IncidentTimeline sessionId={session.id} />}
 
       <div className="panel">
         <div className="panel-heading">

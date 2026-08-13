@@ -55,6 +55,51 @@ export interface SessionMutationResponse {
   session: SessionView;
 }
 
+export type IncidentCategory =
+  | "ADB_DISCONNECTED"
+  | "APPIUM_SESSION_LOST"
+  | "APP_CRASH_OR_ANR"
+  | "WRONG_FOREGROUND"
+  | "BRIDGE_TIMEOUT"
+  | "BRIDGE_STATE_MISMATCH"
+  | "TEXT_FOCUS_MISMATCH"
+  | "METRICS_CHANGED"
+  | "LOW_DISK";
+
+export interface IncidentRecord {
+  schemaVersion: 1;
+  incidentId: string;
+  runId: string;
+  serial?: string;
+  category: IncidentCategory;
+  generation?: number;
+  detectedAtRealtimeMs: number;
+  detectedAt: string;
+  source: string;
+  evidenceRef?: string;
+  details: Record<string, string>;
+}
+
+export interface RecoveryRecord {
+  id: string;
+  incidentId: string;
+  runId: string;
+  action: "PAUSE_ALL" | "QUARANTINE_DEVICE";
+  targetSerial?: string;
+  reason: string;
+  deadlineRealtimeMs: number;
+  status: "STARTED" | "SUCCEEDED" | "FAILED";
+  startedAt: string;
+  completedAt?: string;
+  errorMessage?: string;
+}
+
+export interface IncidentTimeline {
+  runId: string;
+  incidents: IncidentRecord[];
+  recoveries: RecoveryRecord[];
+}
+
 export type BridgeHealthStatus = "READY" | "DEGRADED" | "UNAVAILABLE";
 export interface UidSnapshot {
   installation: {
@@ -129,6 +174,21 @@ export async function fetchSession(id: string, signal?: AbortSignal): Promise<Se
     throw new Error(body.error ?? `session:${response.status}`);
   }
   return body.session;
+}
+
+export async function fetchIncidentTimeline(
+  id: string,
+  signal?: AbortSignal,
+): Promise<IncidentTimeline> {
+  const response = await fetch(
+    `/api/sessions/${encodeURIComponent(id)}/incidents`,
+    signal ? { signal } : undefined,
+  );
+  const body = (await response.json()) as { timeline?: IncidentTimeline; error?: string };
+  if (!response.ok || body.timeline === undefined) {
+    throw new Error(body.error ?? `incidents:${response.status}`);
+  }
+  return body.timeline;
 }
 
 export async function preflightSession(id: string): Promise<SessionView> {

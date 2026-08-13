@@ -471,6 +471,10 @@ main {
   background: #fae4d7;
   color: #974d31;
 }
+.chip-danger {
+  background: #f6d9d4;
+  color: #a13b32;
+}
 .data-row {
   display: flex;
   align-items: center;
@@ -924,6 +928,97 @@ main {
 }
 .session-preview-panel {
   margin-bottom: 18px;
+}
+.session-timeline-panel {
+  margin-bottom: 18px;
+}
+.timeline-empty {
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #788486;
+  font-size: 13px;
+}
+.incident-timeline-list {
+  display: grid;
+  padding: 4px 0 2px;
+}
+.incident-timeline-item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  position: relative;
+  padding: 12px 0;
+}
+.incident-timeline-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: 38px;
+  bottom: -2px;
+  width: 1px;
+  background: #ded8ce;
+}
+.incident-timeline-marker {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: #974d31;
+  background: #fae4d7;
+  border: 1px solid #e6bfae;
+  border-radius: 50%;
+  z-index: 1;
+}
+.incident-timeline-content {
+  min-width: 0;
+}
+.incident-timeline-head,
+.incident-timeline-meta,
+.incident-recovery-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.incident-timeline-head {
+  justify-content: space-between;
+  gap: 16px;
+}
+.incident-timeline-head strong {
+  color: #28383a;
+  font-size: 14px;
+}
+.incident-timeline-head time {
+  color: #899392;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.incident-timeline-meta {
+  margin-top: 5px;
+  color: #899392;
+  font-size: 12px;
+}
+.incident-timeline-meta span + span::before {
+  content: "·";
+  margin-right: 10px;
+  color: #b9b2a8;
+}
+.incident-timeline-content > p {
+  margin: 7px 0 9px;
+  color: #697877;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.incident-recovery-row {
+  color: #697877;
+  font-size: 12px;
+}
+.incident-recovery-error {
+  color: #a13b32;
+  overflow-wrap: anywhere;
 }
 .session-preview-controls {
   display: flex;

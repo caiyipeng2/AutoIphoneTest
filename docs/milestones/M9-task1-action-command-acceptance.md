@@ -337,10 +337,25 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 - server runtime 将只读 timeline service 接到实际 SQLite repository；无服务返回 503，不存在的 run 返回 404，未认证返回 401。
 - API 只提供查询，不新增恢复、重试或动作副作用，为后续控制台故障时间线提供稳定数据契约。
 
-| 检查                                      | 结果           |
-| ----------------------------------------- | -------------- |
+| 检查                                      | 结果                   |
+| ----------------------------------------- | ---------------------- |
 | incident route / repository focused tests | 2 个文件、5 个测试通过 |
-| TypeScript project build                  | 通过           |
-| ESLint、Prettier、diff check              | 通过           |
+| TypeScript project build                  | 通过                   |
+| ESLint、Prettier、diff check              | 通过                   |
 
 当前边界：已提供 incident/recovery 查询接口；尚未实现控制台时间线 UI、分页/筛选和恢复操作入口。
+
+## M9 Task 18：控制台故障时间线只读视图
+
+- Sessions 页面新增只读故障时间线，按 incident 展示故障类别、设备串号、来源、代次、检测时间和详情。
+- 每条 incident 关联展示最新 recovery 状态：处理中、已处理或处理失败；失败原因保留可换行显示。
+- 时间线包含加载态、空态、错误态和刷新入口，刷新只重新读取 `/api/sessions/:id/incidents`，不触发任何恢复动作。
+- 使用现有深色运维工作台、Lucide 图标和紧凑响应式布局；移动宽度下时间、状态和长错误文本不会挤出容器。
+
+| 检查                         | 结果                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| TypeScript project build     | 通过                                                                    |
+| ESLint、Prettier、diff check | 通过                                                                    |
+| Sessions 页面自动化测试      | 受本机 React/ReactDOM 多副本 `Invalid hook call` 阻断，待依赖恢复后复验 |
+
+当前边界：已完成控制台只读故障时间线；尚未实现分页/筛选、故障详情抽屉和恢复操作入口。

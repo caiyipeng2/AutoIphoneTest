@@ -96,6 +96,11 @@ describe("SessionsPage", () => {
         return jsonResponse({ schemaVersion: 1, session: session("PREFLIGHT") });
       if (url.endsWith("/start"))
         return jsonResponse({ schemaVersion: 1, session: session("RUNNING") });
+      if (url.endsWith("/incidents"))
+        return jsonResponse({
+          schemaVersion: 1,
+          timeline: { runId: "run-2", incidents: [], recoveries: [] },
+        });
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
