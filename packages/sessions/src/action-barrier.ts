@@ -2,6 +2,7 @@ import type { ActionCommand } from "./action-command.js";
 
 export interface ActionBarrierRequest {
   readonly actionId: string;
+  readonly runId?: string;
   readonly serial: string;
   readonly command: ActionCommand;
   readonly metricsEpoch: number;
@@ -17,4 +18,4 @@ export interface ActionBarrier {
   arm(request: ActionBarrierRequest): Promise<ActionBarrierLease>;
 }
 
-export type ActionBarrierFactory = (serial: string) => ActionBarrier;
+export type ActionBarrierFactory = (serial: string, runId?: string) => ActionBarrier;

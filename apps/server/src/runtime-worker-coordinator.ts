@@ -1,16 +1,18 @@
 import type { DeviceSerial } from "@test-center/contracts/device";
 
 import type { DeviceWorker } from "@test-center/sessions";
+import type { ActionBarrier } from "@test-center/sessions";
 
 export interface RuntimeWorkerFactoryInput {
   readonly runId: string;
   readonly serial: DeviceSerial;
   readonly packageName: string;
+  readonly runNonceHash: string;
 }
 
 export type RuntimeWorkerFactory = (
   input: RuntimeWorkerFactoryInput,
-) => Pick<DeviceWorker, "start" | "stop">;
+) => Pick<DeviceWorker, "start" | "stop"> & Partial<Pick<DeviceWorker, "getActionBarrier">>;
 
 export class RuntimeWorkerCoordinator {
   private readonly runs = new Map<string, Map<DeviceSerial, RuntimeWorkerFactoryReturn>>();
@@ -21,6 +23,7 @@ export class RuntimeWorkerCoordinator {
     runId: string,
     serials: readonly DeviceSerial[],
     packageName: string,
+    runNonceHash: string,
   ): Promise<void> {
     if (this.runs.has(runId)) throw new Error(`Workers already exist for run '${runId}'.`);
     const workers = new Map<DeviceSerial, RuntimeWorkerFactoryReturn>();
@@ -28,7 +31,7 @@ export class RuntimeWorkerCoordinator {
     try {
       await Promise.all(
         serials.map(async (serial) => {
-          const worker = this.factory({ runId, serial, packageName });
+          const worker = this.factory({ runId, serial, packageName, runNonceHash });
           workers.set(serial, worker);
           await worker.start();
         }),
@@ -60,6 +63,10 @@ export class RuntimeWorkerCoordinator {
     return [...(this.runs.get(runId)?.keys() ?? [])];
   }
 
+  public getActionBarrier(runId: string, serial: DeviceSerial): ActionBarrier | undefined {
+    return this.runs.get(runId)?.get(serial)?.getActionBarrier?.();
+  }
+
   private async stopWorkers(workers: Map<DeviceSerial, RuntimeWorkerFactoryReturn>): Promise<void> {
     const results = await Promise.allSettled([...workers.values()].map((worker) => worker.stop()));
     const failure = results.find(
@@ -69,4 +76,5 @@ export class RuntimeWorkerCoordinator {
   }
 }
 
-type RuntimeWorkerFactoryReturn = Pick<DeviceWorker, "start" | "stop">;
+type RuntimeWorkerFactoryReturn = Pick<DeviceWorker, "start" | "stop"> &
+  Partial<Pick<DeviceWorker, "getActionBarrier">>;

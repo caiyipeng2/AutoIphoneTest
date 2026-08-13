@@ -32,6 +32,46 @@ afterEach(async () => {
 });
 
 describe("RuntimeSessionRouteService", () => {
+  it("passes the persisted run nonce hash to managed workers", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const workerCoordinator = {
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      undefined,
+      undefined,
+      workerCoordinator,
+    );
+    const created = await service.create({
+      clientRequestId: "request-worker-nonce",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    const stored = database
+      .prepare("SELECT run_nonce_hash FROM test_runs WHERE id = ?")
+      .get(created.session.id) as { run_nonce_hash: string };
+    expect(workerCoordinator.start).toHaveBeenCalledWith(
+      created.session.id,
+      [serial],
+      "com.example.game",
+      `sha256:${stored.run_nonce_hash}`,
+    );
+  });
+
   it("persists a leader run and deduplicates the same client request", async () => {
     const database = await createDatabase();
     const serial = parseDeviceSerial("R5CX211TXNT");
@@ -288,6 +328,7 @@ describe("RuntimeSessionRouteService", () => {
       created.session.id,
       [serial],
       "com.example.game",
+      expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
     );
   });
 

@@ -67,6 +67,22 @@
 
 当前边界：dispatcher runtime factory 尚未绑定真实 `BridgeClient + ArmController`，run nonce、metrics/view/focus 映射和真实 Unity bridge action 验收留在下一切片；本切片只闭合 worker 生命周期与资源清理。
 
+## M9 Task 5：runtime BridgeClient/ArmController 接入
+
+- `RuntimeWorkerCoordinator.start` 将数据库中的 run nonce 传递到每个 managed worker；session 不对外暴露 nonce。
+- runtime worker 使用独立的 ADB forward 创建 TCP `BridgeClient`，连接后执行时钟校准，并由 `ArmController` 生成带 run nonce、当前 view/focus/metrics 的 `QA_ARM`。
+- `ActionDispatcher` 通过 runId/serial 取得 READY worker 的真实 `ActionBarrier`，形成 `ARM -> Appium -> QA_ACK` 生产接线。
+- lifecycle 命令继续跳过 bridge arm；bridge session 连接失败、worker 停止和启动回滚沿用既有 forward/session 清理路径。
+
+| 检查 | 结果 |
+| --- | --- |
+| runtime bridge、coordinator、session focused tests | 34 个测试通过 |
+| TypeScript project build | 通过 |
+| Prettier 与 diff check | 通过 |
+| 已连接真机 Appium 前置检查 | 未通过：Appium 3.6.0 在驱动加载阶段就绪超时，设备 ADB 状态正常 |
+
+当前边界：生产游戏包是否包含 Unity QA Bridge 组件仍需用带 `UNITY_MULTI_DEVICE_QA` 的验收包确认；当前 `normalizedShape` 使用会话动作规范，需与游戏侧 `QaActionDescriptor` 约定一致后才能得到真实 QA_ACK。现有 `com.hg.idleweaponshoptycoon.android` 包未完成该 bridge 闭环验收。
+
 ## 当前边界
 
 本 Task 1 切片未接入 bridge arm/ACK、失败策略或控制台 UI。命令持久化与 dispatcher 传递已在下方 Task 2 切片完成；真实 bridge ACK 和故障策略仍按 M9 计划逐步扩展。

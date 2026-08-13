@@ -27,6 +27,7 @@ interface SessionRow {
   readonly membership_state: SessionView["leader"]["membershipState"];
   readonly epoch: number;
   readonly generation: number;
+  readonly run_nonce_hash: string;
 }
 
 interface SessionMemberRow {
@@ -131,6 +132,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
         current.id,
         current.devices.map((device) => device.serial),
         current.packageName,
+        this.readRunNonceHash(current.id),
       );
     }
     try {
@@ -168,6 +170,14 @@ export class RuntimeSessionRouteService implements SessionRouteService {
        WHERE r.client_request_id = ?`,
       )
       .get(clientRequestId) as SessionRow | undefined;
+  }
+
+  private readRunNonceHash(runId: string): string {
+    const row = this.database
+      .prepare("SELECT run_nonce_hash FROM test_runs WHERE id = ?")
+      .get(runId) as { run_nonce_hash: string } | undefined;
+    if (row === undefined) throw new Error("Run not found.");
+    return `sha256:${row.run_nonce_hash}`;
   }
 
   private readMemberSerials(runId: string): readonly string[] {

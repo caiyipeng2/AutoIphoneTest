@@ -8,6 +8,7 @@
   ],
   "dependencies": {
     "@test-center/appium": "0.0.0",
+    "@test-center/bridge": "0.0.0",
     "@test-center/contracts": "0.0.0",
     "@test-center/adb": "0.0.0",
     "@test-center/artifacts": "0.0.0",

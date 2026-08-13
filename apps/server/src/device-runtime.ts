@@ -2,6 +2,7 @@ import { win32 } from "node:path";
 import { join } from "node:path";
 
 import { AdbClient, LogcatStream } from "@test-center/adb";
+import { createRuntimeBridgeSession } from "./runtime-bridge.js";
 import {
   ArtifactMetadataParser,
   collectInstalledIdentity,
@@ -16,7 +17,7 @@ import {
   type ArtifactImportFileRequest,
   type ArtifactImportService,
 } from "@test-center/build-provider";
-import type { DeviceSerial } from "@test-center/contracts/device";
+import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/device";
 import type Database from "better-sqlite3";
 import {
   ARTIFACTS_MIGRATION,
@@ -122,7 +123,7 @@ export async function createRuntimeDeviceRegistry(
     registry,
     createConfiguredPreflightProbe(),
     actionRepository,
-    createConfiguredActionDispatcher(actionRepository, actionOutbox, registry),
+    createConfiguredActionDispatcher(actionRepository, actionOutbox, registry, workerCoordinator),
     workerCoordinator,
   );
   const deploymentService = new RuntimeDeploymentRouteService(
@@ -153,6 +154,7 @@ function createRuntimeWorkerCoordinator(
   registry: DeviceRegistry,
 ): RuntimeWorkerCoordinator {
   const ownerPid = process.pid;
+  const client = new AdbClient({ adbPath, cwd: projectRoot });
   const allocator = new PortAllocator({
     store: new JsonFilePortLeaseStore(join(paths.dataRoot, "port-leases.json")),
     ranges: {
@@ -177,7 +179,30 @@ function createRuntimeWorkerCoordinator(
     win32.join(projectRoot, "node_modules", "appium", "build", "lib", "main.js");
   const appiumHome =
     process.env.TEST_CENTER_APPIUM_HOME ?? win32.join(paths.dataRoot, "appium-home");
-  return new RuntimeWorkerCoordinator(({ runId, serial, packageName }) => {
+  const bridgeForwarder = {
+    add: async (serial: string, hostPort: number, devicePort: number) => {
+      assertAdbSuccess(
+        await client.execute({
+          kind: "forwardAdd",
+          serial: parseDeviceSerial(serial),
+          hostPort,
+          devicePort,
+        }),
+        "ADB bridge forward add",
+      );
+    },
+    remove: async (serial: string, hostPort: number) => {
+      assertAdbSuccess(
+        await client.execute({
+          kind: "forwardRemove",
+          serial: parseDeviceSerial(serial),
+          hostPort,
+        }),
+        "ADB bridge forward remove",
+      );
+    },
+  };
+  return new RuntimeWorkerCoordinator(({ runId, serial, packageName, runNonceHash }) => {
     const workerOwner = { ownerPid, ownerToken: `server-${String(ownerPid)}` };
     return new DeviceWorker({
       serial,
@@ -185,6 +210,16 @@ function createRuntimeWorkerCoordinator(
       owner: workerOwner,
       runId,
       resourceManager: resources,
+      bridgeForwarder,
+      bridgeSessionFactory: ({ hostPort, runNonceHash: workerNonce }) => {
+        if (workerNonce === undefined) throw new Error("Managed worker run nonce is required.");
+        const bridge = createRuntimeBridgeSession({
+          hostPort,
+          runNonceHash: workerNonce,
+        });
+        return bridge;
+      },
+      runNonceHash,
       allocator,
       identityProbe: async () => {
         const device = registry.get(serial);
@@ -226,6 +261,7 @@ function createConfiguredActionDispatcher(
   actionRepository: RunActionRepository,
   actionOutbox: ActionOutbox,
   registry: DeviceRegistry,
+  workerCoordinator: Pick<RuntimeWorkerCoordinator, "getActionBarrier">,
 ): ActionDispatcher | undefined {
   const baseUrl = process.env.TEST_CENTER_APPIUM_URL;
   if (baseUrl === undefined || baseUrl.trim() === "") return undefined;
@@ -255,6 +291,12 @@ function createConfiguredActionDispatcher(
       });
     },
     `server-action-dispatcher-${process.pid}`,
+    (serial, runId) => {
+      if (runId === undefined) throw new Error("Action run id is required for bridge dispatch.");
+      const barrier = workerCoordinator.getActionBarrier(runId, parseDeviceSerial(serial));
+      if (barrier === undefined) throw new Error(`Worker bridge is not ready: ${serial}.`);
+      return barrier;
+    },
   );
 }
 

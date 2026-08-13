@@ -8,6 +8,7 @@
   },
   "references": [
     { "path": "../../packages/appium" },
+    { "path": "../../packages/bridge" },
     { "path": "../../packages/adb" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/devices" },

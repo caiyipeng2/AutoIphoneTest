@@ -48,8 +48,9 @@ export class ActionDispatcher {
             command !== undefined &&
             actionCompletionPolicy(command).armBridge &&
             this.barrierFactory !== undefined
-              ? await this.barrierFactory(target.serial).arm({
+              ? await this.barrierFactory(target.serial, queued.runId).arm({
                   actionId: queued.id,
+                  runId: queued.runId,
                   serial: target.serial,
                   command,
                   metricsEpoch: queued.sourceMetricsEpoch,
