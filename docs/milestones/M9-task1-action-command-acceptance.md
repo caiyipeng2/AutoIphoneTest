@@ -74,12 +74,12 @@
 - `ActionDispatcher` 通过 runId/serial 取得 READY worker 的真实 `ActionBarrier`，形成 `ARM -> Appium -> QA_ACK` 生产接线。
 - lifecycle 命令继续跳过 bridge arm；bridge session 连接失败、worker 停止和启动回滚沿用既有 forward/session 清理路径。
 
-| 检查 | 结果 |
-| --- | --- |
-| runtime bridge、coordinator、session focused tests | 34 个测试通过 |
-| TypeScript project build | 通过 |
-| Prettier 与 diff check | 通过 |
-| 已连接真机 Appium 前置检查 | 未通过：Appium 3.6.0 在驱动加载阶段就绪超时，设备 ADB 状态正常 |
+| 检查                                               | 结果                                                           |
+| -------------------------------------------------- | -------------------------------------------------------------- |
+| runtime bridge、coordinator、session focused tests | 34 个测试通过                                                  |
+| TypeScript project build                           | 通过                                                           |
+| Prettier 与 diff check                             | 通过                                                           |
+| 已连接真机 Appium 前置检查                         | 未通过：Appium 3.6.0 在驱动加载阶段就绪超时，设备 ADB 状态正常 |
 
 当前边界：生产游戏包是否包含 Unity QA Bridge 组件仍需用带 `UNITY_MULTI_DEVICE_QA` 的验收包确认；当前 `normalizedShape` 使用会话动作规范，需与游戏侧 `QaActionDescriptor` 约定一致后才能得到真实 QA_ACK。现有 `com.hg.idleweaponshoptycoon.android` 包未完成该 bridge 闭环验收。
 
@@ -90,12 +90,12 @@
 - barrier 失败时整组目标均记录 `FAILED`，不发送 ARM、不调用 Appium，也不自动重试。
 - runtime coordinator 从 READY worker 暴露 state snapshot，dispatcher 按真实 `runId + serial` 查询，避免使用占位 session 或跨运行数据。
 
-| 检查 | 结果 |
-| --- | --- |
-| 文本焦点 barrier、失败矩阵、dispatcher 不发送动作 | 21 个 focused 测试通过 |
-| 全量自动化测试 | 78 个文件、329 个测试通过 |
-| TypeScript project build | 通过 |
-| 本切片文件级 ESLint、Prettier、diff check | 通过 |
+| 检查                                              | 结果                      |
+| ------------------------------------------------- | ------------------------- |
+| 文本焦点 barrier、失败矩阵、dispatcher 不发送动作 | 21 个 focused 测试通过    |
+| 全量自动化测试                                    | 78 个文件、329 个测试通过 |
+| TypeScript project build                          | 通过                      |
+| 本切片文件级 ESLint、Prettier、diff check         | 通过                      |
 
 当前边界：文本明文默认脱敏、故障 incident/policy、控制台动作/故障 UI 和 M10 默认 HTML/ZIP 报告仍未实现；生产游戏包也仍需启用 Unity QA Bridge 后才能进行真实文本 QA_ACK 验收。
 
@@ -105,12 +105,12 @@
 - `redact` 同时替换日志中的精确明文和 JSON 字符串形式，避免诊断文本直接泄漏测试输入。
 - 空文本和过短 run salt 被拒绝；该层不改变现有动作持久化 schema，后续 evidence/report 发布器将复用同一契约。
 
-| 检查 | 结果 |
-| --- | --- |
-| text redactor focused tests | 3 个测试通过 |
-| 全量自动化测试 | 79 个文件、332 个测试通过 |
-| TypeScript project build | 通过 |
-| 本切片 ESLint、Prettier、diff check | 通过 |
+| 检查                                | 结果                      |
+| ----------------------------------- | ------------------------- |
+| text redactor focused tests         | 3 个测试通过              |
+| 全量自动化测试                      | 79 个文件、332 个测试通过 |
+| TypeScript project build            | 通过                      |
+| 本切片 ESLint、Prettier、diff check | 通过                      |
 
 当前边界：`TextRedactor` 已完成安全输出基础契约，但尚未接入 M10 evidence/report 发布流水线；故障 incident/policy、控制台动作/故障 UI 和生产包 QA_ACK 真机验收仍待后续切片。
 
@@ -183,5 +183,20 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 首次重启验收发现 Appium 冷启动 UiAutomator2 驱动时默认 15 秒就绪窗口不足，脚本已将服务就绪等待上限调整为 60 秒；随后发现安卓重启过渡期间 `current_package` 合法地返回 `null`，客户端现将其视为未稳定前台并继续轮询。两次验收均在删除 session 后完成 UiAutomator2 退出与端口清理。
 
 ## 审批边界
+
+## M9 Task 8：typed incident 与失败策略决策矩阵
+
+- 新增版本化 `Incident` 合约，覆盖 ADB、Appium、崩溃/前台、Bridge、文本焦点、metrics 和低磁盘类别。
+- 新增不可变 `decideFailurePolicy`：默认 `PAUSE_ALL`；显式 quarantine 仅允许 active follower，leader、唯一活动成员、未知成员和 LOW_DISK 强制暂停。
+- 每个决策固定 2,000 ms 响应预算和 deadline；检测时间倒退会被拒绝，incident 详情在决策结果中冻结。
+
+| 检查                                              | 结果                      |
+| ------------------------------------------------- | ------------------------- |
+| incident schema 与 pause/quarantine focused tests | 7 个测试通过              |
+| 全量自动化测试                                    | 80 个文件、339 个测试通过 |
+| TypeScript project build                          | 通过                      |
+| 本切片 ESLint、Prettier、diff check               | 通过                      |
+
+当前边界：本切片只有纯逻辑决策器，尚未写入 incidents/recovery 数据库、驱动真实 fault monitor、暂停 session action API 或提供控制台故障时间线。
 
 当前改动仍未提交、未推送，等待用户验收后再创建提交并推送 `origin/main`。

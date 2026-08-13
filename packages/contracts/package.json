@@ -50,6 +50,10 @@
     "./session": {
       "types": "./dist/session.d.ts",
       "import": "./dist/session.js"
+    },
+    "./incident": {
+      "types": "./dist/incident.d.ts",
+      "import": "./dist/incident.js"
     }
   },
   "dependencies": {
