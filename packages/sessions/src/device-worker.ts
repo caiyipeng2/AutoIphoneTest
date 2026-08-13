@@ -7,6 +7,7 @@ import type {
 } from "@test-center/appium";
 import type { LogcatStream } from "@test-center/adb";
 import type { WorkerResourceLease, WorkerResourceManager } from "./worker-resource-manager.js";
+import type { ActionBarrier } from "./action-barrier.js";
 
 export type DeviceWorkerState =
   "DISCONNECTED" | "STARTING" | "READY" | "STOPPING" | "STOPPED" | "ERROR";
@@ -33,6 +34,25 @@ export interface DeviceWorkerLogcatFactoryInput {
   readonly generation: number;
   readonly lease: PortLease;
   readonly resourceLease?: WorkerResourceLease;
+}
+
+export interface DeviceWorkerBridgeForwarder {
+  add(serial: string, hostPort: number, devicePort: number): Promise<void>;
+  remove(serial: string, hostPort: number): Promise<void>;
+}
+
+export interface DeviceWorkerBridgeSession {
+  connect(): Promise<void>;
+  close(): Promise<void>;
+  readonly actionBarrier: ActionBarrier;
+}
+
+export interface DeviceWorkerBridgeSessionFactoryInput {
+  readonly serial: string;
+  readonly generation: number;
+  readonly hostPort: number;
+  readonly devicePort: number;
+  readonly runNonceHash?: string;
 }
 
 export interface AppiumServiceLike {
@@ -62,6 +82,12 @@ export interface DeviceWorkerOptions {
     input: DeviceWorkerAppiumServiceFactoryInput,
   ) => AppiumServiceLike;
   readonly appiumBaseUrl?: (lease: PortLease) => string;
+  readonly bridgeForwarder?: DeviceWorkerBridgeForwarder;
+  readonly bridgeSessionFactory?: (
+    input: DeviceWorkerBridgeSessionFactoryInput,
+  ) => DeviceWorkerBridgeSession;
+  readonly bridgeDevicePort?: number;
+  readonly runNonceHash?: string;
 }
 
 export type DeviceWorkerErrorCode =
@@ -99,6 +125,12 @@ export class DeviceWorker {
   private logcat: LogcatStream | undefined;
   private appium: AppiumServiceLike | undefined;
   private resourceLease: WorkerResourceLease | undefined;
+  private bridgeSession: DeviceWorkerBridgeSession | undefined;
+  private bridgeForwarded = false;
+  private readonly bridgeForwarder: DeviceWorkerOptions["bridgeForwarder"];
+  private readonly bridgeSessionFactory: DeviceWorkerOptions["bridgeSessionFactory"];
+  private readonly bridgeDevicePort: number;
+  private readonly runNonceHash: string | undefined;
 
   public constructor(options: DeviceWorkerOptions) {
     if (!options.serial.trim() || !options.packageName.trim())
@@ -119,6 +151,20 @@ export class DeviceWorker {
     this.runId = options.runId;
     this.resourceManager = options.resourceManager;
     this.appiumServiceFactory = options.appiumServiceFactory;
+    this.bridgeForwarder = options.bridgeForwarder;
+    this.bridgeSessionFactory = options.bridgeSessionFactory;
+    this.bridgeDevicePort = options.bridgeDevicePort ?? 17_501;
+    this.runNonceHash = options.runNonceHash;
+    if ((this.bridgeForwarder === undefined) !== (this.bridgeSessionFactory === undefined)) {
+      throw new TypeError("Bridge forwarder and session factory must be configured together.");
+    }
+    if (
+      !Number.isSafeInteger(this.bridgeDevicePort) ||
+      this.bridgeDevicePort < 1 ||
+      this.bridgeDevicePort > 65_535
+    ) {
+      throw new TypeError("bridgeDevicePort must be a valid TCP port.");
+    }
     this.appiumBaseUrl =
       options.appiumBaseUrl ?? ((lease) => `http://127.0.0.1:${String(lease.appiumPort)}`);
   }
@@ -152,6 +198,8 @@ export class DeviceWorker {
     let fence: SessionFence | undefined;
     let logcat: LogcatStream | undefined;
     let logcatStarted = false;
+    let bridgeSession: DeviceWorkerBridgeSession | undefined;
+    let bridgeForwarded = false;
     try {
       const identity = await this.identityProbe();
       if (identity.serial !== this.serial || identity.packageName !== this.packageName) {
@@ -186,6 +234,26 @@ export class DeviceWorker {
         baseUrl: this.appiumBaseUrl(lease),
       });
       fence = await client.createSession(this.createCapabilities(lease));
+      if (
+        resourceLease !== undefined &&
+        this.bridgeForwarder !== undefined &&
+        this.bridgeSessionFactory !== undefined
+      ) {
+        await this.bridgeForwarder.add(
+          this.serial,
+          resourceLease.ports.bridge,
+          this.bridgeDevicePort,
+        );
+        bridgeForwarded = true;
+        bridgeSession = this.bridgeSessionFactory({
+          serial: this.serial,
+          generation: this._generation,
+          hostPort: resourceLease.ports.bridge,
+          devicePort: this.bridgeDevicePort,
+          ...(this.runNonceHash === undefined ? {} : { runNonceHash: this.runNonceHash }),
+        });
+        await bridgeSession.connect();
+      }
       logcat = this.logcatFactory({
         serial: this.serial,
         generation: this._generation,
@@ -200,10 +268,17 @@ export class DeviceWorker {
       this.logcat = logcat;
       this.appium = appium;
       this.resourceLease = resourceLease;
+      this.bridgeSession = bridgeSession;
+      this.bridgeForwarded = bridgeForwarded;
       this.setState("READY");
     } catch (error) {
       if (fence !== undefined && client !== undefined)
         await client.deleteSession(fence).catch(() => undefined);
+      await bridgeSession?.close().catch(() => undefined);
+      if (bridgeForwarded && resourceLease !== undefined)
+        await this.bridgeForwarder
+          ?.remove(this.serial, resourceLease.ports.bridge)
+          .catch(() => undefined);
       if (logcatStarted) await logcat?.stop().catch(() => undefined);
       if (appiumStarted) await appium?.stop().catch(() => undefined);
       if (resourceLease !== undefined)
@@ -233,7 +308,20 @@ export class DeviceWorker {
     const lease = this.lease;
     const appium = this.appium;
     const resourceLease = this.resourceLease;
+    const bridgeSession = this.bridgeSession;
+    const bridgeForwarded = this.bridgeForwarded;
     let firstError: unknown;
+    try {
+      await bridgeSession?.close();
+    } catch (error) {
+      firstError ??= error;
+    }
+    try {
+      if (bridgeForwarded && resourceLease !== undefined)
+        await this.bridgeForwarder?.remove(this.serial, resourceLease.ports.bridge);
+    } catch (error) {
+      firstError ??= error;
+    }
     try {
       await logcat?.stop();
     } catch (error) {
@@ -262,12 +350,19 @@ export class DeviceWorker {
     this.lease = undefined;
     this.appium = undefined;
     this.resourceLease = undefined;
+    this.bridgeSession = undefined;
+    this.bridgeForwarded = false;
     this._generation += 1;
     this.setState(firstError === undefined ? "STOPPED" : "ERROR");
     if (firstError !== undefined)
       throw new DeviceWorkerError("STOP_FAILED", "Device worker failed to stop cleanly.", {
         cause: firstError,
       });
+  }
+
+  public getActionBarrier(): ActionBarrier | undefined {
+    if (this._state !== "READY") return undefined;
+    return this.bridgeSession?.actionBarrier;
   }
 
   private createCapabilities(lease: PortLease): DeviceSessionCapabilities {

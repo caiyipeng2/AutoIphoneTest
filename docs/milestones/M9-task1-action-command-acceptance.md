@@ -54,6 +54,19 @@
 
 当前边界：本切片完成 dispatcher barrier 契约和失败清理，尚未把真实 Unity QA Bridge 连接绑定到每个 managed worker，也未实现文本可信焦点屏障。
 
+## M9 Task 4：managed worker Bridge 生命周期接线
+
+- `DeviceWorker` 在 managed 资源租约中使用独立 bridge host port，建立 serial-owned ADB forward。
+- worker 创建并连接注入的 Bridge session，向上暴露 generation-fenced `ActionBarrier`。
+- worker 停止、启动回滚和 bridge 连接失败都会关闭 session、移除 forward，并释放 worker 资源。
+
+| 检查                                                | 结果          |
+| --------------------------------------------------- | ------------- |
+| managed worker bridge forward/session focused tests | 11 个测试通过 |
+| TypeScript project build                            | 通过          |
+
+当前边界：dispatcher runtime factory 尚未绑定真实 `BridgeClient + ArmController`，run nonce、metrics/view/focus 映射和真实 Unity bridge action 验收留在下一切片；本切片只闭合 worker 生命周期与资源清理。
+
 ## 当前边界
 
 本 Task 1 切片未接入 bridge arm/ACK、失败策略或控制台 UI。命令持久化与 dispatcher 传递已在下方 Task 2 切片完成；真实 bridge ACK 和故障策略仍按 M9 计划逐步扩展。

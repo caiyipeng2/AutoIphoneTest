@@ -199,6 +199,90 @@ describe("DeviceWorker", () => {
     });
   });
 
+  it("forwards the managed bridge port and connects a generation-bound bridge session", async () => {
+    const { client, logcat, appium, resourceManager } = createManagedHarness();
+    const forwarder = {
+      add: vi.fn(async () => undefined),
+      remove: vi.fn(async () => undefined),
+    };
+    const actionBarrier = {
+      arm: vi.fn(async () => ({
+        waitForAck: async () => undefined,
+        cancel: async () => undefined,
+      })),
+    };
+    const bridgeSession = {
+      connect: vi.fn(async () => undefined),
+      close: vi.fn(async () => undefined),
+      actionBarrier,
+    };
+    const bridgeSessionFactory = vi.fn(() => bridgeSession);
+    const bridgeWorker = new DeviceWorker({
+      serial: "serial-a",
+      packageName: "com.example.game",
+      owner: { ownerPid: 100, ownerToken: "run-a" },
+      runId: "run-a",
+      resourceManager,
+      appiumServiceFactory: () => appium,
+      identityProbe: vi.fn(async () => ({ serial: "serial-a", packageName: "com.example.game" })),
+      clientFactory: () => client,
+      logcatFactory: () => logcat,
+      bridgeForwarder: forwarder,
+      bridgeSessionFactory,
+    });
+
+    await bridgeWorker.start();
+
+    expect(forwarder.add).toHaveBeenCalledWith("serial-a", resourceLease.ports.bridge, 17_501);
+    expect(bridgeSessionFactory).toHaveBeenCalledWith({
+      serial: "serial-a",
+      generation: 1,
+      hostPort: resourceLease.ports.bridge,
+      devicePort: 17_501,
+    });
+    expect(bridgeSession.connect).toHaveBeenCalledTimes(1);
+    expect(bridgeWorker.getActionBarrier()).toBe(actionBarrier);
+
+    await bridgeWorker.stop();
+
+    expect(bridgeSession.close).toHaveBeenCalledTimes(1);
+    expect(forwarder.remove).toHaveBeenCalledWith("serial-a", resourceLease.ports.bridge);
+    expect(bridgeWorker.getActionBarrier()).toBeUndefined();
+  });
+
+  it("removes the bridge forward when bridge connection fails", async () => {
+    const { client, logcat, appium, resourceManager } = createManagedHarness();
+    const forwarder = {
+      add: vi.fn(async () => undefined),
+      remove: vi.fn(async () => undefined),
+    };
+    const bridgeSession = {
+      connect: vi.fn(async () => {
+        throw new Error("bridge unavailable");
+      }),
+      close: vi.fn(async () => undefined),
+      actionBarrier: { arm: vi.fn() },
+    };
+    const bridgeWorker = new DeviceWorker({
+      serial: "serial-a",
+      packageName: "com.example.game",
+      owner: { ownerPid: 100, ownerToken: "run-a" },
+      runId: "run-a",
+      resourceManager,
+      appiumServiceFactory: () => appium,
+      identityProbe: vi.fn(async () => ({ serial: "serial-a", packageName: "com.example.game" })),
+      clientFactory: () => client,
+      logcatFactory: () => logcat,
+      bridgeForwarder: forwarder,
+      bridgeSessionFactory: () => bridgeSession,
+    });
+
+    await expect(bridgeWorker.start()).rejects.toThrow("bridge unavailable");
+    expect(bridgeSession.close).toHaveBeenCalledTimes(1);
+    expect(forwarder.remove).toHaveBeenCalledWith("serial-a", resourceLease.ports.bridge);
+    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, resourceLease.ownerToken);
+  });
+
   it("checks identity, allocates ports, starts Appium and logcat, then becomes READY", async () => {
     const { worker, client, logcat, allocator } = createHarness();
     const states: DeviceWorkerState[] = [];
