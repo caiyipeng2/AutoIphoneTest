@@ -175,6 +175,22 @@ describe("AppiumW3cClient", () => {
     expect(requests).toContain(`${baseUrl}/session/session-a/appium/settings`);
   });
 
+  it("treats a transient null current package as an unset foreground package", async () => {
+    const baseUrl = await createFakeServer(async (request) => {
+      if (new URL(request).pathname === "/session")
+        return Response.json({
+          sessionId: "session-a",
+          value: { sessionId: "session-a", capabilities: capabilities() },
+        });
+      if (new URL(request).pathname.endsWith("/current_package"))
+        return Response.json({ value: null });
+      return Response.json({ value: {} });
+    });
+    const { client, fence } = await createClient(baseUrl);
+
+    await expect(client.currentPackage(fence)).resolves.toBeUndefined();
+  });
+
   it("rejects stale generation, serial, and session responses before dispatch", async () => {
     const baseUrl = await createFakeServer(async (request) => {
       if (new URL(request).pathname === "/session")

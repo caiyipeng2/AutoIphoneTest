@@ -33,6 +33,9 @@ const CreateSessionResponseSchema = z
 const StringValueResponseSchema = z
   .object({ value: z.string().min(1).max(25_000_000) })
   .passthrough();
+const NullableStringValueResponseSchema = z
+  .object({ value: z.string().min(1).max(25_000_000).nullable() })
+  .passthrough();
 const EmptyValueResponseSchema = z.object({ value: z.unknown() }).passthrough();
 
 const W3cActionSchema = z
@@ -256,14 +259,15 @@ export class AppiumW3cClient {
     );
   }
 
-  public async currentPackage(fence: SessionFence): Promise<string> {
-    return await this.requestValue(
+  public async currentPackage(fence: SessionFence): Promise<string | undefined> {
+    const currentPackage = await this.requestValue(
       fence,
       "GET",
       this.sessionPath(fence, "appium/device/current_package"),
       undefined,
-      StringValueResponseSchema,
+      NullableStringValueResponseSchema,
     );
+    return currentPackage ?? undefined;
   }
 
   public async currentActivity(fence: SessionFence): Promise<string> {

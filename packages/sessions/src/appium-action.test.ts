@@ -246,4 +246,47 @@ describe("AppiumActionExecutor", () => {
     expect(processProbe).toHaveBeenCalledTimes(2);
     expect(client.performActions).not.toHaveBeenCalled();
   });
+
+  it("restarts with terminate, process absence, and a fresh activate without pointer actions", async () => {
+    const fence: SessionFence = {
+      sessionId: "session-restart",
+      serial: "R5CX211TXNT",
+      generation: 1,
+    };
+    const client = {
+      createSession: vi.fn(async () => fence),
+      activateApp: vi.fn(async () => undefined),
+      terminateApp: vi.fn(async () => undefined),
+      currentPackage: vi.fn(async () => "com.hg.idleweaponshoptycoon.android"),
+      pressKey: vi.fn(async () => undefined),
+      performActions: vi.fn(async () => undefined),
+      deleteSession: vi.fn(async () => undefined),
+    };
+    const processProbe = vi
+      .fn<() => Promise<boolean>>()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const executor = new AppiumActionExecutor({
+      baseUrl: "http://127.0.0.1:4723",
+      systemPort: 8201,
+      mjpegServerPort: 7811,
+      viewport: { width: 1080, height: 2340 },
+      foregroundPollIntervalMs: 1,
+      processProbe,
+      clientFactory: () => client,
+    });
+
+    const result = await executor.execute({
+      serial: fence.serial,
+      packageName: "com.hg.idleweaponshoptycoon.android",
+      command: { type: "restart" },
+    });
+
+    expect(result.pointerActionCount).toBe(0);
+    expect(client.terminateApp).toHaveBeenCalledWith(fence, "com.hg.idleweaponshoptycoon.android");
+    expect(client.activateApp).toHaveBeenCalledTimes(2);
+    expect(client.performActions).not.toHaveBeenCalled();
+    expect(processProbe).toHaveBeenCalledTimes(2);
+  });
 });

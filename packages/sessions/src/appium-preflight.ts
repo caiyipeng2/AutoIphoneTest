@@ -13,7 +13,7 @@ export interface AppiumPreflightInput {
 export interface AppiumPreflightClient {
   createSession(capabilities: DeviceSessionCapabilities): Promise<SessionFence>;
   activateApp(fence: SessionFence, packageName: string): Promise<void>;
-  currentPackage(fence: SessionFence): Promise<string>;
+  currentPackage(fence: SessionFence): Promise<string | undefined>;
   deleteSession(fence: SessionFence): Promise<void>;
 }
 

@@ -18,7 +18,7 @@ export interface AppiumActionClient {
   createSession(capabilities: DeviceSessionCapabilities): Promise<SessionFence>;
   activateApp(fence: SessionFence, packageName: string): Promise<void>;
   terminateApp(fence: SessionFence, packageName: string): Promise<void>;
-  currentPackage(fence: SessionFence): Promise<string>;
+  currentPackage(fence: SessionFence): Promise<string | undefined>;
   pressKey(fence: SessionFence, keycode: number, metastate?: number): Promise<void>;
   performActions(fence: SessionFence, actions: readonly W3cAction[]): Promise<void>;
   deleteSession(fence: SessionFence): Promise<void>;
@@ -91,6 +91,18 @@ export class AppiumActionExecutor {
           serial: input.serial,
           packageName: input.packageName,
           foregroundPackage,
+          pointerActionCount: 0,
+        };
+      }
+      if (input.command?.type === "restart") {
+        await client.terminateApp(fence, input.packageName);
+        await this.waitForProcessAbsent(input.serial, input.packageName);
+        await client.activateApp(fence, input.packageName);
+        await this.waitForForegroundPackage(client, fence, input.packageName);
+        return {
+          serial: input.serial,
+          packageName: input.packageName,
+          foregroundPackage: input.packageName,
           pointerActionCount: 0,
         };
       }

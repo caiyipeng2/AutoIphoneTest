@@ -10,18 +10,20 @@
 
 ## 测试证据
 
-| 检查                           | 结果                       |
-| ------------------------------ | -------------------------- |
-| 动作命令 focused tests         | 11 个测试通过              |
-| Appium action focused tests    | 5 个测试通过               |
-| Back action focused tests      | 6 个测试通过               |
-| Activate action focused tests  | 7 个测试通过               |
-| Terminate action focused tests | 8 个测试通过               |
-| TypeScript project build       | 通过                       |
-| 本切片 ESLint                  | 通过                       |
-| 本切片 Prettier                | 通过                       |
-| `git diff --check`             | 通过                       |
-| Android 真机 long press/drag   | Appium `/actions` HTTP 200 |
+| 检查                                 | 结果                       |
+| ------------------------------------ | -------------------------- |
+| 动作命令 focused tests               | 11 个测试通过              |
+| Appium action focused tests          | 5 个测试通过               |
+| Back action focused tests            | 6 个测试通过               |
+| Activate action focused tests        | 7 个测试通过               |
+| Terminate action focused tests       | 8 个测试通过               |
+| Restart action focused tests         | 9 个测试通过               |
+| Appium current_package null 回归测试 | 1 个测试通过               |
+| TypeScript project build             | 通过                       |
+| 本切片 ESLint                        | 通过                       |
+| 本切片 Prettier                      | 通过                       |
+| `git diff --check`                   | 通过                       |
+| Android 真机 long press/drag         | Appium `/actions` HTTP 200 |
 
 ## 当前边界
 
@@ -57,6 +59,39 @@ Back 真机验收脚本：`tests/hardware/m9-back.ts`。设备上通过 Appium `
 Activate 真机验收脚本：`tests/hardware/m9-activate.ts`。设备上通过 Appium `activate_app` 启动 `com.hg.idleweaponshoptycoon.android`，请求返回 HTTP 200；使用前台轮询等待异步启动完成后，包名校验通过，未发送 pointer actions，session 删除、UiAutomator2 退出和 `8202/7812` ADB forward 清理均成功。
 
 Terminate 真机验收脚本：`tests/hardware/m9-terminate.ts`。设备上先启动游戏并通过 ADB `pidof` 得到 PID `2669`，再调用 Appium `terminate_app`；请求返回 HTTP 200，随后 `pidof` 确认进程消失，session 删除、UiAutomator2 退出和 `8203/7813` ADB forward 清理均成功。
+
+Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `terminate_app` 并等待进程消失，再调用 `activate_app`，轮询前台包名并确认 PID 已变化。两台已连接安卓真机均通过：
+
+```json
+[
+  {
+    "status": "PASS",
+    "serial": "R5CWB17PN0Y",
+    "packageName": "com.hg.idleweaponshoptycoon.android",
+    "sessionId": "2dd37ad9-0bea-40f6-bb88-78c37601f1a5",
+    "pidBefore": "3733",
+    "pidAfter": "4612",
+    "foregroundAfter": "com.hg.idleweaponshoptycoon.android",
+    "appiumPort": 4727,
+    "systemPort": 8204,
+    "mjpegPort": 7814
+  },
+  {
+    "status": "PASS",
+    "serial": "R5CX211TXNT",
+    "packageName": "com.hg.idleweaponshoptycoon.android",
+    "sessionId": "052f2d10-c9cc-4df2-85c8-c0c6c549bb7f",
+    "pidBefore": "22619",
+    "pidAfter": "22915",
+    "foregroundAfter": "com.hg.idleweaponshoptycoon.android",
+    "appiumPort": 4727,
+    "systemPort": 8204,
+    "mjpegPort": 7814
+  }
+]
+```
+
+首次重启验收发现 Appium 冷启动 UiAutomator2 驱动时默认 15 秒就绪窗口不足，脚本已将服务就绪等待上限调整为 60 秒；随后发现安卓重启过渡期间 `current_package` 合法地返回 `null`，客户端现将其视为未稳定前台并继续轮询。两次验收均在删除 session 后完成 UiAutomator2 退出与端口清理。
 
 ## 审批边界
 
