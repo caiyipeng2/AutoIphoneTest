@@ -60,6 +60,7 @@ import {
   RunMembershipIncidentExecutor,
   RunMembershipRepository,
   TextFocusBarrier,
+  type AppiumActionFaultEvent,
 } from "@test-center/sessions";
 import { DeviceWorker } from "@test-center/sessions";
 import {
@@ -377,7 +378,10 @@ function createConfiguredActionDispatcher(
   actionRepository: RunActionRepository,
   actionOutbox: ActionOutbox,
   registry: DeviceRegistry,
-  workerCoordinator: Pick<RuntimeWorkerCoordinator, "getActionBarrier" | "getTextFocusSnapshot">,
+  workerCoordinator: Pick<
+    RuntimeWorkerCoordinator,
+    "getActionBarrier" | "getTextFocusSnapshot" | "publishFault"
+  >,
 ): ActionDispatcher | undefined {
   const baseUrl = process.env.TEST_CENTER_APPIUM_URL;
   if (baseUrl === undefined || baseUrl.trim() === "") return undefined;
@@ -404,6 +408,7 @@ function createConfiguredActionDispatcher(
         systemPort: systemPort + portIndex,
         mjpegServerPort: mjpegServerPort + portIndex,
         viewport,
+        faultSink: (event) => workerCoordinator.publishFault(toRuntimeFaultEvent(event)),
       });
     },
     `server-action-dispatcher-${process.pid}`,
@@ -422,6 +427,20 @@ function createConfiguredActionDispatcher(
       },
     }),
   );
+}
+
+function toRuntimeFaultEvent(event: AppiumActionFaultEvent) {
+  return {
+    runId: event.runId,
+    serial: event.serial,
+    generation: 1,
+    faultId: event.faultId,
+    category: event.category,
+    source: event.source,
+    message: event.message,
+    detectedAt: event.detectedAt,
+    detectedAtRealtimeMs: event.detectedAtRealtimeMs,
+  } as const;
 }
 
 function readPositiveInteger(value: string | undefined, fallback: number): number {

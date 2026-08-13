@@ -95,6 +95,10 @@ export class RuntimeWorkerCoordinator {
     return () => this.faultListeners.delete(listener);
   }
 
+  public publishFault(event: RuntimeFaultEvent): void {
+    this.emitFault(event);
+  }
+
   private emitLogcat(record: LogcatRecord): void {
     for (const listener of this.logcatListeners) listener(record);
   }

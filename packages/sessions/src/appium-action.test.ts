@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { DeviceSessionCapabilities, SessionFence, W3cAction } from "@test-center/appium";
+import { AppiumW3cClientError } from "@test-center/appium";
 
 import {
   AppiumActionExecutor,
@@ -91,6 +92,54 @@ describe("createPointerActions", () => {
 });
 
 describe("AppiumActionExecutor", () => {
+  it("reports a typed fault for an Appium session loss while preserving the action error", async () => {
+    const faultSink = vi.fn();
+    const client = {
+      createSession: vi.fn(
+        async () =>
+          ({
+            sessionId: "session-lost",
+            serial: "R5CX211TXNT",
+            generation: 1,
+          }) satisfies SessionFence,
+      ),
+      activateApp: vi.fn(async () => {
+        throw new AppiumW3cClientError("SESSION_NOT_FOUND", "session disappeared");
+      }),
+      terminateApp: vi.fn(async () => undefined),
+      currentPackage: vi.fn(async () => "com.hg.idleweaponshoptycoon.android"),
+      pressKey: vi.fn(async () => undefined),
+      performActions: vi.fn(async () => undefined),
+      deleteSession: vi.fn(async () => undefined),
+    };
+    const executor = new AppiumActionExecutor({
+      baseUrl: "http://127.0.0.1:4723",
+      systemPort: 8201,
+      mjpegServerPort: 7811,
+      viewport: { width: 1080, height: 2340 },
+      clientFactory: () => client,
+      faultSink,
+    });
+
+    await expect(
+      executor.execute({
+        runId: "run-a",
+        actionId: "action-a",
+        serial: "R5CX211TXNT",
+        packageName: "com.hg.idleweaponshoptycoon.android",
+      }),
+    ).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" });
+    expect(faultSink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: "run-a",
+        serial: "R5CX211TXNT",
+        faultId: "action-a",
+        category: "APPIUM_SESSION_LOST",
+      }),
+    );
+    expect(client.deleteSession).toHaveBeenCalledWith(expect.anything());
+  });
+
   it("creates a serial-bound session, activates the package, injects actions, and cleans up", async () => {
     const fence: SessionFence = { sessionId: "session-a", serial: "R5CX211TXNT", generation: 1 };
     const client = {

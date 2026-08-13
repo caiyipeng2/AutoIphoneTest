@@ -9,6 +9,8 @@ import type { TextFocusBarrier, TextFocusVerificationInput } from "./text-focus-
 
 export interface ActionDeviceExecutor {
   execute(input: {
+    readonly runId?: string;
+    readonly actionId?: string;
     readonly serial: string;
     readonly packageName: string;
     readonly payload?: ActionPayload;
@@ -91,6 +93,8 @@ export class ActionDispatcher {
                 })
               : undefined;
           const executorInput = {
+            runId: queued.runId,
+            actionId: queued.id,
             serial: target.serial,
             packageName: input.packageName,
             ...(queued.command === undefined ? {} : { command: queued.command }),

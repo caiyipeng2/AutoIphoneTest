@@ -314,3 +314,18 @@ Restart 真机验收脚本：`tests/hardware/m9-restart.ts`。脚本先调用 `t
 | 本切片 ESLint、Prettier、diff check                        | 待最终验证                                                        |
 
 当前边界：已完成 Appium/Bridge worker 到 typed incident 的基础适配；尚未实现真实运行中 Appium 请求失败的持续监听、策略配置化和控制台故障时间线。
+
+## M9 Task 16：动作期间 Appium fault 回写
+
+- `AppiumActionExecutor` 新增可选 fault sink；动作期间仅把明确的 `SESSION_NOT_FOUND`、`TIMEOUT`、`NETWORK_ERROR`、`FENCE_MISMATCH` 映射为 typed runtime fault。
+- `ActionDispatcher` 为 executor 补充 runId/actionId 上下文，故障 incident 可追溯到具体动作；原有 action target 失败回写和异常传播保持不变。
+- server 通过 `RuntimeWorkerCoordinator.publishFault` 把动作 fault 送入既有 `RuntimeFaultMonitor`，不新增第二套 incident/recovery 逻辑。
+- 未配置 run/action 上下文或未知异常不生成 fault；session cleanup 仍在 finally 中执行。
+
+| 检查                         | 结果                    |
+| ---------------------------- | ----------------------- |
+| Appium action focused tests  | 1 个文件、10 个测试通过 |
+| TypeScript project build     | 通过                    |
+| ESLint、Prettier、diff check | 待最终验证              |
+
+当前边界：已接入动作期间明确 Appium 请求故障的 typed incident 回写；尚未实现真实设备上的长时间网络抖动压测、策略配置化和控制台故障时间线。

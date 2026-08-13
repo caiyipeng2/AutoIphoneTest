@@ -1,5 +1,6 @@
 import {
   AppiumW3cClient,
+  AppiumW3cClientError,
   type AppiumW3cClientOptions,
   type DeviceSessionCapabilities,
   type SessionFence,
@@ -8,6 +9,21 @@ import {
 
 import type { ActionPayload } from "./run-repository.js";
 import type { ActionCommand } from "./action-command.js";
+
+export type AppiumActionFaultCategory =
+  "APPIUM_SESSION_LOST" | "BRIDGE_TIMEOUT" | "BRIDGE_STATE_MISMATCH";
+
+export interface AppiumActionFaultEvent {
+  readonly runId: string;
+  readonly actionId: string;
+  readonly serial: string;
+  readonly category: AppiumActionFaultCategory;
+  readonly faultId: string;
+  readonly source: "appium-action";
+  readonly message: string;
+  readonly detectedAt: string;
+  readonly detectedAtRealtimeMs: number;
+}
 
 export interface ViewportSize {
   readonly width: number;
@@ -34,9 +50,12 @@ export interface AppiumActionExecutorOptions {
   readonly foregroundPollIntervalMs?: number;
   readonly processProbe?: (serial: string, packageName: string) => Promise<boolean>;
   readonly clientFactory?: (options: AppiumW3cClientOptions) => AppiumActionClient;
+  readonly faultSink?: (event: AppiumActionFaultEvent) => void;
 }
 
 export interface AppiumActionInput {
+  readonly runId?: string;
+  readonly actionId?: string;
   readonly serial: string;
   readonly packageName: string;
   readonly payload?: ActionPayload;
@@ -121,6 +140,10 @@ export class AppiumActionExecutor {
         foregroundPackage,
         pointerActionCount: actions[0]?.actions.length ?? 0,
       };
+    } catch (error) {
+      const fault = toActionFault(error, input);
+      if (fault !== undefined) this.options.faultSink?.(fault);
+      throw error;
     } finally {
       if (fence !== undefined) await client.deleteSession(fence).catch(() => undefined);
     }
@@ -156,6 +179,34 @@ export class AppiumActionExecutor {
     }
     return currentPackage;
   }
+}
+
+function toActionFault(
+  error: unknown,
+  input: AppiumActionInput,
+): AppiumActionFaultEvent | undefined {
+  if (!(error instanceof AppiumW3cClientError)) return undefined;
+  const category: AppiumActionFaultCategory =
+    error.code === "SESSION_NOT_FOUND"
+      ? "APPIUM_SESSION_LOST"
+      : error.code === "TIMEOUT" || error.code === "NETWORK_ERROR"
+        ? "BRIDGE_TIMEOUT"
+        : error.code === "FENCE_MISMATCH"
+          ? "BRIDGE_STATE_MISMATCH"
+          : undefined!;
+  if (category === undefined || input.runId === undefined || input.actionId === undefined)
+    return undefined;
+  return {
+    runId: input.runId,
+    actionId: input.actionId,
+    serial: input.serial,
+    category,
+    faultId: input.actionId,
+    source: "appium-action",
+    message: error.message,
+    detectedAt: new Date().toISOString(),
+    detectedAtRealtimeMs: Math.max(0, Date.now()),
+  };
 }
 
 export function createPointerActions(
