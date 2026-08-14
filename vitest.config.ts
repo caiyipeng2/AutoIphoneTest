@@ -59,6 +59,10 @@ export default defineConfig({
         replacement: `${databaseSource}$1.ts`,
       },
       {
+        find: "@test-center/database",
+        replacement: `${databaseSource}index.ts`,
+      },
+      {
         find: /^@test-center\/adb\/(.+)$/,
         replacement: `${adbSource}$1.ts`,
       },

@@ -65,7 +65,37 @@ describe("RuntimeWorkerCoordinator", () => {
     ).rejects.toThrow("start failed");
     expect(
       [...workers.values()].filter((worker) => worker.stop.mock.calls.length === 1),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
     expect(coordinator.list("run-2")).toEqual([]);
+  });
+
+  it("cleans up a partially established run after a later worker fails", async () => {
+    const events: string[] = [];
+    const factory: RuntimeWorkerFactory = (input) => ({
+      start: vi.fn(async () => {
+        events.push(`start:${input.serial}`);
+        if (input.serial === serials[0]) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          events.push(`started:${input.serial}`);
+          return;
+        }
+        throw new Error(`start failed: ${input.serial}`);
+      }),
+      stop: vi.fn(async () => {
+        events.push(`stop:${input.serial}`);
+      }),
+    });
+    const coordinator = new RuntimeWorkerCoordinator(factory);
+
+    await expect(
+      coordinator.start("run-3", serials.slice(0, 2), "com.example.game", "sha256:nonce"),
+    ).rejects.toThrow("start failed");
+    expect(events).toEqual([
+      `start:${serials[0]}`,
+      `started:${serials[0]}`,
+      `start:${serials[1]}`,
+      `stop:${serials[0]}`,
+      `stop:${serials[1]}`,
+    ]);
   });
 });

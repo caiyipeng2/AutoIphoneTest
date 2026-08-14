@@ -220,6 +220,38 @@ describe("AppiumActionExecutor", () => {
     expect(client.deleteSession).toHaveBeenCalledWith(fence);
   });
 
+  it("dispatches text through Appium native input instead of treating it as a tap", async () => {
+    const fence: SessionFence = { sessionId: "session-text", serial: "R5CX211TXNT", generation: 1 };
+    const client = {
+      createSession: vi.fn(async () => fence),
+      activateApp: vi.fn(async () => undefined),
+      terminateApp: vi.fn(async () => undefined),
+      currentPackage: vi.fn(async () => "com.hg.idleweaponshoptycoon.android"),
+      pressKey: vi.fn(async () => undefined),
+      typeText: vi.fn(async () => undefined),
+      performActions: vi.fn(async () => undefined),
+      deleteSession: vi.fn(async () => undefined),
+    };
+    const executor = new AppiumActionExecutor({
+      baseUrl: "http://127.0.0.1:4723",
+      systemPort: 8201,
+      mjpegServerPort: 7811,
+      viewport: { width: 1080, height: 2340 },
+      clientFactory: () => client,
+    });
+
+    const result = await executor.execute({
+      serial: fence.serial,
+      packageName: "com.hg.idleweaponshoptycoon.android",
+      command: { type: "text", text: "UID-123" },
+    });
+
+    expect(result.pointerActionCount).toBe(0);
+    expect(client.typeText).toHaveBeenCalledWith(fence, "UID-123");
+    expect(client.performActions).not.toHaveBeenCalled();
+    expect(client.deleteSession).toHaveBeenCalledWith(fence);
+  });
+
   it("executes activate as a lifecycle command without pointer actions", async () => {
     const fence: SessionFence = {
       sessionId: "session-activate",

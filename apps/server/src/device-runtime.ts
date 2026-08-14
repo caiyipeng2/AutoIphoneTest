@@ -31,6 +31,7 @@ import {
   ACTION_COMMANDS_MIGRATION,
   INCIDENTS_MIGRATION,
   RUN_MEMBERSHIP_MIGRATION,
+  RUN_FAILURE_POLICY_MIGRATION,
   UID_BRIDGE_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
@@ -81,6 +82,7 @@ import type { ArtifactRouteService, InstalledRegistrationResult } from "./routes
 import type { SessionRouteService } from "./routes/sessions.js";
 import { RuntimeSessionRouteService } from "./session-runtime.js";
 import { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
+import { parseBridgeMode, type BridgeMode } from "./runtime-config.js";
 
 export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
@@ -116,6 +118,7 @@ export async function createRuntimeDeviceRegistry(
     ACTION_COMMANDS_MIGRATION,
     INCIDENTS_MIGRATION,
     RUN_MEMBERSHIP_MIGRATION,
+    RUN_FAILURE_POLICY_MIGRATION,
   ]);
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
@@ -132,7 +135,14 @@ export async function createRuntimeDeviceRegistry(
     new DeviceRepository(database),
     createAdbDiscoverySource(client),
   );
-  const workerCoordinator = createRuntimeWorkerCoordinator(paths, projectRoot, adbPath, registry);
+  const bridgeMode = parseBridgeMode(process.env);
+  const workerCoordinator = createRuntimeWorkerCoordinator(
+    paths,
+    projectRoot,
+    adbPath,
+    registry,
+    bridgeMode,
+  );
   const uidService = new UidService(database);
   const actionRepository = new RunActionRepository(database);
   const actionOutbox = new ActionOutbox(database);
@@ -141,7 +151,13 @@ export async function createRuntimeDeviceRegistry(
     registry,
     createConfiguredPreflightProbe(),
     actionRepository,
-    createConfiguredActionDispatcher(actionRepository, actionOutbox, registry, workerCoordinator),
+    createConfiguredActionDispatcher(
+      actionRepository,
+      actionOutbox,
+      registry,
+      workerCoordinator,
+      bridgeMode,
+    ),
     workerCoordinator,
   );
   const incidentMonitor = new IncidentMonitor(
@@ -215,8 +231,14 @@ export async function createRuntimeDeviceRegistry(
 
 function readRunningLogcatFaultRuns(database: Database.Database) {
   const runs = database
-    .prepare("SELECT id, current_epoch FROM test_runs WHERE state = 'RUNNING' ORDER BY id ASC")
-    .all() as readonly { id: string; current_epoch: number }[];
+    .prepare(
+      "SELECT id, current_epoch, failure_policy FROM test_runs WHERE state = 'RUNNING' ORDER BY id ASC",
+    )
+    .all() as readonly {
+    id: string;
+    current_epoch: number;
+    failure_policy: "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE";
+  }[];
   return runs.flatMap((run) => {
     const members = database
       .prepare(
@@ -234,7 +256,7 @@ function readRunningLogcatFaultRuns(database: Database.Database) {
       .map((member) => ({
         runId: run.id,
         serial: member.serial,
-        policy: "PAUSE_ALL" as const,
+        policy: run.failure_policy,
         members: members.map((item) => ({
           serial: item.serial,
           role: item.role,
@@ -246,11 +268,17 @@ function readRunningLogcatFaultRuns(database: Database.Database) {
 
 function readRunningFaultRuns(database: Database.Database) {
   const runs = database
-    .prepare("SELECT id, current_epoch FROM test_runs WHERE state = 'RUNNING' ORDER BY id ASC")
-    .all() as readonly { id: string; current_epoch: number }[];
+    .prepare(
+      "SELECT id, current_epoch, failure_policy FROM test_runs WHERE state = 'RUNNING' ORDER BY id ASC",
+    )
+    .all() as readonly {
+    id: string;
+    current_epoch: number;
+    failure_policy: "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE";
+  }[];
   return runs.map((run) => ({
     runId: run.id,
-    policy: "PAUSE_ALL" as const,
+    policy: run.failure_policy,
     members: database
       .prepare(
         `SELECT serial, role, membership_state
@@ -279,6 +307,7 @@ function createRuntimeWorkerCoordinator(
   projectRoot: string,
   adbPath: string,
   registry: DeviceRegistry,
+  bridgeMode: BridgeMode,
 ): RuntimeWorkerCoordinator {
   const ownerPid = process.pid;
   const client = new AdbClient({ adbPath, cwd: projectRoot });
@@ -332,22 +361,25 @@ function createRuntimeWorkerCoordinator(
   return new RuntimeWorkerCoordinator(
     ({ runId, serial, packageName, runNonceHash, logcatRecordSink, faultSink }) => {
       const workerOwner = { ownerPid, ownerToken: `server-${String(ownerPid)}` };
+      const bridgeOptions =
+        bridgeMode === "REQUIRED"
+          ? {
+              bridgeForwarder,
+              bridgeSessionFactory: ({ hostPort, runNonceHash: workerNonce }: { readonly hostPort: number; readonly runNonceHash?: string }) => {
+                if (workerNonce === undefined) throw new Error("Managed worker run nonce is required.");
+                return createRuntimeBridgeSession({ hostPort, runNonceHash: workerNonce });
+              },
+            }
+          : {};
       return new DeviceWorker({
         serial,
         packageName,
         owner: workerOwner,
         runId,
         resourceManager: resources,
-        bridgeForwarder,
-        bridgeSessionFactory: ({ hostPort, runNonceHash: workerNonce }) => {
-          if (workerNonce === undefined) throw new Error("Managed worker run nonce is required.");
-          const bridge = createRuntimeBridgeSession({
-            hostPort,
-            runNonceHash: workerNonce,
-          });
-          return bridge;
-        },
+        ...bridgeOptions,
         runNonceHash,
+        actionViewport: readDeviceViewport(registry.get(serial)?.metadata),
         allocator,
         identityProbe: async () => {
           const device = registry.get(serial);
@@ -395,11 +427,11 @@ function createConfiguredActionDispatcher(
   registry: DeviceRegistry,
   workerCoordinator: Pick<
     RuntimeWorkerCoordinator,
-    "getActionBarrier" | "getTextFocusSnapshot" | "publishFault"
+    "getActionBarrier" | "getTextFocusSnapshot" | "getActionExecutor" | "publishFault"
   >,
+  bridgeMode: BridgeMode,
 ): ActionDispatcher | undefined {
-  const baseUrl = process.env.TEST_CENTER_APPIUM_URL;
-  if (baseUrl === undefined || baseUrl.trim() === "") return undefined;
+  const baseUrl = process.env.TEST_CENTER_APPIUM_URL?.trim();
   const systemPort = Number(process.env.TEST_CENTER_APPIUM_SYSTEM_PORT ?? 8201);
   const mjpegServerPort = Number(process.env.TEST_CENTER_APPIUM_MJPEG_PORT ?? 7811);
   const viewport = {
@@ -413,34 +445,67 @@ function createConfiguredActionDispatcher(
       .sort()
       .map((serial, index) => [serial, index] as const),
   );
+  const barrierFactory =
+    bridgeMode === "REQUIRED"
+      ? (serial: string, runId?: string) => {
+          if (runId === undefined) throw new Error("Action run id is required for bridge dispatch.");
+          const barrier = workerCoordinator.getActionBarrier(runId, parseDeviceSerial(serial));
+          if (barrier === undefined) throw new Error(`Worker bridge is not ready: ${serial}.`);
+          return barrier;
+        }
+      : undefined;
+  const textFocusBarrier =
+    bridgeMode === "REQUIRED"
+      ? new TextFocusBarrier({
+          sample: async (serial, runId) => {
+            if (runId === undefined) throw new Error("Text action run id is required.");
+            const snapshot = workerCoordinator.getTextFocusSnapshot(runId, parseDeviceSerial(serial));
+            if (snapshot === undefined) throw new Error(`Worker bridge state is not ready: ${serial}.`);
+            return snapshot;
+          },
+        })
+      : undefined;
+  const executorFactory =
+    baseUrl === undefined
+      ? (serial: string) => ({
+          execute: (input: {
+            readonly runId?: string;
+            readonly actionId?: string;
+            readonly serial: string;
+            readonly packageName: string;
+            readonly payload?: import("@test-center/sessions").ActionPayload;
+            readonly command?: import("@test-center/sessions").ActionCommand;
+          }) => {
+            if (input.runId === undefined) throw new Error("Managed action run id is required.");
+            const executor = workerCoordinator.getActionExecutor(
+              input.runId,
+              parseDeviceSerial(serial),
+            );
+            if (executor === undefined) throw new Error(`Worker is not ready: ${serial}.`);
+            return executor.execute({
+              packageName: input.packageName,
+              ...(input.payload === undefined ? {} : { payload: input.payload }),
+              ...(input.command === undefined ? {} : { command: input.command }),
+            });
+          },
+        })
+      : (serial: string) => {
+          const portIndex = serialPortIndexes.get(serial) ?? 0;
+          return new AppiumActionExecutor({
+            baseUrl,
+            systemPort: systemPort + portIndex,
+            mjpegServerPort: mjpegServerPort + portIndex,
+            viewport,
+            faultSink: (event) => workerCoordinator.publishFault(toRuntimeFaultEvent(event)),
+          });
+        };
   return new ActionDispatcher(
     actionRepository,
     actionOutbox,
-    (serial) => {
-      const portIndex = serialPortIndexes.get(serial) ?? 0;
-      return new AppiumActionExecutor({
-        baseUrl,
-        systemPort: systemPort + portIndex,
-        mjpegServerPort: mjpegServerPort + portIndex,
-        viewport,
-        faultSink: (event) => workerCoordinator.publishFault(toRuntimeFaultEvent(event)),
-      });
-    },
+    executorFactory,
     `server-action-dispatcher-${process.pid}`,
-    (serial, runId) => {
-      if (runId === undefined) throw new Error("Action run id is required for bridge dispatch.");
-      const barrier = workerCoordinator.getActionBarrier(runId, parseDeviceSerial(serial));
-      if (barrier === undefined) throw new Error(`Worker bridge is not ready: ${serial}.`);
-      return barrier;
-    },
-    new TextFocusBarrier({
-      sample: async (serial, runId) => {
-        if (runId === undefined) throw new Error("Text action run id is required.");
-        const snapshot = workerCoordinator.getTextFocusSnapshot(runId, parseDeviceSerial(serial));
-        if (snapshot === undefined) throw new Error(`Worker bridge state is not ready: ${serial}.`);
-        return snapshot;
-      },
-    }),
+    barrierFactory,
+    textFocusBarrier,
   );
 }
 
@@ -461,6 +526,27 @@ function toRuntimeFaultEvent(event: AppiumActionFaultEvent) {
 function readPositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value ?? fallback);
   return Number.isSafeInteger(parsed) && parsed >= 2 ? parsed : fallback;
+}
+
+function readDeviceViewport(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): { readonly width: number; readonly height: number } {
+  const physicalSize = metadata?.physicalSize;
+  if (typeof physicalSize !== "object" || physicalSize === null) {
+    return { width: 1080, height: 2340 };
+  }
+  const width = (physicalSize as { width?: unknown }).width;
+  const height = (physicalSize as { height?: unknown }).height;
+  return (
+    typeof width === "number" &&
+    typeof height === "number" &&
+    Number.isSafeInteger(width) &&
+    Number.isSafeInteger(height) &&
+    width >= 2 &&
+    height >= 2
+  )
+    ? { width, height }
+    : { width: 1080, height: 2340 };
 }
 
 export interface RuntimeArtifactMetadataParser {

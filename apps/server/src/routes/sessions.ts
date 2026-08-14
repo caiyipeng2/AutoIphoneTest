@@ -22,6 +22,8 @@ import {
 import { requireSession } from "./bootstrap.js";
 import type { ServerContext } from "./context.js";
 
+const FailurePolicySchema = z.enum(["PAUSE_ALL", "QUARANTINE_FAILED_DEVICE"]);
+
 const CreateSessionSchema = z
   .object({
     clientRequestId: z.string().trim().min(1).max(128),
@@ -29,6 +31,7 @@ const CreateSessionSchema = z
     deviceSerial: DeviceSerialSchema.optional(),
     deviceSerials: z.array(DeviceSerialSchema).min(1).max(4).optional(),
     leaderVideoEnabled: z.boolean().default(true),
+    failurePolicy: FailurePolicySchema.default("PAUSE_ALL"),
   })
   .strict()
   .superRefine((value, context) => {
@@ -137,6 +140,7 @@ export interface SessionView {
     "CREATED" | "PREFLIGHT" | "RUNNING" | "PAUSED" | "FINISHED" | "INTERRUPTED" | "FAILED";
   readonly currentEpoch: number;
   readonly leaderVideoEnabled: boolean;
+  readonly failurePolicy: "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE";
   readonly leader: SessionLeaderView;
   readonly devices: readonly SessionDeviceView[];
 }
@@ -147,6 +151,7 @@ export interface SessionCreateInput {
   readonly deviceSerials?: readonly DeviceSerial[];
   readonly deviceSerial?: DeviceSerial;
   readonly leaderVideoEnabled: boolean;
+  readonly failurePolicy?: "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE";
   readonly actorSessionId: string;
 }
 
@@ -201,6 +206,7 @@ export async function registerSessionsRoutes(
         packageName: payload.packageName,
         deviceSerials: payload.deviceSerials.map(parseDeviceSerial),
         leaderVideoEnabled: payload.leaderVideoEnabled,
+        failurePolicy: payload.failurePolicy,
         actorSessionId: session.sessionId,
       });
       return await reply

@@ -12,6 +12,7 @@ const view: SessionView = {
   state: "CREATED",
   currentEpoch: 1,
   leaderVideoEnabled: true,
+  failurePolicy: "PAUSE_ALL",
   leader: {
     serial: parseDeviceSerial("R5CX211TXNT"),
     role: "LEADER",

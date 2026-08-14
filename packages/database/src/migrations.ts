@@ -442,6 +442,14 @@ CREATE INDEX IF NOT EXISTS idx_run_device_transitions_lookup
 `.trim(),
 };
 
+export const RUN_FAILURE_POLICY_MIGRATION: Migration = {
+  id: "0013_run_failure_policy",
+  sql: `
+ALTER TABLE test_runs ADD COLUMN failure_policy TEXT NOT NULL DEFAULT 'PAUSE_ALL'
+  CHECK (failure_policy IN ('PAUSE_ALL', 'QUARANTINE_FAILED_DEVICE'));
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");

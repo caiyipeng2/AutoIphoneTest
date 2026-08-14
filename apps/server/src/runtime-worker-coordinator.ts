@@ -3,6 +3,8 @@ import type { DeviceSerial } from "@test-center/contracts/device";
 import type { DeviceWorker } from "@test-center/sessions";
 import type { ActionBarrier, RuntimeFaultEvent, TextFocusSnapshot } from "@test-center/sessions";
 import type { LogcatRecord } from "@test-center/contracts/logcat";
+import type { ActionCommand } from "@test-center/sessions";
+import type { ActionPayload } from "@test-center/sessions";
 
 export interface RuntimeWorkerFactoryInput {
   readonly runId: string;
@@ -16,6 +18,7 @@ export interface RuntimeWorkerFactoryInput {
 export type RuntimeWorkerFactory = (
   input: RuntimeWorkerFactoryInput,
 ) => Pick<DeviceWorker, "start" | "stop"> &
+  Partial<Pick<DeviceWorker, "executeAction">> &
   Partial<Pick<DeviceWorker, "getActionBarrier" | "getTextFocusSnapshot">>;
 
 export class RuntimeWorkerCoordinator {
@@ -35,20 +38,21 @@ export class RuntimeWorkerCoordinator {
     const workers = new Map<DeviceSerial, RuntimeWorkerFactoryReturn>();
     this.runs.set(runId, workers);
     try {
-      await Promise.all(
-        serials.map(async (serial) => {
-          const worker = this.factory({
-            runId,
-            serial,
-            packageName,
-            runNonceHash,
-            logcatRecordSink: (record) => this.emitLogcat(record),
-            faultSink: (event) => this.emitFault(event),
-          });
-          workers.set(serial, worker);
-          await worker.start();
-        }),
-      );
+      // Appium/UiAutomator2 installation touches each device's ADB transport.
+      // Establish workers one at a time to avoid device-side bootstrap races;
+      // action dispatch remains concurrent after every worker is READY.
+      for (const serial of serials) {
+        const worker = this.factory({
+          runId,
+          serial,
+          packageName,
+          runNonceHash,
+          logcatRecordSink: (record) => this.emitLogcat(record),
+          faultSink: (event) => this.emitFault(event),
+        });
+        workers.set(serial, worker);
+        await worker.start();
+      }
     } catch (error) {
       await this.stopWorkers(workers);
       this.runs.delete(runId);
@@ -74,6 +78,18 @@ export class RuntimeWorkerCoordinator {
 
   public list(runId: string): readonly DeviceSerial[] {
     return [...(this.runs.get(runId)?.keys() ?? [])];
+  }
+
+  public getActionExecutor(runId: string, serial: DeviceSerial) {
+    return this.runs.get(runId)?.get(serial)?.executeAction === undefined
+      ? undefined
+      : {
+          execute: (input: {
+            readonly packageName: string;
+            readonly payload?: ActionPayload;
+            readonly command?: ActionCommand;
+          }) => this.runs.get(runId)!.get(serial)!.executeAction!(input),
+        };
   }
 
   public getActionBarrier(runId: string, serial: DeviceSerial): ActionBarrier | undefined {
@@ -117,4 +133,5 @@ export class RuntimeWorkerCoordinator {
 }
 
 type RuntimeWorkerFactoryReturn = Pick<DeviceWorker, "start" | "stop"> &
+  Partial<Pick<DeviceWorker, "executeAction">> &
   Partial<Pick<DeviceWorker, "getActionBarrier" | "getTextFocusSnapshot">>;

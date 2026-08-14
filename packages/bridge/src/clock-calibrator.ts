@@ -132,15 +132,9 @@ export class ClockCalibrator {
     const hostSendMonotonicMs = this.nowMonotonicMs();
     const pongPromise = new Promise<{ message: QaPong; hostReceiveMonotonicMs: number }>(
       (resolve, reject) => {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const removeListener = this.client.onMessage((message) => {
-          if (message.type !== "QA_PONG" || message.pingId !== pingId) return;
-          if (timer !== undefined) clearTimeout(timer);
-          removeListener();
-          resolve({ message, hostReceiveMonotonicMs: this.nowMonotonicMs() });
-        });
-        timer = setTimeout(() => {
-          removeListener();
+        const listener = { remove: () => undefined as void };
+        const timer = setTimeout(() => {
+          listener.remove();
           reject(
             new ClockCalibrationError(
               "PING_TIMEOUT",
@@ -148,6 +142,12 @@ export class ClockCalibrator {
             ),
           );
         }, this.pingTimeoutMs);
+        listener.remove = this.client.onMessage((message) => {
+          if (message.type !== "QA_PONG" || message.pingId !== pingId) return;
+          clearTimeout(timer);
+          listener.remove();
+          resolve({ message, hostReceiveMonotonicMs: this.nowMonotonicMs() });
+        });
       },
     );
 

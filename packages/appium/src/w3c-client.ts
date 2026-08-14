@@ -370,7 +370,8 @@ export class AppiumW3cClient {
         error instanceof DOMException && error.name === "TimeoutError"
           ? "TIMEOUT"
           : "NETWORK_ERROR";
-      throw new AppiumW3cClientError(code, `Appium ${method} ${path} request failed.`, {
+      const detail = error instanceof Error ? `: ${error.message}` : "";
+      throw new AppiumW3cClientError(code, `Appium ${method} ${path} request failed${detail}.`, {
         cause: error,
       });
     }

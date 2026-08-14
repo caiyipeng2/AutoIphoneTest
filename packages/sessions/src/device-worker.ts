@@ -11,6 +11,9 @@ import type { WorkerResourceLease, WorkerResourceManager } from "./worker-resour
 import type { ActionBarrier } from "./action-barrier.js";
 import type { TextFocusSnapshot } from "./text-focus-barrier.js";
 import type { RuntimeFaultCategory, RuntimeFaultEvent } from "./runtime-fault-monitor.js";
+import type { ActionCommand } from "./action-command.js";
+import type { ActionPayload } from "./run-repository.js";
+import { createCommandPointerActions, createPointerActions } from "./appium-action.js";
 
 export type DeviceWorkerState =
   "DISCONNECTED" | "STARTING" | "READY" | "STOPPING" | "STOPPED" | "ERROR";
@@ -95,6 +98,7 @@ export interface DeviceWorkerOptions {
   ) => DeviceWorkerBridgeSession;
   readonly bridgeDevicePort?: number;
   readonly runNonceHash?: string;
+  readonly actionViewport?: { readonly width: number; readonly height: number };
 }
 
 export type DeviceWorkerErrorCode =
@@ -140,6 +144,7 @@ export class DeviceWorker {
   private readonly bridgeSessionFactory: DeviceWorkerOptions["bridgeSessionFactory"];
   private readonly bridgeDevicePort: number;
   private readonly runNonceHash: string | undefined;
+  private readonly actionViewport: { readonly width: number; readonly height: number };
 
   public constructor(options: DeviceWorkerOptions) {
     if (!options.serial.trim() || !options.packageName.trim())
@@ -166,6 +171,7 @@ export class DeviceWorker {
     this.bridgeSessionFactory = options.bridgeSessionFactory;
     this.bridgeDevicePort = options.bridgeDevicePort ?? 17_501;
     this.runNonceHash = options.runNonceHash;
+    this.actionViewport = options.actionViewport ?? { width: 1080, height: 2340 };
     if ((this.bridgeForwarder === undefined) !== (this.bridgeSessionFactory === undefined)) {
       throw new TypeError("Bridge forwarder and session factory must be configured together.");
     }
@@ -386,6 +392,71 @@ export class DeviceWorker {
   public getTextFocusSnapshot(): TextFocusSnapshot | undefined {
     if (this._state !== "READY") return undefined;
     return this.bridgeSession?.getTextFocusSnapshot?.();
+  }
+
+  /** Execute against the worker-owned Appium session so managed runs do not
+   * need a second global Appium endpoint or a Unity QA Bridge injection path. */
+  public async executeAction(input: {
+    readonly packageName: string;
+    readonly payload?: ActionPayload;
+    readonly command?: ActionCommand;
+  }): Promise<unknown> {
+    if (this._state !== "READY" || this.client === undefined || this.fence === undefined) {
+      throw new DeviceWorkerError("INVALID_STATE", "Worker is not ready for actions.");
+    }
+    const client = this.client;
+    const fence = this.fence;
+    await client.activateApp(fence, input.packageName);
+    await this.waitForForegroundPackage(client, fence, input.packageName);
+    const command = input.command;
+    if (command?.type === "terminate") {
+      await client.terminateApp(fence, input.packageName);
+      return { packageName: input.packageName, pointerActionCount: 0 };
+    }
+    if (command?.type === "restart") {
+      await client.terminateApp(fence, input.packageName);
+      await client.activateApp(fence, input.packageName);
+      return { packageName: input.packageName, pointerActionCount: 0 };
+    }
+    if (command?.type === "back") {
+      await client.pressKey(fence, 4);
+      return { packageName: input.packageName, pointerActionCount: 0 };
+    }
+    if (command?.type === "activate") {
+      return { packageName: input.packageName, pointerActionCount: 0 };
+    }
+    if (command?.type === "text") {
+      await client.typeText(fence, command.text);
+      return { packageName: input.packageName, pointerActionCount: 0 };
+    }
+    const actions =
+      command === undefined
+        ? createPointerActions(
+            input.payload ?? { kind: "tap", x: 0.5, y: 0.5 },
+            this.actionViewport,
+          )
+        : createCommandPointerActions(command, this.actionViewport);
+    await client.performActions(fence, actions);
+    return { packageName: input.packageName, pointerActionCount: actions[0]?.actions.length ?? 0 };
+  }
+
+  private async waitForForegroundPackage(
+    client: AppiumW3cClient,
+    fence: SessionFence,
+    packageName: string,
+  ): Promise<void> {
+    const deadline = Date.now() + 5_000;
+    let currentPackage = await client.currentPackage(fence);
+    while (currentPackage !== packageName && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      currentPackage = await client.currentPackage(fence);
+    }
+    if (currentPackage !== packageName) {
+      throw new DeviceWorkerError(
+        "IDENTITY_MISMATCH",
+        `Appium action foreground package mismatch: ${currentPackage ?? "unknown"}.`,
+      );
+    }
   }
 
   private createCapabilities(lease: PortLease): DeviceSessionCapabilities {

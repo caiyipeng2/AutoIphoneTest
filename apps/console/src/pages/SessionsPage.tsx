@@ -43,6 +43,9 @@ export function SessionsPage() {
   const [manualSerial, setManualSerial] = useState("");
   const [activeSerial, setActiveSerial] = useState<string | null>(null);
   const [packageName, setPackageName] = useState(DEFAULT_PACKAGE);
+  const [failurePolicy, setFailurePolicy] = useState<"PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE">(
+    "PAUSE_ALL",
+  );
   const [session, setSession] = useState<SessionView | null>(null);
   const [busy, setBusy] = useState<SessionBusyState>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +100,7 @@ export function SessionsPage() {
         packageName: normalizedPackage,
         deviceSerials: selectedSerials,
         leaderVideoEnabled: true,
+        failurePolicy,
       });
       setSession(created.session);
       setBusy("preflight");
@@ -308,13 +312,23 @@ export function SessionsPage() {
             <h2>故障时如何处理</h2>
           </div>
         </div>
-        <div className="choice-grid">
-          <button className="choice active">
+        <div className="choice-grid" role="group" aria-label="故障处理策略">
+          <button
+            className={`choice ${failurePolicy === "PAUSE_ALL" ? "active" : ""}`}
+            aria-pressed={failurePolicy === "PAUSE_ALL"}
+            onClick={() => setFailurePolicy("PAUSE_ALL")}
+            disabled={isBusy || session !== null}
+          >
             <Pause size={17} />
             <strong>全部暂停</strong>
             <small>保持设备组状态一致</small>
           </button>
-          <button className="choice">
+          <button
+            className={`choice ${failurePolicy === "QUARANTINE_FAILED_DEVICE" ? "active" : ""}`}
+            aria-pressed={failurePolicy === "QUARANTINE_FAILED_DEVICE"}
+            onClick={() => setFailurePolicy("QUARANTINE_FAILED_DEVICE")}
+            disabled={isBusy || session !== null}
+          >
             <Square size={17} />
             <strong>隔离失败设备</strong>
             <small>其余设备继续执行</small>

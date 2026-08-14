@@ -16,6 +16,7 @@ import {
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
   ACTION_COMMANDS_MIGRATION,
+  RUN_FAILURE_POLICY_MIGRATION,
 } from "@test-center/database";
 
 import { RuntimeSessionRouteService } from "./session-runtime.js";
@@ -75,6 +76,32 @@ describe("RuntimeSessionRouteService", () => {
       to_state: "PAUSED",
       reason: "SESSION_PAUSED:fault-monitor",
     });
+  });
+
+  it("persists the selected failure policy for runtime incident decisions", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const service = new RuntimeSessionRouteService(database, {
+      get: () => ({ state: "ONLINE" }),
+    } as never);
+    const created = await service.create({
+      clientRequestId: "request-policy",
+      packageName: "com.example.game",
+      deviceSerials: [serial],
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+      failurePolicy: "QUARANTINE_FAILED_DEVICE",
+    });
+
+    const row = database
+      .prepare("SELECT failure_policy FROM test_runs WHERE id = ?")
+      .get(created.session.id) as { failure_policy: string };
+    expect(row.failure_policy).toBe("QUARANTINE_FAILED_DEVICE");
   });
 
   it("cancels queued actions when pausing a running session", async () => {
@@ -476,6 +503,7 @@ async function createDatabase(): Promise<Database.Database> {
     RUN_ACTIONS_MIGRATION,
     SESSION_API_MIGRATION,
     ACTION_COMMANDS_MIGRATION,
+    RUN_FAILURE_POLICY_MIGRATION,
   ]);
   return database;
 }

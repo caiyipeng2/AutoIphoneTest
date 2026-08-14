@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IncidentTimeline } from "./IncidentTimeline";
@@ -53,14 +53,24 @@ describe("IncidentTimeline", () => {
     );
 
     render(<IncidentTimeline sessionId="run-1" />);
-    await waitFor(() => expect(screen.getByText("游戏崩溃 / ANR")).toBeInTheDocument());
-    expect(screen.getByText("Bridge 超时")).toBeInTheDocument();
+    await waitFor(() => {
+      const articles = screen.getAllByRole("article");
+      expect(articles).toHaveLength(2);
+      const firstArticle = articles[0];
+      if (!firstArticle) throw new Error("Expected the first incident article to be rendered");
+      expect(within(firstArticle).getByText("游戏崩溃 / ANR")).toBeInTheDocument();
+    });
+    const articles = screen.getAllByRole("article");
+    const secondArticle = articles[1];
+    if (!secondArticle) throw new Error("Expected the second incident article to be rendered");
+    expect(within(secondArticle).getByText("Bridge 超时")).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("combobox", { name: "故障类别" }), {
       target: { value: "APP_CRASH_OR_ANR" },
     });
-    expect(screen.getByText("游戏崩溃 / ANR")).toBeInTheDocument();
-    expect(screen.queryByText("Bridge 超时")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("article")).getByText("游戏崩溃 / ANR")).toBeInTheDocument();
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(within(screen.getByRole("article")).queryByText("Bridge 超时")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "展开故障详情 inc-crash" }));
     expect(screen.getByText("runs/run-1/crash.log")).toBeInTheDocument();

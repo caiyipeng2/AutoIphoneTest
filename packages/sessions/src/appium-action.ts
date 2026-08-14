@@ -36,6 +36,7 @@ export interface AppiumActionClient {
   terminateApp(fence: SessionFence, packageName: string): Promise<void>;
   currentPackage(fence: SessionFence): Promise<string | undefined>;
   pressKey(fence: SessionFence, keycode: number, metastate?: number): Promise<void>;
+  typeText?(fence: SessionFence, text: string): Promise<void>;
   performActions(fence: SessionFence, actions: readonly W3cAction[]): Promise<void>;
   deleteSession(fence: SessionFence): Promise<void>;
 }
@@ -122,6 +123,18 @@ export class AppiumActionExecutor {
           serial: input.serial,
           packageName: input.packageName,
           foregroundPackage: input.packageName,
+          pointerActionCount: 0,
+        };
+      }
+      if (input.command?.type === "text") {
+        if (client.typeText === undefined) {
+          throw new Error("Text action requires an Appium client with text input support.");
+        }
+        await client.typeText(fence, input.command.text);
+        return {
+          serial: input.serial,
+          packageName: input.packageName,
+          foregroundPackage,
           pointerActionCount: 0,
         };
       }

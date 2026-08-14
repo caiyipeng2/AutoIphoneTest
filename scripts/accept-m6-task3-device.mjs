@@ -1,3 +1,4 @@
+/* global URL, process, setTimeout, clearTimeout, fetch, Buffer, console */
 import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";

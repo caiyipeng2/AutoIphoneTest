@@ -23,6 +23,7 @@ interface SessionRow {
   readonly state: SessionView["state"];
   readonly current_epoch: number;
   readonly leader_video_enabled: number;
+  readonly failure_policy: "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE";
   readonly serial: string;
   readonly membership_state: SessionView["leader"]["membershipState"];
   readonly epoch: number;
@@ -59,7 +60,8 @@ export class RuntimeSessionRouteService implements SessionRouteService {
       if (
         existing.package_name !== packageName ||
         !sameSerials(this.readMemberSerials(existing.id), deviceSerials) ||
-        Boolean(existing.leader_video_enabled) !== input.leaderVideoEnabled
+        Boolean(existing.leader_video_enabled) !== input.leaderVideoEnabled ||
+        existing.failure_policy !== (input.failurePolicy ?? "PAUSE_ALL")
       ) {
         throw new Error("Session client request already exists with different payload.");
       }
@@ -76,8 +78,8 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     const insert = this.database.transaction(() => {
       this.database
         .prepare(
-          `INSERT INTO test_runs (id, package_name, state, current_epoch, run_nonce_hash, client_request_id, leader_video_enabled, created_at, updated_at)
-         VALUES (?, ?, 'CREATED', 1, ?, ?, ?, ?, ?)`,
+          `INSERT INTO test_runs (id, package_name, state, current_epoch, run_nonce_hash, client_request_id, leader_video_enabled, failure_policy, created_at, updated_at)
+         VALUES (?, ?, 'CREATED', 1, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           runId,
@@ -85,6 +87,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
           runNonceHash,
           input.clientRequestId,
           input.leaderVideoEnabled ? 1 : 0,
+          input.failurePolicy ?? "PAUSE_ALL",
           now,
           now,
         );
@@ -111,7 +114,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
   public get(id: string): SessionView | undefined {
     const row = this.database
       .prepare(
-        `SELECT r.id, r.client_request_id, r.package_name, r.state, r.current_epoch, r.leader_video_enabled,
+        `SELECT r.id, r.client_request_id, r.package_name, r.state, r.current_epoch, r.leader_video_enabled, r.failure_policy,
               d.serial, d.membership_state, d.epoch, d.generation
        FROM test_runs r JOIN run_devices d ON d.run_id = r.id AND d.role = 'LEADER' AND d.epoch = r.current_epoch
        WHERE r.id = ?`,
@@ -192,7 +195,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
   private findByClientRequestId(clientRequestId: string): SessionRow | undefined {
     return this.database
       .prepare(
-        `SELECT r.id, r.client_request_id, r.package_name, r.state, r.current_epoch, r.leader_video_enabled,
+        `SELECT r.id, r.client_request_id, r.package_name, r.state, r.current_epoch, r.leader_video_enabled, r.failure_policy,
               d.serial, d.membership_state, d.epoch, d.generation
        FROM test_runs r JOIN run_devices d ON d.run_id = r.id AND d.role = 'LEADER' AND d.epoch = r.current_epoch
        WHERE r.client_request_id = ?`,
@@ -230,6 +233,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
       state: row.state,
       currentEpoch: row.current_epoch,
       leaderVideoEnabled: Boolean(row.leader_video_enabled),
+      failurePolicy: row.failure_policy,
       leader: {
         serial: parseDeviceSerial(row.serial) as DeviceSerial,
         role: "LEADER",

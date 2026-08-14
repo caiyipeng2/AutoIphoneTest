@@ -405,7 +405,7 @@ function validateArmRequest(request: ArmRequest): void {
   }
   try {
     if (BigInt(request.expiresAtRealtimeMs) <= 0n) throw new Error("expired");
-  } catch (error) {
+  } catch {
     throw new TypeError("expiresAtRealtimeMs must be a positive decimal string.");
   }
   if (

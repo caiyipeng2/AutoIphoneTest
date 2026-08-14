@@ -1,3 +1,4 @@
+/* global console */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";

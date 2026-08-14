@@ -305,6 +305,8 @@ describe("ActionOutbox", () => {
     await dispatcher.dispatch({ actionId: created.action.id, packageName: "com.example.game" });
 
     expect(execute).toHaveBeenCalledWith({
+      runId: "run-1",
+      actionId: created.action.id,
       serial: "leader-a",
       packageName: "com.example.game",
       command: { type: "restart" },
