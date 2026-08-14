@@ -11,5 +11,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13"
   }
 }
