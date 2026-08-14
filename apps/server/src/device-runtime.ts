@@ -396,6 +396,13 @@ function createRuntimeWorkerCoordinator(
             appiumHome,
             port,
             logPath: win32.join(logPath, "appium.log"),
+            // UiAutomator2 may install/validate its device-side server on a
+            // cold Android device. Keep this bounded but long enough for two
+            // sequential workers to initialize without a false timeout.
+            readinessTimeoutMs: readPositiveInteger(
+              process.env.TEST_CENTER_APPIUM_READINESS_TIMEOUT_MS,
+              60_000,
+            ),
             cwd: projectRoot,
           }),
         logcatFactory: ({ serial: logSerial, resourceLease }) =>

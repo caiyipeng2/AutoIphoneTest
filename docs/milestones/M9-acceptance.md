@@ -22,6 +22,7 @@ M9 covers the closed action set, typed incidents, deterministic `PAUSE_ALL` / `Q
 | Explicit bridge mode                                                                  | `TEST_CENTER_BRIDGE_MODE=required` remains the strict default; `optional` selects Appium-only explicitly       |
 | Managed Appium-only action path                                                       | Worker-owned Appium session executes tap/swipe/long press/drag/text/Back/lifecycle actions without QA Bridge  |
 | Worker startup cleanup                                                                 | Sequential 1-4 worker establishment avoids concurrent UiAutomator2 bootstrap races; dispatch remains parallel |
+| Managed Appium readiness                                                               | Default worker readiness window is 60 seconds and remains configurable with `TEST_CENTER_APPIUM_READINESS_TIMEOUT_MS` |
 | Automated suite                                                                       | PASS, 89 files / 365 tests                                                                                      |
 | TypeScript build                                                                      | PASS                                                                                                            |
 | ESLint                                                                                | PASS                                                                                                            |
@@ -39,14 +40,14 @@ The current ADB snapshot contained one online target, `192.168.22.191:5555` (`SM
 
 The production package was then run through the new explicit Appium-only managed path with `TEST_CENTER_BRIDGE_MODE=optional`. A real device reached `CREATED -> PREFLIGHT -> RUNNING`, and a normalized tap was executed through the worker-owned Appium session with a persisted `SUCCEEDED` target result. No Unity QA Bridge listener or `QA_HELLO`/`QA_STATE` handshake is required in this mode. Text input uses Appium native text input; Bridge-backed focus verification remains intentionally unavailable in Appium-only mode.
 
-Two-device session creation and preflight succeeded with `R5CX211TXNT` and `t4vswkqcs4uc8pob`, but the current hardware run did not reach `RUNNING`: one UiAutomator2 `POST /session` request failed during managed startup. The failure was not converted into a multi-device PASS. The coordinator now starts workers sequentially to avoid concurrent device-side bootstrap races; a repeat with both devices continuously online is still required.
+Two-device session creation and preflight succeeded with `R5CX211TXNT` and `t4vswkqcs4uc8pob`. After extending the bounded Appium readiness window for cold device-side UiAutomator2 bootstrap, the managed run reached `RUNNING`; one host tap produced `SUCCEEDED` results for both the leader and follower. The coordinator starts workers sequentially to avoid concurrent device-side bootstrap races, while action dispatch remains concurrent.
 
 Per user confirmation, active-session fault injection and incident/recovery acceptance are temporarily skipped. The existing fault harness remains test-only and unchanged; no production fault route was added.
 
 ## Acceptance decision
 
-**M9 implementation: READY FOR REVIEW. M9 single-device Appium-only action acceptance: PASS. M9 two-device hardware acceptance: PENDING REPEAT. M9 active-session fault-policy acceptance: SKIPPED BY USER.**
+**M9 implementation: READY FOR REVIEW. M9 single-device Appium-only action acceptance: PASS. M9 two-device hardware acceptance: PASS. M9 active-session fault-policy acceptance: SKIPPED BY USER.**
 
-The Appium driver/device discovery blocker is resolved for the current environment. Appium-only operation is explicit and does not silently weaken the strict Bridge default. M10 remains unopened until the user approves this M9 slice and the two-device hardware repeat is completed; fault-policy verification can be resumed later when requested.
+The Appium driver/device discovery blocker is resolved for the current environment. Appium-only operation is explicit and does not silently weaken the strict Bridge default. M10 remains unopened; fault-policy verification can be resumed later when requested.
 
 Local changes are intentionally uncommitted and unpushed pending user approval.
