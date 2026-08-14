@@ -15,6 +15,7 @@
     { "path": "./packages/sessions" },
     { "path": "./packages/video" },
     { "path": "./packages/evidence" },
+    { "path": "./packages/reports" },
     { "path": "./apps/server" },
     { "path": "./apps/console" }
   ]
