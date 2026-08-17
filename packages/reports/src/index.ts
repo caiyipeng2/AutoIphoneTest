@@ -8,3 +8,4 @@ export * from "./zip-manifest.js";
 export * from "./evidence-zip.js";
 export * from "./evidence-zip-verifier.js";
 export * from "./report-zip-publication-service.js";
+export * from "./report-finalization-service.js";

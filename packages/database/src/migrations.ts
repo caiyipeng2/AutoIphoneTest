@@ -506,6 +506,26 @@ CREATE INDEX IF NOT EXISTS idx_report_exports_pending
 `.trim(),
 };
 
+export const REPORT_FINALIZATION_MIGRATION: Migration = {
+  id: "0015_report_finalization",
+  sql: `
+CREATE TABLE IF NOT EXISTS run_finalizations (
+  run_id TEXT PRIMARY KEY NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+  state TEXT NOT NULL CHECK (state IN (
+    'FINALIZING', 'COMPLETED', 'FINALIZATION_FAILED', 'ABORTED', 'INTERRUPTED'
+  )),
+  attempt INTEGER NOT NULL CHECK (attempt > 0),
+  error_category TEXT,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_finalizations_state
+  ON run_finalizations(state, updated_at, run_id);
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
