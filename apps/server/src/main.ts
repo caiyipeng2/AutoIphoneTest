@@ -22,6 +22,7 @@ export async function main(): Promise<void> {
     uidService: runtimeDevices.uidService,
     sessionService: runtimeDevices.sessionService,
     incidentService: runtimeDevices.incidentService,
+    resultsService: runtimeDevices.resultsService,
   });
   app.addHook("onClose", async () => {
     runtimeDevices.faultMonitor.stop();

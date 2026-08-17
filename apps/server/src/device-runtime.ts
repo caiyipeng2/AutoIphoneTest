@@ -85,7 +85,10 @@ import type { SessionRouteService } from "./routes/sessions.js";
 import { RuntimeSessionRouteService } from "./session-runtime.js";
 import { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
 import { parseBridgeMode, type BridgeMode } from "./runtime-config.js";
-import { ReportFinalizationRecoveryService } from "@test-center/reports";
+import {
+  ReportFinalizationRecoveryService,
+  ReportHistoryRepository,
+} from "@test-center/reports";
 
 export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
@@ -98,6 +101,7 @@ export interface RuntimeDeviceRegistry {
   readonly logcatFaultMonitor: LogcatFaultMonitor;
   readonly runtimeFaultMonitor: RuntimeFaultMonitor;
   readonly incidentService: IncidentRouteService;
+  readonly resultsService: ReportHistoryRepository;
   readonly close: () => Promise<void>;
 }
 
@@ -126,6 +130,7 @@ export async function createRuntimeDeviceRegistry(
     REPORT_FINALIZATION_MIGRATION,
   ]);
   new ReportFinalizationRecoveryService(database).reconcileStale();
+  const resultsService = new ReportHistoryRepository(database);
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
     "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\platform-tools\\adb.exe";
@@ -228,6 +233,7 @@ export async function createRuntimeDeviceRegistry(
     logcatFaultMonitor,
     runtimeFaultMonitor,
     incidentService,
+    resultsService,
     close: async () => {
       await workerCoordinator.stopAll().catch(() => undefined);
       database.close();

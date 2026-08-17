@@ -18,6 +18,7 @@ const app = await createApp(
         deploymentService: runtimeDevices.deploymentService,
         sessionService: runtimeDevices.sessionService,
         incidentService: runtimeDevices.incidentService,
+        resultsService: runtimeDevices.resultsService,
       }
     : {
         ...options,
@@ -26,6 +27,7 @@ const app = await createApp(
         deploymentService: runtimeDevices.deploymentService,
         sessionService: runtimeDevices.sessionService,
         incidentService: runtimeDevices.incidentService,
+        resultsService: runtimeDevices.resultsService,
       },
 );
 app.addHook("onClose", async () => {

@@ -30,6 +30,7 @@ import { registerVideoGateway } from "./ws/video-gateway.js";
 import { registerSessionsRoutes } from "./routes/sessions.js";
 import type { SessionRouteService } from "./routes/sessions.js";
 import { registerIncidentRoutes, type IncidentRouteService } from "./routes/incidents.js";
+import { registerResultsRoutes, type ResultsRouteService } from "./routes/results.js";
 
 export interface CreateAppOptions {
   readonly port: number;
@@ -47,6 +48,7 @@ export interface CreateAppOptions {
   readonly viewProviders?: ReadonlyMap<string, ViewProvider>;
   readonly sessionService?: SessionRouteService;
   readonly incidentService?: IncidentRouteService;
+  readonly resultsService?: ResultsRouteService;
 }
 
 export async function createApp(options: CreateAppOptions): Promise<FastifyInstance> {
@@ -76,6 +78,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
     ...(options.viewProviders === undefined ? {} : { views: options.viewProviders }),
     ...(options.sessionService === undefined ? {} : { sessionService: options.sessionService }),
     ...(options.incidentService === undefined ? {} : { incidentService: options.incidentService }),
+    ...(options.resultsService === undefined ? {} : { resultsService: options.resultsService }),
   };
   const snapshot = options.healthSnapshot ?? createDefaultHealthSnapshot();
 
@@ -123,6 +126,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
   await registerDeploymentsRoutes(app, context);
   await registerSessionsRoutes(app, context);
   await registerIncidentRoutes(app, context);
+  await registerResultsRoutes(app, context);
   await registerStateGateway(app, context, snapshot);
   await registerVideoGateway(app, context);
   return app;
