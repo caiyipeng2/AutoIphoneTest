@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FileArchive,
   FileCode2,
+  RefreshCw,
   Smartphone,
 } from "lucide-react";
 
@@ -16,9 +17,15 @@ import type { ReportHistoryItem } from "../../state/api";
 export function ResultDetail({
   result,
   onBack,
+  onRetryFinalization,
+  retryingFinalization,
+  retryFinalizationError,
 }: {
   result: ReportHistoryItem;
   onBack: () => void;
+  onRetryFinalization?: () => void;
+  retryingFinalization?: boolean;
+  retryFinalizationError?: string | undefined;
 }) {
   const stateLabel =
     result.state === "FINISHED" ? "已完成" : result.state === "FAILED" ? "失败" : "已中断";
@@ -154,6 +161,26 @@ export function ResultDetail({
           <CircleDashed size={15} />
           <span>最终化状态：{finalizationStateLabel[result.finalization.state]}</span>
           <span>第 {result.finalization.attempt} 次尝试</span>
+          {(result.finalization.state === "FINALIZATION_FAILED" ||
+            result.finalization.state === "INTERRUPTED") &&
+            onRetryFinalization !== undefined && (
+              <div className="results-detail-finalization-actions">
+                {retryFinalizationError !== undefined && (
+                  <span className="results-detail-finalization-error" role="alert">
+                    {retryFinalizationError}
+                  </span>
+                )}
+                <button
+                  className="button button-quiet"
+                  type="button"
+                  onClick={onRetryFinalization}
+                  disabled={retryingFinalization}
+                >
+                  <RefreshCw size={14} className={retryingFinalization ? "spin" : undefined} />
+                  {retryingFinalization ? "正在重试" : "重试报告生成"}
+                </button>
+              </div>
+            )}
         </div>
       )}
     </div>

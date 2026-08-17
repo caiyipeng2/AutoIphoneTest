@@ -141,6 +141,73 @@ describe("ResultsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "返回报告历史" }));
     expect(screen.getByRole("heading", { name: "报告" })).toBeInTheDocument();
   });
+
+  it("retries an interrupted finalization from the detail view", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/results?limit=50") return jsonResponse({ schemaVersion: 1, results });
+      if (url === "/api/results/run-failed") {
+        return jsonResponse({ schemaVersion: 1, result: results[1] });
+      }
+      if (url === "/api/results/run-failed/retry-finalization") {
+        expect(init?.method).toBe("POST");
+        expect((init?.headers as Record<string, string>)["idempotency-key"]).toBeTruthy();
+        return jsonResponse({
+          schemaVersion: 1,
+          result: {
+            ...results[1],
+            finalization: { ...results[1]!.finalization!, state: "COMPLETED" },
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ResultsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "查看报告 run-failed" })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "查看报告 run-failed" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "重试报告生成" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重试报告生成" }));
+    await waitFor(() => expect(screen.getByText("最终化状态：已完成")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "重试报告生成" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the retry action available and announces a server rejection", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/results?limit=50") return jsonResponse({ schemaVersion: 1, results });
+      if (url === "/api/results/run-failed") {
+        return jsonResponse({ schemaVersion: 1, result: results[1] });
+      }
+      if (url === "/api/results/run-failed/retry-finalization") {
+        expect(init?.method).toBe("POST");
+        return jsonResponse({ error: "Report finalization retry unavailable." }, 503);
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ResultsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "查看报告 run-failed" })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "查看报告 run-failed" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "重试报告生成" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "重试报告生成" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("Report finalization retry unavailable."),
+    );
+    expect(screen.getByRole("button", { name: "重试报告生成" })).toBeInTheDocument();
+  });
 });
 
 function jsonResponse(body: unknown, status = 200) {

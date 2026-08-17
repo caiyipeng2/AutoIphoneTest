@@ -14,6 +14,7 @@ import { ResultDetail } from "../features/results/ResultDetail";
 import {
   fetchResultDetail,
   fetchResults,
+  retryResultFinalization,
   type ReportHistoryItem,
   type ReportRunState,
 } from "../state/api";
@@ -37,6 +38,8 @@ export function ResultsPage() {
   const [detail, setDetail] = useState<ReportHistoryItem | undefined>();
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | undefined>();
+  const [retryingFinalization, setRetryingFinalization] = useState(false);
+  const [retryFinalizationError, setRetryFinalizationError] = useState<string | undefined>();
 
   const loadResults = useCallback(async () => {
     setLoading(true);
@@ -58,6 +61,7 @@ export function ResultsPage() {
     setSelectedRunId(runId);
     setDetail(undefined);
     setDetailError(undefined);
+    setRetryFinalizationError(undefined);
     setDetailLoading(true);
     try {
       setDetail(await fetchResultDetail(runId));
@@ -67,6 +71,22 @@ export function ResultsPage() {
       setDetailLoading(false);
     }
   }, []);
+
+  const retryDetailFinalization = useCallback(async () => {
+    if (detail === undefined || detail.finalization === undefined) return;
+    setRetryingFinalization(true);
+    setRetryFinalizationError(undefined);
+    try {
+      const idempotencyKey =
+        globalThis.crypto?.randomUUID?.() ??
+        `retry-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setDetail(await retryResultFinalization(detail.runId, idempotencyKey));
+    } catch (cause) {
+      setRetryFinalizationError(cause instanceof Error ? cause.message : "无法重试报告生成。");
+    } finally {
+      setRetryingFinalization(false);
+    }
+  }, [detail]);
 
   const closeDetail = useCallback(() => {
     setSelectedRunId(null);
@@ -110,7 +130,13 @@ export function ResultsPage() {
             </div>
           )}
           {!detailLoading && detailError === undefined && detail !== undefined && (
-            <ResultDetail result={detail} onBack={closeDetail} />
+            <ResultDetail
+              result={detail}
+              onBack={closeDetail}
+              onRetryFinalization={() => void retryDetailFinalization()}
+              retryingFinalization={retryingFinalization}
+              retryFinalizationError={retryFinalizationError}
+            />
           )}
         </>
       ) : (
