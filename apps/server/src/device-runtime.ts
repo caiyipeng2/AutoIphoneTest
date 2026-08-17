@@ -102,6 +102,7 @@ export interface RuntimeDeviceRegistry {
   readonly runtimeFaultMonitor: RuntimeFaultMonitor;
   readonly incidentService: IncidentRouteService;
   readonly resultsService: ReportHistoryRepository;
+  readonly resultsExportRoot: string;
   readonly close: () => Promise<void>;
 }
 
@@ -234,6 +235,7 @@ export async function createRuntimeDeviceRegistry(
     runtimeFaultMonitor,
     incidentService,
     resultsService,
+    resultsExportRoot: paths.runsRoot,
     close: async () => {
       await workerCoordinator.stopAll().catch(() => undefined);
       database.close();

@@ -4,6 +4,8 @@ import {
   CircleAlert,
   CircleDashed,
   CircleX,
+  Download,
+  ExternalLink,
   FileArchive,
   FileCode2,
   Smartphone,
@@ -117,6 +119,30 @@ export function ResultDetail({
                   <span>{exportStateLabel[reportExport.state]}</span>
                 </div>
                 <code>{reportExport.sha256 ?? "等待校验哈希"}</code>
+                {reportExport.state === "READY" && reportExport.finalRelativePath !== undefined && (
+                  <div className="results-detail-export-actions">
+                    {reportExport.format === "HTML" ? (
+                      <a
+                        className="button button-quiet"
+                        href={`/api/results/${encodeURIComponent(result.runId)}/exports/HTML`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <ExternalLink size={14} />
+                        打开 HTML
+                      </a>
+                    ) : (
+                      <a
+                        className="button button-quiet"
+                        href={`/api/results/${encodeURIComponent(result.runId)}/exports/ZIP`}
+                        download
+                      >
+                        <Download size={14} />
+                        下载 ZIP
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
             ))
           )}

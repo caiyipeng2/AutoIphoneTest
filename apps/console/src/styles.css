@@ -772,6 +772,16 @@ main {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.results-detail-export-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+.results-detail-export-actions .button {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 11px;
+}
 .results-detail-empty,
 .results-detail-finalization {
   display: flex;

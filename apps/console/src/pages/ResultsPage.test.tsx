@@ -20,6 +20,7 @@ const results = [
         runId: "run-finished",
         format: "HTML" as const,
         state: "READY" as const,
+        finalRelativePath: "reports/report.html",
         attempt: 1,
         createdAt: "2026-08-15T02:05:00.000Z",
         updatedAt: "2026-08-15T02:05:00.000Z",
@@ -29,6 +30,7 @@ const results = [
         runId: "run-finished",
         format: "ZIP" as const,
         state: "READY" as const,
+        finalRelativePath: "reports/evidence.zip",
         attempt: 1,
         createdAt: "2026-08-15T02:05:00.000Z",
         updatedAt: "2026-08-15T02:05:00.000Z",
@@ -126,6 +128,14 @@ describe("ResultsPage", () => {
     );
     expect(screen.getByText("UID-LEADER")).toBeInTheDocument();
     expect(screen.getByText("HTML + ZIP 已就绪")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "打开 HTML" })).toHaveAttribute(
+      "href",
+      "/api/results/run-finished/exports/HTML",
+    );
+    expect(screen.getByRole("link", { name: "下载 ZIP" })).toHaveAttribute(
+      "href",
+      "/api/results/run-finished/exports/ZIP",
+    );
     expect(fetchMock).toHaveBeenCalledWith("/api/results/run-finished", undefined);
 
     fireEvent.click(screen.getByRole("button", { name: "返回报告历史" }));

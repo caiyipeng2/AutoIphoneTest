@@ -19,6 +19,7 @@ const app = await createApp(
         sessionService: runtimeDevices.sessionService,
         incidentService: runtimeDevices.incidentService,
         resultsService: runtimeDevices.resultsService,
+        resultsExportRoot: runtimeDevices.resultsExportRoot,
       }
     : {
         ...options,
@@ -28,6 +29,7 @@ const app = await createApp(
         sessionService: runtimeDevices.sessionService,
         incidentService: runtimeDevices.incidentService,
         resultsService: runtimeDevices.resultsService,
+        resultsExportRoot: runtimeDevices.resultsExportRoot,
       },
 );
 app.addHook("onClose", async () => {

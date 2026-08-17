@@ -49,6 +49,7 @@ export interface CreateAppOptions {
   readonly sessionService?: SessionRouteService;
   readonly incidentService?: IncidentRouteService;
   readonly resultsService?: ResultsRouteService;
+  readonly resultsExportRoot?: string;
 }
 
 export async function createApp(options: CreateAppOptions): Promise<FastifyInstance> {
@@ -79,6 +80,9 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
     ...(options.sessionService === undefined ? {} : { sessionService: options.sessionService }),
     ...(options.incidentService === undefined ? {} : { incidentService: options.incidentService }),
     ...(options.resultsService === undefined ? {} : { resultsService: options.resultsService }),
+    ...(options.resultsExportRoot === undefined
+      ? {}
+      : { resultsExportRoot: options.resultsExportRoot }),
   };
   const snapshot = options.healthSnapshot ?? createDefaultHealthSnapshot();
 

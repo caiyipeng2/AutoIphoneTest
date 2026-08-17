@@ -30,4 +30,5 @@ export interface ServerContext {
   readonly sessionService?: SessionRouteService;
   readonly incidentService?: IncidentRouteService;
   readonly resultsService?: ResultsRouteService;
+  readonly resultsExportRoot?: string;
 }

@@ -23,6 +23,7 @@ export async function main(): Promise<void> {
     sessionService: runtimeDevices.sessionService,
     incidentService: runtimeDevices.incidentService,
     resultsService: runtimeDevices.resultsService,
+    resultsExportRoot: runtimeDevices.resultsExportRoot,
   });
   app.addHook("onClose", async () => {
     runtimeDevices.faultMonitor.stop();
