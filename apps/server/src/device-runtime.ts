@@ -25,6 +25,7 @@ import {
   DEVICES_MIGRATION,
   DEPLOYMENTS_MIGRATION,
   DEPLOYMENT_CONTROLS_MIGRATION,
+  EVIDENCE_REPORTS_MIGRATION,
   INSTALL_SETS_MIGRATION,
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
@@ -33,6 +34,7 @@ import {
   RUN_MEMBERSHIP_MIGRATION,
   RUN_FAILURE_POLICY_MIGRATION,
   UID_BRIDGE_MIGRATION,
+  REPORT_FINALIZATION_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
   migrate,
@@ -83,6 +85,7 @@ import type { SessionRouteService } from "./routes/sessions.js";
 import { RuntimeSessionRouteService } from "./session-runtime.js";
 import { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
 import { parseBridgeMode, type BridgeMode } from "./runtime-config.js";
+import { ReportFinalizationRecoveryService } from "@test-center/reports";
 
 export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
@@ -119,7 +122,10 @@ export async function createRuntimeDeviceRegistry(
     INCIDENTS_MIGRATION,
     RUN_MEMBERSHIP_MIGRATION,
     RUN_FAILURE_POLICY_MIGRATION,
+    EVIDENCE_REPORTS_MIGRATION,
+    REPORT_FINALIZATION_MIGRATION,
   ]);
+  new ReportFinalizationRecoveryService(database).reconcileStale();
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
     "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\platform-tools\\adb.exe";
