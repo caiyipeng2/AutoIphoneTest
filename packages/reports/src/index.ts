@@ -6,3 +6,4 @@ export * from "./report-export-repository.js";
 export * from "./report-publication-service.js";
 export * from "./zip-manifest.js";
 export * from "./evidence-zip.js";
+export * from "./evidence-zip-verifier.js";

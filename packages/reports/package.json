@@ -16,10 +16,12 @@
     "@test-center/contracts": "0.0.0",
     "@test-center/evidence": "0.0.0",
     "archiver": "8.0.0",
-    "better-sqlite3": "13.0.2"
+    "better-sqlite3": "13.0.2",
+    "yauzl": "3.4.0"
   },
   "devDependencies": {
     "@types/archiver": "8.0.0",
-    "@types/better-sqlite3": "7.6.13"
+    "@types/better-sqlite3": "7.6.13",
+    "@types/yauzl": "3.4.0"
   }
 }
