@@ -291,6 +291,25 @@ export async function fetchResultDetail(
   return body.result;
 }
 
+export async function retryResultFinalization(
+  runId: string,
+  idempotencyKey: string,
+): Promise<ReportHistoryItem> {
+  const csrf = readCsrfToken();
+  const response = await fetch(`/api/results/${encodeURIComponent(runId)}/retry-finalization`, {
+    method: "POST",
+    headers: {
+      "idempotency-key": idempotencyKey,
+      ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+    },
+  });
+  const body = (await response.json()) as Partial<ResultDetailResponse> & { error?: string };
+  if (!response.ok || body.result === undefined) {
+    throw new Error(body.error ?? `result-retry:${response.status}`);
+  }
+  return body.result;
+}
+
 export async function preflightSession(id: string): Promise<SessionView> {
   return await sessionPhase(id, "preflight");
 }

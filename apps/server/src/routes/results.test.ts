@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -39,6 +39,14 @@ const item: ReportHistoryItem = {
       updatedAt: "2026-08-15T02:05:00.000Z",
     },
   ],
+  finalization: {
+    runId: "run-1",
+    state: "FINALIZATION_FAILED",
+    attempt: 1,
+    errorCategory: "EXPORT_FAILED",
+    startedAt: "2026-08-15T02:05:00.000Z",
+    updatedAt: "2026-08-15T02:05:01.000Z",
+  },
 };
 
 const unsafeItem: ReportHistoryItem = {
@@ -199,5 +207,94 @@ describe("results routes", () => {
 
     await app.close();
     await rm(root, { recursive: true, force: true });
+  });
+
+  it("guards finalization retry with CSRF, idempotency, and terminal state", async () => {
+    const port = 4801;
+    const completedItem: ReportHistoryItem = {
+      ...item,
+      runId: "run-completed",
+      finalization: {
+        ...item.finalization!,
+        runId: "run-completed",
+        state: "COMPLETED",
+        completedAt: "2026-08-15T02:05:02.000Z",
+      },
+    };
+    const retry = vi.fn(async (runId: string, idempotencyKey: string) => {
+      expect(runId).toBe("run-1");
+      expect(idempotencyKey).toBe("retry-1");
+      return item;
+    });
+    const app = await createApp({
+      port,
+      bootstrapCode: "results-retry-code",
+      launchSecret: "results-retry-secret",
+      resultsService: {
+        list: () => [item],
+        get: (runId) =>
+          runId === item.runId ? item : runId === completedItem.runId ? completedItem : undefined,
+        retryFinalization: retry,
+      },
+    });
+    const base = headers(port);
+    const unauthenticated = await app.inject({
+      method: "POST",
+      url: "/api/results/run-1/retry-finalization",
+      headers: base,
+    });
+    expect(unauthenticated.statusCode).toBe(401);
+
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers: base,
+      payload: { code: "results-retry-code" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const csrf = cookieHeader?.match(/(?:^|; )tc_csrf=([^;]+)/)?.[1];
+    const authenticated = { ...base, cookie: cookieHeader };
+    const missingCsrf = await app.inject({
+      method: "POST",
+      url: "/api/results/run-1/retry-finalization",
+      headers: { ...authenticated, "idempotency-key": "retry-1" },
+    });
+    expect(missingCsrf.statusCode).toBe(403);
+
+    const missingIdempotency = await app.inject({
+      method: "POST",
+      url: "/api/results/run-1/retry-finalization",
+      headers: { ...authenticated, "x-test-center-csrf": csrf },
+    });
+    expect(missingIdempotency.statusCode).toBe(400);
+
+    const accepted = await app.inject({
+      method: "POST",
+      url: "/api/results/run-1/retry-finalization",
+      headers: {
+        ...authenticated,
+        "x-test-center-csrf": csrf,
+        "idempotency-key": "retry-1",
+      },
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toEqual({ schemaVersion: 1, result: item });
+    expect(retry).toHaveBeenCalledOnce();
+
+    const terminal = await app.inject({
+      method: "POST",
+      url: "/api/results/run-completed/retry-finalization",
+      headers: {
+        ...authenticated,
+        "x-test-center-csrf": csrf,
+        "idempotency-key": "retry-terminal",
+      },
+    });
+    expect(terminal.statusCode).toBe(409);
+    expect(retry).toHaveBeenCalledOnce();
+    await app.close();
   });
 });

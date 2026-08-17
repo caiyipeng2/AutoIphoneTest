@@ -1,11 +1,16 @@
 import { createReadStream } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { win32 } from "node:path";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { DeviceSerialSchema } from "@test-center/contracts/device";
 import type { ReportHistoryFilter, ReportHistoryItem } from "@test-center/reports";
+import {
+  assertAllowedHost,
+  assertSameOrigin,
+  assertValidCsrf,
+} from "@test-center/security/request-policy";
 
 import { requireSession } from "./bootstrap.js";
 import type { ServerContext } from "./context.js";
@@ -21,10 +26,12 @@ const ResultsQuerySchema = z
   })
   .strict();
 const ResultsExportFormatSchema = z.enum(["HTML", "ZIP"]);
+const IdempotencyKeySchema = z.string().trim().min(1).max(128);
 
 export interface ResultsRouteService {
   list(filter: ReportHistoryFilter): readonly ReportHistoryItem[];
   get(runId: string): ReportHistoryItem | undefined;
+  retryFinalization?(runId: string, idempotencyKey: string): Promise<ReportHistoryItem>;
 }
 
 export async function registerResultsRoutes(
@@ -55,6 +62,42 @@ export async function registerResultsRoutes(
     if (result === undefined) return await reply.code(404).send({ error: "Result not found." });
     return { schemaVersion: 1, result };
   });
+
+  app.post<{ Params: { id: string } }>(
+    "/api/results/:id/retry-finalization",
+    async (request, reply) => {
+      try {
+        assertMutationAllowed(request, context);
+        if (context.resultsService === undefined)
+          return await reply.code(503).send({ error: "Results service unavailable." });
+        if (context.resultsService.retryFinalization === undefined)
+          return await reply.code(503).send({ error: "Report finalization retry unavailable." });
+
+        const runId = decodeURIComponent(request.params.id);
+        const result = context.resultsService.get(runId);
+        if (result === undefined) return await reply.code(404).send({ error: "Result not found." });
+
+        const rawKey = request.headers["idempotency-key"];
+        const idempotencyKey = IdempotencyKeySchema.parse(
+          Array.isArray(rawKey) ? rawKey[0] : rawKey,
+        );
+        if (
+          result.finalization === undefined ||
+          (result.finalization.state !== "FINALIZATION_FAILED" &&
+            result.finalization.state !== "INTERRUPTED")
+        ) {
+          return await reply.code(409).send({ error: "Result finalization is not retryable." });
+        }
+
+        const retried = await context.resultsService.retryFinalization(runId, idempotencyKey);
+        return { schemaVersion: 1, result: retried };
+      } catch (error) {
+        return await reply
+          .code(resultsMutationErrorCode(error))
+          .send({ error: errorMessage(error) });
+      }
+    },
+  );
 
   app.get<{ Params: { id: string; format: string } }>(
     "/api/results/:id/exports/:format",
@@ -99,6 +142,28 @@ export async function registerResultsRoutes(
       }
     },
   );
+}
+
+function assertMutationAllowed(request: FastifyRequest, context: ServerContext): void {
+  assertAllowedHost(request.headers.host, context.port);
+  assertSameOrigin(request.headers.origin, context.port);
+  if (requireSession(request, context) === undefined) throw new Error("Authentication required.");
+  const csrfHeader = request.headers["x-test-center-csrf"];
+  assertValidCsrf(request.cookies.tc_csrf, Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Result finalization retry rejected.";
+}
+
+function resultsMutationErrorCode(error: unknown): 400 | 401 | 403 | 404 | 409 | 503 {
+  const message = errorMessage(error);
+  if (/Authentication required/i.test(message)) return 401;
+  if (/Host|Origin|CSRF/i.test(message)) return 403;
+  if (/not found/i.test(message)) return 404;
+  if (/unavailable/i.test(message)) return 503;
+  if (/retryable|terminal|Idempotency|idempotency|state/i.test(message)) return 409;
+  return 400;
 }
 
 async function resolveReadyExportPath(root: string, relativePath: string): Promise<string> {
