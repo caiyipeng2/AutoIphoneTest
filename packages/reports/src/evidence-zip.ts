@@ -70,6 +70,12 @@ export class EvidenceZipPublisher {
       throw error;
     }
   }
+
+  /** Removes a just-published archive when a later verification step rejects it. */
+  public async cleanupPublished(relativePath: string): Promise<void> {
+    const normalizedPath = normalizeRelativePath(relativePath);
+    await rm(resolveInside(this.runRoot, normalizedPath), { force: true });
+  }
 }
 
 async function writeArchive(
