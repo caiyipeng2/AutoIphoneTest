@@ -542,6 +542,105 @@ main {
   background: transparent;
   font-size: 12px;
 }
+.results-toolbar {
+  align-items: center;
+}
+.results-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.results-filter select {
+  min-height: 34px;
+  padding: 0 27px 0 9px;
+  border: 1px solid #cfc8bc;
+  border-radius: 3px;
+  background: #fffdf8;
+  color: var(--text);
+  font-size: 12px;
+}
+.results-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 14px;
+  margin-bottom: 14px;
+  border: 1px solid #d9d2c5;
+  background: #fffdf8;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.results-error {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid #e6b9a9;
+  background: #fff5f0;
+}
+.results-error .button {
+  margin-left: auto;
+}
+.results-table .table-head,
+.results-table .table-row {
+  grid-template-columns: 1.35fr 1.15fr 0.7fr 0.95fr 0.9fr;
+}
+.results-table .table-row {
+  min-height: 76px;
+}
+.results-run strong {
+  color: #28383a;
+  font:
+    12px Consolas,
+    monospace;
+}
+.results-run small,
+.results-device-more,
+.results-updated {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.results-device-stack {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.results-device {
+  overflow: hidden;
+  color: #405252;
+  font:
+    11px Consolas,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.results-device-more {
+  margin-top: 1px;
+}
+.results-state {
+  width: max-content;
+}
+.results-output {
+  font-size: 11px;
+}
+.results-output.is-ready {
+  color: #4c712c;
+}
+.results-output.is-failed {
+  color: #a13b32;
+}
+.results-output.is-pending {
+  color: #9b7140;
+}
+.results-updated {
+  margin-top: 0;
+  white-space: nowrap;
+}
 .table-panel {
   overflow: hidden;
   border: 1px solid #d9d2c5;
@@ -1357,6 +1456,10 @@ main {
   .table-head,
   .table-row {
     min-width: 650px;
+  }
+  .results-table .table-head,
+  .results-table .table-row {
+    min-width: 760px;
   }
   .health-detail {
     display: none;

@@ -101,6 +101,60 @@ export interface IncidentTimeline {
   recoveries: RecoveryRecord[];
 }
 
+export type ReportRunState = "FINISHED" | "FAILED" | "INTERRUPTED";
+export type ReportExportFormat = "HTML" | "ZIP";
+export type ReportExportState = "PENDING" | "READY" | "FAILED" | "MISSING";
+export type ReportFinalizationState =
+  "FINALIZING" | "COMPLETED" | "FINALIZATION_FAILED" | "ABORTED" | "INTERRUPTED";
+
+export interface ReportHistoryDevice {
+  serial: string;
+  role: "LEADER" | "FOLLOWER";
+  uid?: string;
+}
+
+export interface ReportExportRecord {
+  id: string;
+  runId: string;
+  format: ReportExportFormat;
+  state: ReportExportState;
+  tempRelativePath?: string;
+  finalRelativePath?: string;
+  sha256?: string;
+  sizeBytes?: number;
+  errorCategory?: string;
+  attempt: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReportFinalizationRecord {
+  runId: string;
+  state: ReportFinalizationState;
+  attempt: number;
+  errorCategory?: string;
+  startedAt: string;
+  completedAt?: string;
+  updatedAt: string;
+}
+
+export interface ReportHistoryItem {
+  runId: string;
+  packageName: string;
+  state: ReportRunState;
+  currentEpoch: number;
+  createdAt: string;
+  updatedAt: string;
+  devices: ReportHistoryDevice[];
+  exports: ReportExportRecord[];
+  finalization?: ReportFinalizationRecord;
+}
+
+export interface ResultsResponse {
+  schemaVersion: 1;
+  results: ReportHistoryItem[];
+}
+
 export type BridgeHealthStatus = "READY" | "DEGRADED" | "UNAVAILABLE";
 export interface UidSnapshot {
   installation: {
@@ -191,6 +245,30 @@ export async function fetchIncidentTimeline(
     throw new Error(body.error ?? `incidents:${response.status}`);
   }
   return body.timeline;
+}
+
+export async function fetchResults(
+  filter: { state?: ReportRunState; serial?: string; uid?: string; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<ReportHistoryItem[]> {
+  const params = new URLSearchParams();
+  if (filter.state !== undefined) params.set("state", filter.state);
+  if (filter.serial !== undefined && filter.serial.trim() !== "") {
+    params.set("serial", filter.serial.trim());
+  }
+  if (filter.uid !== undefined && filter.uid.trim() !== "") {
+    params.set("uid", filter.uid.trim());
+  }
+  params.set("limit", String(filter.limit ?? 50));
+  const response = await fetch(
+    `/api/results?${params.toString()}`,
+    signal ? { signal } : undefined,
+  );
+  const body = (await response.json()) as Partial<ResultsResponse> & { error?: string };
+  if (!response.ok || !Array.isArray(body.results)) {
+    throw new Error(body.error ?? `results:${response.status}`);
+  }
+  return body.results;
 }
 
 export async function preflightSession(id: string): Promise<SessionView> {
