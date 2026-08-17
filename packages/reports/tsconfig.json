@@ -6,6 +6,6 @@
     "outDir": "dist",
     "tsBuildInfoFile": "dist/reports.tsbuildinfo"
   },
-  "references": [{ "path": "../contracts" }, { "path": "../database" }],
+  "references": [{ "path": "../contracts" }, { "path": "../database" }, { "path": "../evidence" }],
   "include": ["src/**/*.ts"]
 }

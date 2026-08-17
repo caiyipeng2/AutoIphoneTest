@@ -28,6 +28,9 @@ const artifactsSource = fileURLToPath(
 const deploymentsSource = fileURLToPath(
   new URL("./packages/deployments/src/", import.meta.url),
 ).replaceAll("\\", "/");
+const evidenceSource = fileURLToPath(
+  new URL("./packages/evidence/src/", import.meta.url),
+).replaceAll("\\", "/");
 
 export default defineConfig({
   resolve: {
@@ -77,6 +80,10 @@ export default defineConfig({
       {
         find: /^@test-center\/deployments\/(.+)$/,
         replacement: `${deploymentsSource}$1.ts`,
+      },
+      {
+        find: "@test-center/evidence",
+        replacement: `${evidenceSource}index.ts`,
       },
     ],
   },
