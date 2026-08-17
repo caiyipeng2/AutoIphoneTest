@@ -155,6 +155,11 @@ export interface ResultsResponse {
   results: ReportHistoryItem[];
 }
 
+export interface ResultDetailResponse {
+  schemaVersion: 1;
+  result: ReportHistoryItem;
+}
+
 export type BridgeHealthStatus = "READY" | "DEGRADED" | "UNAVAILABLE";
 export interface UidSnapshot {
   installation: {
@@ -269,6 +274,21 @@ export async function fetchResults(
     throw new Error(body.error ?? `results:${response.status}`);
   }
   return body.results;
+}
+
+export async function fetchResultDetail(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ReportHistoryItem> {
+  const response = await fetch(
+    `/api/results/${encodeURIComponent(runId)}`,
+    signal ? { signal } : undefined,
+  );
+  const body = (await response.json()) as Partial<ResultDetailResponse> & { error?: string };
+  if (!response.ok || body.result === undefined) {
+    throw new Error(body.error ?? `result:${response.status}`);
+  }
+  return body.result;
 }
 
 export async function preflightSession(id: string): Promise<SessionView> {

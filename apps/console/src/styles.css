@@ -598,6 +598,21 @@ main {
     12px Consolas,
     monospace;
 }
+.results-run-button {
+  width: max-content;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.results-run-button:hover strong,
+.results-run-button:focus-visible strong {
+  color: #557d33;
+  text-decoration: underline;
+}
 .results-run small,
 .results-device-more,
 .results-updated {
@@ -640,6 +655,142 @@ main {
 .results-updated {
   margin-top: 0;
   white-space: nowrap;
+}
+.results-detail {
+  display: grid;
+  gap: 18px;
+}
+.results-detail-heading {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #d9d2c5;
+}
+.results-detail-heading h2 {
+  margin: 2px 0 0;
+  color: #28383a;
+  font-size: 21px;
+}
+.results-detail-run {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font:
+    12px Consolas,
+    monospace;
+}
+.results-detail-state {
+  margin-top: 3px;
+}
+.results-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid #d9d2c5;
+  background: #d9d2c5;
+}
+.results-detail-summary > div {
+  display: grid;
+  gap: 6px;
+  min-height: 78px;
+  padding: 13px 15px;
+  background: #fffdf8;
+}
+.results-detail-summary span,
+.results-detail-section-heading h3 {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.results-detail-summary strong {
+  overflow: hidden;
+  color: #28383a;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.results-detail-section {
+  padding-top: 16px;
+  border-top: 1px solid #ebe6dc;
+}
+.results-detail-section-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.results-detail-section-heading h3 {
+  margin: 3px 0 0;
+  color: #344447;
+  font-size: 14px;
+}
+.results-detail-devices,
+.results-detail-exports {
+  display: grid;
+  gap: 8px;
+}
+.results-detail-device,
+.results-detail-export {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 9px 12px;
+  border: 1px solid #ebe6dc;
+  background: #fffdf8;
+}
+.results-detail-device > svg,
+.results-detail-export > svg {
+  color: #6f8985;
+}
+.results-detail-device > div,
+.results-detail-export > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.results-detail-device strong,
+.results-detail-export strong {
+  color: #344447;
+  font-size: 12px;
+}
+.results-detail-device span,
+.results-detail-export span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.results-detail-device code,
+.results-detail-export code {
+  max-width: 260px;
+  overflow: hidden;
+  color: #697877;
+  font:
+    11px Consolas,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.results-detail-empty,
+.results-detail-finalization {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.results-detail-empty {
+  border: 1px dashed #cfc8bc;
+}
+.results-detail-finalization {
+  border: 1px solid #d9d2c5;
+  background: #eef4e4;
+}
+.results-detail-finalization span:last-child {
+  margin-left: auto;
 }
 .table-panel {
   overflow: hidden;
@@ -1460,6 +1611,33 @@ main {
   .results-table .table-head,
   .results-table .table-row {
     min-width: 760px;
+  }
+  .results-detail-summary {
+    grid-template-columns: 1fr;
+  }
+  .results-detail-heading {
+    grid-template-columns: auto 1fr;
+  }
+  .results-detail-state {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .results-detail-device,
+  .results-detail-export {
+    grid-template-columns: auto 1fr;
+  }
+  .results-detail-device code,
+  .results-detail-export code {
+    grid-column: 2;
+    max-width: 100%;
+  }
+  .results-detail-finalization {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
+  .results-detail-finalization span:last-child {
+    margin-left: 0;
   }
   .health-detail {
     display: none;

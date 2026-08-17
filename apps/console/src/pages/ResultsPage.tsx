@@ -10,7 +10,13 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageFrame } from "../components/PageFrame";
-import { fetchResults, type ReportHistoryItem, type ReportRunState } from "../state/api";
+import { ResultDetail } from "../features/results/ResultDetail";
+import {
+  fetchResultDetail,
+  fetchResults,
+  type ReportHistoryItem,
+  type ReportRunState,
+} from "../state/api";
 
 type ResultsFilter = "ALL" | ReportRunState;
 
@@ -27,6 +33,10 @@ export function ResultsPage() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ReportHistoryItem | undefined>();
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | undefined>();
 
   const loadResults = useCallback(async () => {
     setLoading(true);
@@ -43,6 +53,26 @@ export function ResultsPage() {
   useEffect(() => {
     void loadResults();
   }, [loadResults]);
+
+  const openDetail = useCallback(async (runId: string) => {
+    setSelectedRunId(runId);
+    setDetail(undefined);
+    setDetailError(undefined);
+    setDetailLoading(true);
+    try {
+      setDetail(await fetchResultDetail(runId));
+    } catch (cause) {
+      setDetailError(cause instanceof Error ? cause.message : "无法读取报告详情。");
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    setSelectedRunId(null);
+    setDetail(undefined);
+    setDetailError(undefined);
+  }, []);
 
   const visibleResults = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -62,108 +92,143 @@ export function ResultsPage() {
 
   return (
     <PageFrame title="报告" eyebrow="RESULTS / 证据输出">
-      <div className="toolbar results-toolbar">
-        <label className="search">
-          <Search size={15} />
-          <input
-            type="search"
-            aria-label="搜索报告历史"
-            placeholder="搜索会话、包名或 UID"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <label className="results-filter">
-          <Filter size={14} />
-          <span>状态</span>
-          <select
-            aria-label="报告状态"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value as ResultsFilter)}
-          >
-            {Object.entries(stateLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="toolbar-spacer" />
-        <span className="toolbar-note">
-          <FileCheck2 size={14} />
-          {results.length === 0
-            ? "暂无历史"
-            : `${visibleResults.length} / ${results.length} 条记录`}
-        </span>
-        <button
-          className="button button-quiet"
-          type="button"
-          aria-label="刷新报告历史"
-          title="重新读取报告历史"
-          onClick={() => void loadResults()}
-          disabled={loading}
-        >
-          <RefreshCw size={15} className={loading ? "spin" : undefined} />
-          重新读取
-        </button>
-      </div>
-
-      {loading && (
-        <div className="results-feedback" role="status" aria-live="polite">
-          <CircleDashed size={16} className="spin" />
-          正在读取报告历史
-        </div>
-      )}
-
-      {error !== undefined && !loading && (
-        <div className="inline-error results-error" role="alert">
-          <CircleAlert size={16} />
-          <span>{error}</span>
-          <button className="button button-quiet" type="button" onClick={() => void loadResults()}>
-            重新读取
-          </button>
-        </div>
-      )}
-
-      {!loading && error === undefined && results.length === 0 && (
-        <div className="panel">
-          <div className="empty-state">
-            <FileCheck2 size={32} />
-            <h2>还没有可查看的报告</h2>
-            <p>完成一次终态会话后，HTML 与 ZIP 会出现在这里。</p>
+      {selectedRunId !== null ? (
+        <>
+          {detailLoading && (
+            <div className="results-feedback" role="status" aria-live="polite">
+              <CircleDashed size={16} className="spin" />
+              正在读取报告详情
+            </div>
+          )}
+          {detailError !== undefined && !detailLoading && (
+            <div className="inline-error results-error" role="alert">
+              <CircleAlert size={16} />
+              <span>{detailError}</span>
+              <button className="button button-quiet" type="button" onClick={closeDetail}>
+                返回报告历史
+              </button>
+            </div>
+          )}
+          {!detailLoading && detailError === undefined && detail !== undefined && (
+            <ResultDetail result={detail} onBack={closeDetail} />
+          )}
+        </>
+      ) : (
+        <>
+          <div className="toolbar results-toolbar">
+            <label className="search">
+              <Search size={15} />
+              <input
+                type="search"
+                aria-label="搜索报告历史"
+                placeholder="搜索会话、包名或 UID"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <label className="results-filter">
+              <Filter size={14} />
+              <span>状态</span>
+              <select
+                aria-label="报告状态"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value as ResultsFilter)}
+              >
+                {Object.entries(stateLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="toolbar-spacer" />
+            <span className="toolbar-note">
+              <FileCheck2 size={14} />
+              {results.length === 0
+                ? "暂无历史"
+                : `${visibleResults.length} / ${results.length} 条记录`}
+            </span>
+            <button
+              className="button button-quiet"
+              type="button"
+              aria-label="刷新报告历史"
+              title="重新读取报告历史"
+              onClick={() => void loadResults()}
+              disabled={loading}
+            >
+              <RefreshCw size={15} className={loading ? "spin" : undefined} />
+              重新读取
+            </button>
           </div>
-        </div>
-      )}
 
-      {!loading && error === undefined && results.length > 0 && visibleResults.length === 0 && (
-        <div className="panel">
-          <div className="empty-state">
-            <Search size={32} />
-            <h2>没有匹配的报告</h2>
-            <p>调整状态或搜索条件后重试。</p>
-          </div>
-        </div>
-      )}
+          {loading && (
+            <div className="results-feedback" role="status" aria-live="polite">
+              <CircleDashed size={16} className="spin" />
+              正在读取报告历史
+            </div>
+          )}
 
-      {!loading && error === undefined && visibleResults.length > 0 && (
-        <div className="table-panel results-table" role="table" aria-label="报告历史">
-          <div className="table-head" role="row">
-            <span>运行 / 包体</span>
-            <span>设备 / UID</span>
-            <span>状态</span>
-            <span>默认输出</span>
-            <span>更新时间</span>
-          </div>
-          {visibleResults.map((result) => (
-            <ResultRow key={result.runId} result={result} />
-          ))}
-        </div>
+          {error !== undefined && !loading && (
+            <div className="inline-error results-error" role="alert">
+              <CircleAlert size={16} />
+              <span>{error}</span>
+              <button
+                className="button button-quiet"
+                type="button"
+                onClick={() => void loadResults()}
+              >
+                重新读取
+              </button>
+            </div>
+          )}
+
+          {!loading && error === undefined && results.length === 0 && (
+            <div className="panel">
+              <div className="empty-state">
+                <FileCheck2 size={32} />
+                <h2>还没有可查看的报告</h2>
+                <p>完成一次终态会话后，HTML 与 ZIP 会出现在这里。</p>
+              </div>
+            </div>
+          )}
+
+          {!loading && error === undefined && results.length > 0 && visibleResults.length === 0 && (
+            <div className="panel">
+              <div className="empty-state">
+                <Search size={32} />
+                <h2>没有匹配的报告</h2>
+                <p>调整状态或搜索条件后重试。</p>
+              </div>
+            </div>
+          )}
+
+          {!loading && error === undefined && visibleResults.length > 0 && (
+            <div className="table-panel results-table" role="table" aria-label="报告历史">
+              <div className="table-head" role="row">
+                <span>运行 / 包体</span>
+                <span>设备 / UID</span>
+                <span>状态</span>
+                <span>默认输出</span>
+                <span>更新时间</span>
+              </div>
+              {visibleResults.map((result) => (
+                <ResultRow key={result.runId} result={result} onOpen={openDetail} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </PageFrame>
   );
 }
 
-function ResultRow({ result }: { result: ReportHistoryItem }) {
+function ResultRow({
+  result,
+  onOpen,
+}: {
+  result: ReportHistoryItem;
+  onOpen: (runId: string) => void;
+}) {
   const stateLabel =
     result.state === "FINISHED" ? "已完成" : result.state === "FAILED" ? "失败" : "已中断";
   const stateClass =
@@ -177,7 +242,15 @@ function ResultRow({ result }: { result: ReportHistoryItem }) {
   return (
     <div className="table-row" role="row">
       <div className="results-run" role="cell">
-        <strong>{result.runId}</strong>
+        <button
+          className="results-run-button"
+          type="button"
+          title={`查看报告 ${result.runId}`}
+          aria-label={`查看报告 ${result.runId}`}
+          onClick={() => onOpen(result.runId)}
+        >
+          <strong>{result.runId}</strong>
+        </button>
         <small>{result.packageName}</small>
         <small>Epoch {result.currentEpoch}</small>
       </div>

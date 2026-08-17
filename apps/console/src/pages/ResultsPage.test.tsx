@@ -103,6 +103,34 @@ describe("ResultsPage", () => {
     );
     expect(screen.getByRole("button", { name: "重新读取" })).toBeInTheDocument();
   });
+
+  it("opens a read-only result detail and returns to history", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/results?limit=50") return jsonResponse({ schemaVersion: 1, results });
+      if (url === "/api/results/run-finished") {
+        return jsonResponse({ schemaVersion: 1, result: results[0] });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ResultsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "查看报告 run-finished" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "查看报告 run-finished" }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "报告详情" })).toBeInTheDocument(),
+    );
+    expect(screen.getByText("UID-LEADER")).toBeInTheDocument();
+    expect(screen.getByText("HTML + ZIP 已就绪")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/results/run-finished", undefined);
+
+    fireEvent.click(screen.getByRole("button", { name: "返回报告历史" }));
+    expect(screen.getByRole("heading", { name: "报告" })).toBeInTheDocument();
+  });
 });
 
 function jsonResponse(body: unknown, status = 200) {
