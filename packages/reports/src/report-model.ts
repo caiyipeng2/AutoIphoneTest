@@ -29,6 +29,18 @@ export type ReportEvidenceKind =
   | "BRIDGE_ARM"
   | "BRIDGE_ACK"
   | "BUFFERED_LOGCAT";
+export type ReportIncidentCategory =
+  | "ADB_DISCONNECTED"
+  | "APPIUM_SESSION_LOST"
+  | "APP_CRASH_OR_ANR"
+  | "WRONG_FOREGROUND"
+  | "BRIDGE_TIMEOUT"
+  | "BRIDGE_STATE_MISMATCH"
+  | "TEXT_FOCUS_MISMATCH"
+  | "METRICS_CHANGED"
+  | "LOW_DISK";
+export type ReportRecoveryAction = "PAUSE_ALL" | "QUARANTINE_DEVICE";
+export type ReportRecoveryState = "STARTED" | "SUCCEEDED" | "FAILED";
 
 export interface ReportRunInput {
   readonly id: string;
@@ -73,12 +85,39 @@ export interface ReportEvidenceInput {
   readonly unavailableReason?: ReportUnavailableReason;
 }
 
+export interface ReportIncidentInput {
+  readonly incidentId: string;
+  readonly category: ReportIncidentCategory;
+  readonly serial?: string;
+  readonly generation?: number;
+  readonly detectedAtRealtimeMs: number;
+  readonly detectedAt: string;
+  readonly source: string;
+  readonly evidenceRef?: string;
+  readonly details: Readonly<Record<string, string>>;
+}
+
+export interface ReportRecoveryInput {
+  readonly id: string;
+  readonly incidentId: string;
+  readonly action: ReportRecoveryAction;
+  readonly targetSerial?: string;
+  readonly reason: string;
+  readonly deadlineRealtimeMs: number;
+  readonly status: ReportRecoveryState;
+  readonly startedAt: string;
+  readonly completedAt?: string;
+  readonly errorMessage?: string;
+}
+
 export interface ReportModelInput {
   readonly schemaVersion: 1;
   readonly run: ReportRunInput;
   readonly devices: readonly ReportDeviceInput[];
   readonly actions: readonly ReportActionInput[];
   readonly evidence: readonly ReportEvidenceInput[];
+  readonly incidents?: readonly ReportIncidentInput[];
+  readonly recoveries?: readonly ReportRecoveryInput[];
 }
 
 export interface ImmutableReportModel {
@@ -87,6 +126,8 @@ export interface ImmutableReportModel {
   readonly devices: readonly ImmutableReportDevice[];
   readonly actions: readonly ImmutableReportAction[];
   readonly evidence: readonly ImmutableReportEvidence[];
+  readonly incidents: readonly ImmutableReportIncident[];
+  readonly recoveries: readonly ImmutableReportRecovery[];
 }
 
 export interface ImmutableReportDevice {
@@ -123,13 +164,48 @@ export interface ImmutableReportEvidence {
   readonly unavailableReason?: ReportUnavailableReason;
 }
 
+export interface ImmutableReportIncident {
+  readonly incidentId: string;
+  readonly category: ReportIncidentCategory;
+  readonly serial?: DeviceSerial;
+  readonly generation?: number;
+  readonly detectedAtRealtimeMs: number;
+  readonly detectedAt: string;
+  readonly source: string;
+  readonly evidenceRef?: string;
+  readonly details: Readonly<Record<string, string>>;
+}
+
+export interface ImmutableReportRecovery {
+  readonly id: string;
+  readonly incidentId: string;
+  readonly action: ReportRecoveryAction;
+  readonly targetSerial?: DeviceSerial;
+  readonly reason: string;
+  readonly deadlineRealtimeMs: number;
+  readonly status: ReportRecoveryState;
+  readonly startedAt: string;
+  readonly completedAt?: string;
+  readonly errorMessage?: string;
+}
+
 export function createImmutableReportModel(input: ReportModelInput): ImmutableReportModel {
   if (input.schemaVersion !== 1) throw new TypeError("Unsupported report schema version.");
   const run = normalizeRun(input.run);
   const devices = normalizeDevices(input.devices);
   const actions = normalizeActions(input.actions);
   const evidence = normalizeEvidence(input.evidence);
-  return deepFreeze({ schemaVersion: 1 as const, run, devices, actions, evidence });
+  const incidents = normalizeIncidents(input.incidents ?? []);
+  const recoveries = normalizeRecoveries(input.recoveries ?? []);
+  return deepFreeze({
+    schemaVersion: 1 as const,
+    run,
+    devices,
+    actions,
+    evidence,
+    incidents,
+    recoveries,
+  });
 }
 
 function normalizeRun(input: ReportRunInput): ReportRunInput {
@@ -258,6 +334,111 @@ function normalizeEvidence(
     .sort((left, right) => left.id.localeCompare(right.id));
 }
 
+function normalizeIncidents(
+  input: readonly ReportIncidentInput[],
+): readonly ImmutableReportIncident[] {
+  const ids = new Set<string>();
+  return input
+    .map((incident) => {
+      requireText(incident.incidentId, "incident.incidentId");
+      if (ids.has(incident.incidentId)) {
+        throw new Error(`Duplicate incident id: ${incident.incidentId}`);
+      }
+      ids.add(incident.incidentId);
+      if (!isIncidentCategory(incident.category))
+        throw new TypeError("Incident category is invalid.");
+      if (incident.serial !== undefined) parseDeviceSerial(incident.serial);
+      if (incident.generation !== undefined) {
+        requirePositiveInteger(incident.generation, `incident ${incident.incidentId} generation`);
+      }
+      if (!Number.isFinite(incident.detectedAtRealtimeMs) || incident.detectedAtRealtimeMs < 0) {
+        throw new TypeError(`Incident ${incident.incidentId} realtime timestamp is invalid.`);
+      }
+      requireText(incident.detectedAt, `incident ${incident.incidentId} detectedAt`);
+      requireText(incident.source, `incident ${incident.incidentId} source`);
+      const details = normalizeDetails(incident.details, `incident ${incident.incidentId} details`);
+      return {
+        incidentId: incident.incidentId,
+        category: incident.category,
+        ...(incident.serial === undefined ? {} : { serial: parseDeviceSerial(incident.serial) }),
+        ...(incident.generation === undefined ? {} : { generation: incident.generation }),
+        detectedAtRealtimeMs: incident.detectedAtRealtimeMs,
+        detectedAt: incident.detectedAt,
+        source: incident.source,
+        ...(incident.evidenceRef === undefined
+          ? {}
+          : { evidenceRef: requireText(incident.evidenceRef, "incident.evidenceRef") }),
+        details,
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.detectedAtRealtimeMs - right.detectedAtRealtimeMs ||
+        left.detectedAt.localeCompare(right.detectedAt) ||
+        left.incidentId.localeCompare(right.incidentId),
+    );
+}
+
+function normalizeRecoveries(
+  input: readonly ReportRecoveryInput[],
+): readonly ImmutableReportRecovery[] {
+  const ids = new Set<string>();
+  return input
+    .map((recovery) => {
+      requireText(recovery.id, "recovery.id");
+      if (ids.has(recovery.id)) throw new Error(`Duplicate recovery id: ${recovery.id}`);
+      ids.add(recovery.id);
+      requireText(recovery.incidentId, `recovery ${recovery.id} incidentId`);
+      if (recovery.action !== "PAUSE_ALL" && recovery.action !== "QUARANTINE_DEVICE") {
+        throw new TypeError(`Recovery ${recovery.id} action is invalid.`);
+      }
+      if (recovery.targetSerial !== undefined) parseDeviceSerial(recovery.targetSerial);
+      requireText(recovery.reason, `recovery ${recovery.id} reason`);
+      if (!Number.isFinite(recovery.deadlineRealtimeMs) || recovery.deadlineRealtimeMs < 0) {
+        throw new TypeError(`Recovery ${recovery.id} deadline is invalid.`);
+      }
+      if (!isRecoveryState(recovery.status))
+        throw new TypeError(`Recovery ${recovery.id} state is invalid.`);
+      requireText(recovery.startedAt, `recovery ${recovery.id} startedAt`);
+      if (recovery.completedAt !== undefined)
+        requireText(recovery.completedAt, "recovery.completedAt");
+      if (recovery.errorMessage !== undefined)
+        requireText(recovery.errorMessage, "recovery.errorMessage");
+      return {
+        id: recovery.id,
+        incidentId: recovery.incidentId,
+        action: recovery.action,
+        ...(recovery.targetSerial === undefined
+          ? {}
+          : { targetSerial: parseDeviceSerial(recovery.targetSerial) }),
+        reason: recovery.reason,
+        deadlineRealtimeMs: recovery.deadlineRealtimeMs,
+        status: recovery.status,
+        startedAt: recovery.startedAt,
+        ...(recovery.completedAt === undefined ? {} : { completedAt: recovery.completedAt }),
+        ...(recovery.errorMessage === undefined ? {} : { errorMessage: recovery.errorMessage }),
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.startedAt.localeCompare(right.startedAt) || left.id.localeCompare(right.id),
+    );
+}
+
+function normalizeDetails(
+  details: Readonly<Record<string, string>>,
+  field: string,
+): Readonly<Record<string, string>> {
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(details).sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
+    requireText(key, `${field} key`);
+    normalized[key] = requireText(value, `${field}.${key}`);
+  }
+  return normalized;
+}
+
 function requireText(value: string, field: string): string {
   if (value.trim().length === 0) throw new TypeError(`${field} is required.`);
   return value;
@@ -315,6 +496,24 @@ function isEvidenceKind(value: string): value is ReportEvidenceKind {
     "BRIDGE_ACK",
     "BUFFERED_LOGCAT",
   ].includes(value);
+}
+
+function isIncidentCategory(value: string): value is ReportIncidentCategory {
+  return [
+    "ADB_DISCONNECTED",
+    "APPIUM_SESSION_LOST",
+    "APP_CRASH_OR_ANR",
+    "WRONG_FOREGROUND",
+    "BRIDGE_TIMEOUT",
+    "BRIDGE_STATE_MISMATCH",
+    "TEXT_FOCUS_MISMATCH",
+    "METRICS_CHANGED",
+    "LOW_DISK",
+  ].includes(value);
+}
+
+function isRecoveryState(value: string): value is ReportRecoveryState {
+  return value === "STARTED" || value === "SUCCEEDED" || value === "FAILED";
 }
 
 function deepFreeze<T>(value: T): T {

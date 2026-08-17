@@ -110,6 +110,8 @@ export function renderOfflineReport(model: ImmutableReportModel): string {
 
       ${renderDevices(model.devices)}
       ${renderActions(model.actions)}
+      ${renderIncidents(model.incidents)}
+      ${renderRecoveries(model.recoveries)}
       ${renderEvidence(model.evidence)}
     </main>
   </body>
@@ -196,6 +198,53 @@ function renderEvidence(evidence: readonly ImmutableReportEvidence[]): string {
   );
 }
 
+function renderIncidents(incidents: ImmutableReportModel["incidents"]): string {
+  const rows = incidents
+    .map((incident) => {
+      const details = Object.entries(incident.details)
+        .map(
+          ([key, value]) =>
+            `<span class="mono">${escapeHtmlText(key)}</span>: ${escapeHtmlText(value)}`,
+        )
+        .join("<br>");
+      return `<tr>
+        <td class="mono">${escapeHtmlText(incident.incidentId)}</td>
+        <td><span class="state ${incidentClass(incident.category)}">${escapeHtmlText(incident.category)}</span></td>
+        <td>${escapeHtmlText(incident.serial ?? "Run-wide")}</td>
+        <td>${escapeHtmlText(incident.source)}${details ? `<br><span class="subtle">${details}</span>` : ""}</td>
+      </tr>`;
+    })
+    .join("");
+  return section(
+    "Incident log",
+    `${incidents.length} incident${incidents.length === 1 ? "" : "s"}`,
+    rows.length === 0
+      ? `<p class="empty">No incidents were recorded.</p>`
+      : `<div class="table-wrap"><table><thead><tr><th scope="col">Incident ID</th><th scope="col">Category</th><th scope="col">Device</th><th scope="col">Source / details</th></tr></thead><tbody>${rows}</tbody></table></div>`,
+  );
+}
+
+function renderRecoveries(recoveries: ImmutableReportModel["recoveries"]): string {
+  const rows = recoveries
+    .map(
+      (recovery) => `<tr>
+        <td class="mono">${escapeHtmlText(recovery.id)}</td>
+        <td>${escapeHtmlText(recovery.action)}</td>
+        <td>${escapeHtmlText(recovery.targetSerial ?? "All devices")}</td>
+        <td><span class="state ${stateClass(recovery.status)}">${escapeHtmlText(recovery.status)}</span></td>
+        <td>${escapeHtmlText(recovery.errorMessage ?? recovery.reason)}</td>
+      </tr>`,
+    )
+    .join("");
+  return section(
+    "Recovery attempts",
+    `${recoveries.length} attempt${recoveries.length === 1 ? "" : "s"}`,
+    rows.length === 0
+      ? `<p class="empty">No recovery attempts were recorded.</p>`
+      : `<div class="table-wrap"><table><thead><tr><th scope="col">Attempt ID</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Status</th><th scope="col">Reason / error</th></tr></thead><tbody>${rows}</tbody></table></div>`,
+  );
+}
+
 function section(title: string, hint: string, body: string): string {
   return `<section class="panel"><div class="panel__header"><h2>${escapeHtmlText(title)}</h2><span class="panel__hint">${escapeHtmlText(hint)}</span></div>${body}</section>`;
 }
@@ -219,4 +268,10 @@ function stateClass(state: string): string {
   }
   if (["FAILED", "MISSING", "CANCELLED", "QUARANTINED"].includes(state)) return "state--danger";
   return "state--muted";
+}
+
+function incidentClass(category: string): string {
+  return category === "LOW_DISK" || category === "METRICS_CHANGED"
+    ? "state--warning"
+    : "state--danger";
 }

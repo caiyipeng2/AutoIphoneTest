@@ -5,7 +5,9 @@ import type {
   ReportActionTargetInput,
   ReportDeviceInput,
   ReportEvidenceInput,
+  ReportIncidentInput,
   ReportModelInput,
+  ReportRecoveryInput,
   ReportUnavailableReason,
 } from "./report-model.js";
 import { createImmutableReportModel, type ImmutableReportModel } from "./report-model.js";
@@ -50,6 +52,31 @@ interface EvidenceRow {
   readonly size_bytes: number | null;
   readonly capture_error_category: string | null;
   readonly unavailable_reason: ReportUnavailableReason | null;
+}
+
+interface IncidentRow {
+  readonly incident_id: string;
+  readonly serial: string | null;
+  readonly category: ReportIncidentInput["category"];
+  readonly generation: number | null;
+  readonly detected_at_realtime_ms: number;
+  readonly detected_at: string;
+  readonly source: string;
+  readonly evidence_ref: string | null;
+  readonly details_json: string;
+}
+
+interface RecoveryRow {
+  readonly id: string;
+  readonly incident_id: string;
+  readonly action: ReportRecoveryInput["action"];
+  readonly target_serial: string | null;
+  readonly reason: string;
+  readonly deadline_realtime_ms: number;
+  readonly status: ReportRecoveryInput["status"];
+  readonly started_at: string;
+  readonly completed_at: string | null;
+  readonly error_message: string | null;
 }
 
 /** Reads the report-owned snapshot without exposing a live database handle to renderers. */
@@ -105,6 +132,22 @@ export class ReportSnapshotRepository {
            FROM evidence_records WHERE run_id = ? ORDER BY id ASC`,
         )
         .all(run.id) as readonly EvidenceRow[];
+      const incidents = this.database
+        .prepare(
+          `SELECT incident_id, serial, category, generation, detected_at_realtime_ms,
+                  detected_at, source, evidence_ref, details_json
+           FROM incidents WHERE run_id = ?
+           ORDER BY detected_at_realtime_ms ASC, detected_at ASC, incident_id ASC`,
+        )
+        .all(run.id) as readonly IncidentRow[];
+      const recoveries = this.database
+        .prepare(
+          `SELECT id, incident_id, action, target_serial, reason, deadline_realtime_ms,
+                  status, started_at, completed_at, error_message
+           FROM recovery_attempts WHERE run_id = ?
+           ORDER BY started_at ASC, id ASC`,
+        )
+        .all(run.id) as readonly RecoveryRow[];
 
       const input: ReportModelInput = {
         schemaVersion: 1,
@@ -147,6 +190,29 @@ export class ReportSnapshotRepository {
           ...(entry.unavailable_reason === null
             ? {}
             : { unavailableReason: entry.unavailable_reason }),
+        })),
+        incidents: incidents.map((incident) => ({
+          incidentId: incident.incident_id,
+          category: incident.category,
+          ...(incident.serial === null ? {} : { serial: incident.serial }),
+          ...(incident.generation === null ? {} : { generation: incident.generation }),
+          detectedAtRealtimeMs: incident.detected_at_realtime_ms,
+          detectedAt: incident.detected_at,
+          source: incident.source,
+          ...(incident.evidence_ref === null ? {} : { evidenceRef: incident.evidence_ref }),
+          details: JSON.parse(incident.details_json) as Record<string, string>,
+        })),
+        recoveries: recoveries.map((recovery) => ({
+          id: recovery.id,
+          incidentId: recovery.incident_id,
+          action: recovery.action,
+          ...(recovery.target_serial === null ? {} : { targetSerial: recovery.target_serial }),
+          reason: recovery.reason,
+          deadlineRealtimeMs: recovery.deadline_realtime_ms,
+          status: recovery.status,
+          startedAt: recovery.started_at,
+          ...(recovery.completed_at === null ? {} : { completedAt: recovery.completed_at }),
+          ...(recovery.error_message === null ? {} : { errorMessage: recovery.error_message }),
         })),
       };
       return createImmutableReportModel(input);

@@ -65,16 +65,65 @@ describe("immutable offline report model", () => {
           unavailableReason: "DEVICE_DISCONNECTED" as const,
         },
       ],
+      incidents: [
+        {
+          incidentId: "inc-2",
+          category: "LOW_DISK" as const,
+          serial: "ZX2G22B7F8",
+          detectedAtRealtimeMs: 200,
+          detectedAt: "2026-08-14T01:04:00.000Z",
+          source: "storage-monitor",
+          details: { freeBytes: "100" },
+        },
+        {
+          incidentId: "inc-1",
+          category: "ADB_DISCONNECTED" as const,
+          serial: "ABC1234567",
+          detectedAtRealtimeMs: 100,
+          detectedAt: "2026-08-14T01:03:00.000Z",
+          source: "adb",
+          evidenceRef: "ev-1",
+          details: { message: "device left" },
+        },
+      ],
+      recoveries: [
+        {
+          id: "recovery-2",
+          incidentId: "inc-2",
+          action: "PAUSE_ALL" as const,
+          reason: "protect run",
+          deadlineRealtimeMs: 500,
+          status: "SUCCEEDED" as const,
+          startedAt: "2026-08-14T01:04:01.000Z",
+          completedAt: "2026-08-14T01:04:02.000Z",
+        },
+        {
+          id: "recovery-1",
+          incidentId: "inc-1",
+          action: "QUARANTINE_DEVICE" as const,
+          targetSerial: "ABC1234567",
+          reason: "isolate device",
+          deadlineRealtimeMs: 400,
+          status: "FAILED" as const,
+          startedAt: "2026-08-14T01:03:01.000Z",
+          completedAt: "2026-08-14T01:03:02.000Z",
+          errorMessage: "timeout",
+        },
+      ],
     };
 
     const model = createImmutableReportModel(input);
     expect(model.devices.map((device) => device.serial)).toEqual(["ABC1234567", "ZX2G22B7F8"]);
     expect(model.actions.map((action) => action.id)).toEqual(["act-1", "act-2"]);
     expect(model.evidence.map((entry) => entry.id)).toEqual(["ev-1", "ev-2"]);
+    expect(model.incidents.map((incident) => incident.incidentId)).toEqual(["inc-1", "inc-2"]);
+    expect(model.recoveries.map((recovery) => recovery.id)).toEqual(["recovery-1", "recovery-2"]);
     expect(Object.isFrozen(model)).toBe(true);
     expect(Object.isFrozen(model.devices)).toBe(true);
     expect(Object.isFrozen(model.devices[0]!)).toBe(true);
     expect(Object.isFrozen(model.actions[0]!.targets)).toBe(true);
+    expect(Object.isFrozen(model.incidents)).toBe(true);
+    expect(Object.isFrozen(model.incidents[0]!.details)).toBe(true);
     expect(() => {
       (model.run as { packageName: string }).packageName = "tampered";
     }).toThrow(TypeError);

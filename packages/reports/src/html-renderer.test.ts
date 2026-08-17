@@ -56,6 +56,31 @@ function createFixture(): ReportModelInput {
         errorCategory: "capture <failed>",
       },
     ],
+    incidents: [
+      {
+        incidentId: "inc-1",
+        category: "APP_CRASH_OR_ANR",
+        serial: "ABC1234567",
+        detectedAtRealtimeMs: 100,
+        detectedAt: "2026-08-14T01:03:00.000Z",
+        source: "watchdog",
+        details: { message: "crash <detected>" },
+      },
+    ],
+    recoveries: [
+      {
+        id: "recovery-1",
+        incidentId: "inc-1",
+        action: "QUARANTINE_DEVICE",
+        targetSerial: "ABC1234567",
+        reason: "isolate device",
+        deadlineRealtimeMs: 500,
+        status: "FAILED",
+        startedAt: "2026-08-14T01:03:01.000Z",
+        completedAt: "2026-08-14T01:03:02.000Z",
+        errorMessage: "recovery <failed>",
+      },
+    ],
   };
 }
 
@@ -69,6 +94,8 @@ describe("offline HTML report renderer", () => {
     expect(html).toContain("ABC1234567");
     expect(html).toContain("REDACTED_LOGCAT");
     expect(html).toContain("DEVICE_DISCONNECTED");
+    expect(html).toContain("Incident log");
+    expect(html).toContain("Recovery attempts");
     expect(html).toContain('href="evidence/logcat-1&quot;.txt"');
     expect(html).toContain("inline-style");
   });
@@ -82,6 +109,8 @@ describe("offline HTML report renderer", () => {
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
     expect(html).toContain("&lt;failed&gt;");
+    expect(html).toContain("crash &lt;detected&gt;");
+    expect(html).toContain("recovery &lt;failed&gt;");
     expect(html).not.toMatch(/(?:https?:|data:|javascript:)/i);
     expect(html).not.toContain("<link");
     expect(html).not.toContain("<script");

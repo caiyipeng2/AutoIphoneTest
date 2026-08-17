@@ -96,6 +96,23 @@ function seedRun(database: Database.Database, state = "FINISHED"): void {
               ('ev-1', 'run-1', 'ABC1234567', 'CURRENT_SCREENSHOT', 'MISSING', NULL, NULL, NULL, 'DEVICE_DISCONNECTED', 1, '2026-08-14T01:03:00.000Z', '2026-08-14T01:03:00.000Z')`,
     )
     .run("a".repeat(64));
+  database
+    .prepare(
+      `INSERT INTO incidents
+       (incident_id, run_id, serial, schema_version, category, generation, detected_at_realtime_ms,
+        detected_at, source, evidence_ref, details_json, created_at)
+       VALUES ('inc-1', 'run-1', 'ABC1234567', 1, 'APP_CRASH_OR_ANR', 3, 100,
+               '2026-08-14T01:03:00.000Z', 'watchdog', 'ev-1', '{"message":"crash"}', '2026-08-14T01:03:00.000Z')`,
+    )
+    .run();
+  database
+    .prepare(
+      `INSERT INTO recovery_attempts
+       (id, incident_id, run_id, action, target_serial, reason, deadline_realtime_ms, status, started_at, completed_at, error_message)
+       VALUES ('recovery-1', 'inc-1', 'run-1', 'QUARANTINE_DEVICE', 'ABC1234567', 'isolate', 500, 'FAILED',
+               '2026-08-14T01:03:01.000Z', '2026-08-14T01:03:02.000Z', 'timeout')`,
+    )
+    .run();
 }
 
 describe("report snapshot repository", () => {
@@ -120,6 +137,8 @@ describe("report snapshot repository", () => {
       state: "READY",
       finalRelativePath: "evidence/logcat-2.txt",
     });
+    expect(model.incidents).toMatchObject([{ incidentId: "inc-1", category: "APP_CRASH_OR_ANR" }]);
+    expect(model.recoveries).toMatchObject([{ id: "recovery-1", status: "FAILED" }]);
   });
 
   it("rejects unknown runs and live run states before rendering", () => {
