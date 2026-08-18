@@ -54,6 +54,19 @@ describe("cleanup audit repository", () => {
     expect(() => repository.markDeleting(["run-a"])).toThrow(/cleanup state/i);
   });
 
+  it("moves DELETING runs to terminal cleanup states atomically", () => {
+    const { database, repository } = createRepository();
+
+    repository.markDeleting(["run-a", "run-b"]);
+    expect(repository.markDeleted(["run-a"])).toEqual(["run-a"]);
+    expect(repository.markRecoveryRequired(["run-b"])).toEqual(["run-b"]);
+    expect(database.prepare("SELECT id, cleanup_state FROM test_runs ORDER BY id").all()).toEqual([
+      { id: "run-a", cleanup_state: "DELETED" },
+      { id: "run-b", cleanup_state: "RECOVERY_REQUIRED" },
+    ]);
+    expect(() => repository.markDeleted(["run-b"])).toThrow(/DELETING/i);
+  });
+
   it("appends cleanup events without overwriting earlier evidence", () => {
     const { repository } = createRepository();
 

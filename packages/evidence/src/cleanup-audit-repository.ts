@@ -77,6 +77,14 @@ export class CleanupAuditRepository {
     return transaction.immediate();
   }
 
+  public markDeleted(runIds: readonly string[]): readonly string[] {
+    return this.transitionRuns(runIds, "DELETING", "DELETED");
+  }
+
+  public markRecoveryRequired(runIds: readonly string[]): readonly string[] {
+    return this.transitionRuns(runIds, "DELETING", "RECOVERY_REQUIRED");
+  }
+
   public appendEvent(input: AppendCleanupAuditEventInput): CleanupAuditEvent {
     validateEvent(input);
     const result = this.database
@@ -107,6 +115,32 @@ export class CleanupAuditRepository {
       .prepare("SELECT * FROM cleanup_audit_events WHERE cleanup_id = ? ORDER BY sequence ASC")
       .all(cleanupId) as readonly CleanupAuditEventRow[];
     return rows.map(toEvent);
+  }
+
+  private transitionRuns(
+    runIds: readonly string[],
+    fromState: CleanupState,
+    toState: CleanupState,
+  ): readonly string[] {
+    const normalizedRunIds = normalizeRunIds(runIds);
+    const transaction = this.database.transaction(() => {
+      for (const runId of normalizedRunIds) {
+        const result = this.database
+          .prepare(
+            "UPDATE test_runs SET cleanup_state = ?, updated_at = ? WHERE id = ? AND cleanup_state = ?",
+          )
+          .run(toState, this.now(), runId, fromState);
+        if (result.changes !== 1) {
+          const row = this.database
+            .prepare("SELECT cleanup_state FROM test_runs WHERE id = ?")
+            .get(runId) as { cleanup_state: CleanupState } | undefined;
+          if (row === undefined) throw new Error(`Run not found: ${runId}.`);
+          throw new Error(`Run cleanup state must be ${fromState} before ${toState}: ${runId}.`);
+        }
+      }
+      return normalizedRunIds;
+    });
+    return transaction.immediate();
   }
 }
 
