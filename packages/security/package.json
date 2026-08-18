@@ -22,6 +22,10 @@
     "./destructive-confirmation": {
       "types": "./dist/destructive-confirmation.d.ts",
       "import": "./dist/destructive-confirmation.js"
+    },
+    "./cleanup-confirmation": {
+      "types": "./dist/cleanup-confirmation.d.ts",
+      "import": "./dist/cleanup-confirmation.js"
     }
   },
   "dependencies": {

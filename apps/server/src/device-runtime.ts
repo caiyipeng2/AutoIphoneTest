@@ -35,6 +35,7 @@ import {
   RUN_FAILURE_POLICY_MIGRATION,
   UID_BRIDGE_MIGRATION,
   REPORT_FINALIZATION_MIGRATION,
+  CLEANUP_CONFIRMATIONS_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
   migrate,
@@ -131,6 +132,7 @@ export async function createRuntimeDeviceRegistry(
     RUN_FAILURE_POLICY_MIGRATION,
     EVIDENCE_REPORTS_MIGRATION,
     REPORT_FINALIZATION_MIGRATION,
+    CLEANUP_CONFIRMATIONS_MIGRATION,
   ]);
   new ReportFinalizationRecoveryService(database).reconcileStale();
   const historyRepository = new ReportHistoryRepository(database);

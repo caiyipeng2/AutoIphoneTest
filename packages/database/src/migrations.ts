@@ -526,6 +526,22 @@ CREATE INDEX IF NOT EXISTS idx_run_finalizations_state
 `.trim(),
 };
 
+export const CLEANUP_CONFIRMATIONS_MIGRATION: Migration = {
+  id: "0016_cleanup_confirmations",
+  sql: `
+CREATE TABLE IF NOT EXISTS cleanup_confirmations (
+  nonce_hash TEXT PRIMARY KEY NOT NULL,
+  run_ids_json TEXT NOT NULL,
+  expected_bytes INTEGER NOT NULL CHECK (expected_bytes >= 0),
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_cleanup_confirmations_expiry
+  ON cleanup_confirmations(expires_at, consumed_at);
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
