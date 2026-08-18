@@ -11,3 +11,4 @@ export * from "./storage-pressure-monitor.js";
 export * from "./storage-free-space-source.js";
 export * from "./storage-pressure-poller.js";
 export * from "./cleanup-service.js";
+export * from "./cleanup-trash-mover.js";
