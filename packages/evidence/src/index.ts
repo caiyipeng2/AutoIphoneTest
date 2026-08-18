@@ -9,3 +9,4 @@ export * from "./text-redactor.js";
 export * from "./storage-policy.js";
 export * from "./storage-pressure-monitor.js";
 export * from "./storage-free-space-source.js";
+export * from "./storage-pressure-poller.js";
