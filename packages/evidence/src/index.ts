@@ -7,3 +7,4 @@ export * from "./redacted-logcat-publication-service.js";
 export * from "./mandatory-capture.js";
 export * from "./text-redactor.js";
 export * from "./storage-policy.js";
+export * from "./storage-pressure-monitor.js";
