@@ -209,6 +209,74 @@ describe("results routes", () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it("serves the newest export attempt for a retried report", async () => {
+    const root = await mkdtemp(
+      join(process.env.TEMP ?? process.cwd(), "test-center-results-retry-"),
+    );
+    await mkdir(join(root, "reports"), { recursive: true });
+    await writeFile(join(root, "reports", "evidence-2.zip"), Buffer.from("PK\x05\x06"));
+    const retryItem: ReportHistoryItem = {
+      ...item,
+      runId: "run-retry",
+      exports: [
+        {
+          ...item.exports[0]!,
+          runId: "run-retry",
+          state: "READY",
+          attempt: 1,
+        },
+        {
+          id: "zip-1",
+          runId: "run-retry",
+          format: "ZIP",
+          state: "FAILED",
+          attempt: 1,
+          createdAt: item.updatedAt,
+          updatedAt: item.updatedAt,
+        },
+        {
+          ...item.exports[1]!,
+          id: "zip-2",
+          runId: "run-retry",
+          state: "READY",
+          finalRelativePath: "reports/evidence-2.zip",
+          attempt: 2,
+        },
+      ],
+    };
+    const port = 4802;
+    const app = await createApp({
+      port,
+      bootstrapCode: "results-retry-export-code",
+      launchSecret: "results-retry-export-secret",
+      resultsExportRoot: root,
+      resultsService: {
+        list: () => [retryItem],
+        get: (runId) => (runId === retryItem.runId ? retryItem : undefined),
+      },
+    });
+    const base = headers(port);
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers: base,
+      payload: { code: "results-retry-export-code" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/results/run-retry/exports/ZIP",
+      headers: { ...base, cookie: cookieHeader },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.rawPayload).toEqual(Buffer.from("PK\x05\x06"));
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
   it("guards finalization retry with CSRF, idempotency, and terminal state", async () => {
     const port = 4801;
     const completedItem: ReportHistoryItem = {

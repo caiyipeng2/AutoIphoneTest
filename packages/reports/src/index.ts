@@ -9,5 +9,6 @@ export * from "./evidence-zip.js";
 export * from "./evidence-zip-verifier.js";
 export * from "./report-zip-publication-service.js";
 export * from "./report-finalization-service.js";
+export * from "./report-finalization-executor.js";
 export * from "./report-finalization-recovery-service.js";
 export * from "./report-history-repository.js";

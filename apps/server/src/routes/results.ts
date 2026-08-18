@@ -114,7 +114,9 @@ export async function registerResultsRoutes(
         return await reply.code(400).send({ error: "Export format is invalid." });
       const result = context.resultsService.get(decodeURIComponent(request.params.id));
       if (result === undefined) return await reply.code(404).send({ error: "Result not found." });
-      const reportExport = result.exports.find((item) => item.format === format.data);
+      const reportExport = result.exports
+        .filter((item) => item.format === format.data)
+        .sort((left, right) => right.attempt - left.attempt)[0];
       if (reportExport?.state !== "READY" || reportExport.finalRelativePath === undefined) {
         return await reply.code(409).send({ error: "Result export is not ready." });
       }
