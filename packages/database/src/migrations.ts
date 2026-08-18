@@ -542,6 +542,30 @@ CREATE INDEX IF NOT EXISTS idx_cleanup_confirmations_expiry
 `.trim(),
 };
 
+export const CLEANUP_AUDIT_MIGRATION: Migration = {
+  id: "0017_cleanup_audit",
+  sql: `
+ALTER TABLE test_runs ADD COLUMN cleanup_state TEXT NOT NULL DEFAULT 'ACTIVE'
+  CHECK (cleanup_state IN ('ACTIVE', 'DELETING', 'DELETED', 'RECOVERY_REQUIRED'));
+
+CREATE TABLE IF NOT EXISTS cleanup_audit_events (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  cleanup_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN (
+    'STARTED', 'RUN_MOVED', 'RUN_RESTORED', 'MOVE_FAILED', 'COMPLETED', 'ROLLED_BACK'
+  )),
+  run_id TEXT,
+  source_path TEXT,
+  trash_path TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cleanup_audit_events_lookup
+  ON cleanup_audit_events(cleanup_id, sequence);
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");
