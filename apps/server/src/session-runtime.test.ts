@@ -485,6 +485,65 @@ describe("RuntimeSessionRouteService", () => {
     expect(service.get(created.session.id)?.state).toBe("PREFLIGHT");
     expect(coordinator.stop).not.toHaveBeenCalled();
   });
+
+  it("completes a running session, fences workers, and starts report finalization", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const coordinator = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
+    const finalization = {
+      startFinalization: vi.fn(async () => ({
+        runId: "run-complete",
+        state: "FINALIZING" as const,
+        attempt: 1,
+        startedAt: "now",
+        updatedAt: "now",
+      })),
+    };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      undefined,
+      undefined,
+      coordinator,
+      undefined,
+      finalization,
+    );
+    const created = await service.create({
+      clientRequestId: "request-complete",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+
+    const completed = await service.complete(created.session.id, {
+      state: "FINISHED",
+      reason: "operator-finished",
+    });
+
+    expect(completed.state).toBe("FINISHED");
+    expect(coordinator.stop).toHaveBeenCalledWith(created.session.id);
+    expect(finalization.startFinalization).toHaveBeenCalledWith(created.session.id);
+    expect(
+      database
+        .prepare(
+          "SELECT from_state, to_state, reason FROM run_transitions WHERE run_id = ? ORDER BY id DESC LIMIT 1",
+        )
+        .get(created.session.id),
+    ).toEqual({
+      from_state: "RUNNING",
+      to_state: "FINISHED",
+      reason: "SESSION_COMPLETED:operator-finished",
+    });
+  });
 });
 
 async function createDatabase(): Promise<Database.Database> {

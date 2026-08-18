@@ -5,6 +5,7 @@ import type { DeviceRegistry } from "@test-center/devices";
 import { parseAndroidPackageName } from "@test-center/contracts/artifact";
 import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/device";
 import { ActionOutbox, RunActionRepository, type ActionDispatcher } from "@test-center/sessions";
+import type { ReportFinalizationExecutor } from "@test-center/reports";
 import type { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
 
 import type {
@@ -12,6 +13,7 @@ import type {
   SessionPreflightProbe,
   SessionActionInput,
   SessionActionResult,
+  SessionCompletionInput,
   SessionRouteService,
   SessionView,
 } from "./routes/sessions.js";
@@ -48,6 +50,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     private readonly actionDispatcher?: Pick<ActionDispatcher, "dispatch">,
     private readonly workerCoordinator?: Pick<RuntimeWorkerCoordinator, "start" | "stop">,
     private readonly actionOutbox = new ActionOutbox(database),
+    private readonly finalization?: Pick<ReportFinalizationExecutor, "startFinalization">,
   ) {}
 
   public async create(
@@ -172,6 +175,39 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     const paused = this.get(id);
     if (paused === undefined) throw new Error("Paused session could not be read back.");
     return paused;
+  }
+
+  public async complete(id: string, input: SessionCompletionInput): Promise<SessionView> {
+    if (!input.reason.trim() || input.reason.length > 128)
+      throw new TypeError("Completion reason is invalid.");
+    const current = this.get(id);
+    if (current === undefined) throw new Error("Session not found.");
+    if (current.state !== "RUNNING" && current.state !== "PAUSED") {
+      throw new Error("Session state must be RUNNING or PAUSED.");
+    }
+
+    await this.workerCoordinator?.stop(id);
+    this.actionOutbox.cancelQueuedForRun(id, "SESSION_COMPLETED");
+    const now = new Date().toISOString();
+    const update = this.database.transaction(() => {
+      const changed = this.database
+        .prepare("UPDATE test_runs SET state = ?, updated_at = ? WHERE id = ? AND state = ?")
+        .run(input.state, now, id, current.state) as { changes: number };
+      if (changed.changes !== 1) throw new Error("Session state changed while completing.");
+      this.database
+        .prepare(
+          "INSERT INTO run_transitions (run_id, from_state, to_state, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run(id, current.state, input.state, `SESSION_COMPLETED:${input.reason}`, now);
+    });
+    update.immediate();
+
+    const completed = this.get(id);
+    if (completed === undefined) throw new Error("Completed session could not be read back.");
+    if (this.finalization !== undefined) {
+      await this.finalization.startFinalization(id).catch(() => undefined);
+    }
+    return completed;
   }
 
   public async submitAction(

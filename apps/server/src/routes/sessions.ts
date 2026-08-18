@@ -115,6 +115,12 @@ const ActionSubmitSchema = z
 const PauseSessionSchema = z
   .object({ reason: z.string().trim().min(1).max(128).default("operator") })
   .strict();
+const CompleteSessionSchema = z
+  .object({
+    state: z.enum(["FINISHED", "FAILED", "INTERRUPTED"]),
+    reason: z.string().trim().min(1).max(128).default("operator"),
+  })
+  .strict();
 
 export interface SessionLeaderView {
   readonly serial: DeviceSerial;
@@ -173,6 +179,11 @@ export interface SessionActionResult {
   readonly action: ActionView;
 }
 
+export interface SessionCompletionInput {
+  readonly state: "FINISHED" | "FAILED" | "INTERRUPTED";
+  readonly reason: string;
+}
+
 export interface SessionRouteService {
   create(
     input: SessionCreateInput,
@@ -181,6 +192,7 @@ export interface SessionRouteService {
   preflight(id: string, actorSessionId: string): Promise<SessionView>;
   start(id: string, actorSessionId: string): Promise<SessionView>;
   pause(id: string, reason: string): Promise<SessionView>;
+  complete?(id: string, input: SessionCompletionInput): Promise<SessionView>;
   submitAction(
     id: string,
     actorSessionId: string,
@@ -268,6 +280,28 @@ export async function registerSessionsRoutes(
       return await reply
         .code(sessionErrorCode(error))
         .send({ error: error instanceof Error ? error.message : "Pause rejected." });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/api/sessions/:id/complete", async (request, reply) => {
+    try {
+      assertMutationAllowed(request, context);
+      if (context.sessionService === undefined)
+        return await reply.code(503).send({ error: "Session service unavailable." });
+      if (context.sessionService.complete === undefined)
+        return await reply.code(503).send({ error: "Session completion unavailable." });
+      if (requireSession(request, context) === undefined)
+        return await reply.code(401).send({ error: "Authentication required." });
+      const payload = CompleteSessionSchema.parse(request.body);
+      const session = await context.sessionService.complete(
+        decodeURIComponent(request.params.id),
+        payload,
+      );
+      return { schemaVersion: 1, session };
+    } catch (error) {
+      return await reply
+        .code(sessionErrorCode(error))
+        .send({ error: error instanceof Error ? error.message : "Completion rejected." });
     }
   });
 

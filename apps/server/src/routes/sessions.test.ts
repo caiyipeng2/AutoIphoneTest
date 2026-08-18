@@ -52,6 +52,7 @@ function service(): SessionRouteService {
     start: async () => ({ ...view, state: "RUNNING" }),
     submitAction: async () => ({ state: "CREATED", action }),
     pause: async () => ({ ...view, state: "PAUSED" }),
+    complete: async () => ({ ...view, state: "FINISHED" }),
   };
 }
 
@@ -245,6 +246,47 @@ describe("session create/detail routes", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ schemaVersion: 1, session: { state: "PAUSED" } });
+    await app.close();
+  });
+
+  it("exposes a protected completion endpoint that accepts a terminal outcome", async () => {
+    const complete = async () => ({ ...view, state: "FAILED" as const });
+    const app = await createApp({
+      port: 4798,
+      bootstrapCode: "session-bootstrap-4",
+      launchSecret: "session-secret-4",
+      sessionService: { ...service(), complete },
+    });
+    const headers = { host: "127.0.0.1:4798", origin: "http://127.0.0.1:4798" };
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers,
+      payload: { code: "session-bootstrap-4" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const csrf = Array.isArray(cookies)
+      ? cookies
+          .find((cookie) => cookie.startsWith("tc_csrf="))
+          ?.split("=", 2)[1]
+          ?.split(";", 1)[0]
+      : undefined;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/sessions/run-1/complete",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+      payload: { state: "FAILED", reason: "operator-failure" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      schemaVersion: 1,
+      session: { ...view, state: "FAILED" },
+    });
     await app.close();
   });
 });

@@ -134,9 +134,12 @@ export async function createRuntimeDeviceRegistry(
   ]);
   new ReportFinalizationRecoveryService(database).reconcileStale();
   const historyRepository = new ReportHistoryRepository(database);
+  const finalizationExecutor = new ReportFinalizationExecutor(database, {
+    runRoot: paths.runsRoot,
+  });
   const resultsService = new RuntimeResultsRouteService(
     historyRepository,
-    new ReportFinalizationExecutor(database, { runRoot: paths.runsRoot }),
+    finalizationExecutor,
   );
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
@@ -177,6 +180,8 @@ export async function createRuntimeDeviceRegistry(
       bridgeMode,
     ),
     workerCoordinator,
+    actionOutbox,
+    finalizationExecutor,
   );
   const incidentMonitor = new IncidentMonitor(
     new IncidentRepository(database),

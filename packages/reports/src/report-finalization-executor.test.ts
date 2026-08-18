@@ -58,6 +58,19 @@ function openDatabase(): Database.Database {
 }
 
 describe("report finalization executor", () => {
+  it("starts the first finalization without an idempotency key", async () => {
+    const database = openDatabase();
+    const root = await mkdtemp(join(tmpdir(), "test-center-finalization-start-"));
+    roots.push(root);
+
+    const executor = new ReportFinalizationExecutor(database, { runRoot: root });
+    await expect(executor.startFinalization("run-1")).resolves.toMatchObject({
+      state: "COMPLETED",
+      attempt: 1,
+    });
+    expect(() => executor.startFinalization("run-1")).toThrow("already started");
+  });
+
   it("rebuilds failed reports from the snapshot and deduplicates the same request", async () => {
     const database = openDatabase();
     const root = await mkdtemp(join(tmpdir(), "test-center-finalization-executor-"));

@@ -169,7 +169,7 @@ function resultsMutationErrorCode(error: unknown): 400 | 401 | 403 | 404 | 409 |
 }
 
 async function resolveReadyExportPath(root: string, relativePath: string): Promise<string> {
-  const normalizedRoot = win32.normalize(root);
+  const normalizedRoot = await realpath(win32.normalize(root));
   if (!win32.isAbsolute(normalizedRoot))
     throw new TypeError("Results export root must be absolute.");
   const candidate = win32.resolve(normalizedRoot, relativePath.replaceAll("/", "\\"));

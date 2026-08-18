@@ -72,6 +72,28 @@ export class ReportFinalizationExecutor {
       return existing.promise;
     }
 
+    const tracked = this.enqueue(runId);
+    this.idempotentRequests.set(idempotencyKey, { runId, promise: tracked });
+    while (this.idempotentRequests.size > 256) {
+      const oldest = this.idempotentRequests.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      this.idempotentRequests.delete(oldest);
+    }
+    return tracked;
+  }
+
+  /** Starts the first report build after a run reaches a terminal session state. */
+  public startFinalization(runId: string): Promise<ReportFinalizationRecord> {
+    validateText(runId, "runId");
+    const inFlight = this.inFlightByRun.get(runId);
+    if (inFlight !== undefined) return inFlight;
+    if (this.finalization.get(runId) !== undefined) {
+      throw new Error("Report finalization has already started.");
+    }
+    return this.enqueue(runId);
+  }
+
+  private enqueue(runId: string): Promise<ReportFinalizationRecord> {
     const prior = this.inFlightByRun.get(runId);
     const queued = (prior === undefined ? Promise.resolve() : prior.catch(() => undefined)).then(
       async () => await this.execute(runId),
@@ -80,12 +102,6 @@ export class ReportFinalizationExecutor {
       if (this.inFlightByRun.get(runId) === tracked) this.inFlightByRun.delete(runId);
     });
     this.inFlightByRun.set(runId, tracked);
-    this.idempotentRequests.set(idempotencyKey, { runId, promise: tracked });
-    while (this.idempotentRequests.size > 256) {
-      const oldest = this.idempotentRequests.keys().next().value as string | undefined;
-      if (oldest === undefined) break;
-      this.idempotentRequests.delete(oldest);
-    }
     return tracked;
   }
 
