@@ -93,6 +93,13 @@ import {
   ReportHistoryRepository,
 } from "@test-center/reports";
 import { RuntimeResultsRouteService } from "./results-runtime.js";
+import {
+  CleanupAuditRepository,
+  CleanupExecutionService,
+  CleanupTrashMover,
+} from "@test-center/evidence";
+import { CleanupConfirmationService } from "@test-center/security";
+import type { CleanupRouteService } from "./routes/cleanup.js";
 
 export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
@@ -107,6 +114,7 @@ export interface RuntimeDeviceRegistry {
   readonly incidentService: IncidentRouteService;
   readonly resultsService: RuntimeResultsRouteService;
   readonly resultsExportRoot: string;
+  readonly cleanupService: CleanupRouteService;
   readonly close: () => Promise<void>;
 }
 
@@ -145,6 +153,23 @@ export async function createRuntimeDeviceRegistry(
     historyRepository,
     finalizationExecutor,
   );
+  const cleanupRepository = new CleanupAuditRepository(database);
+  const cleanupConfirmation = new CleanupConfirmationService(database);
+  const cleanupExecution = new CleanupExecutionService(
+    cleanupRepository,
+    cleanupConfirmation,
+    new CleanupTrashMover(),
+  );
+  const cleanupService: CleanupRouteService = {
+    issueConfirmation: (target) => cleanupConfirmation.issue(target),
+    execute: async (input) =>
+      await cleanupExecution.execute({
+        ...input,
+        runsRoot: paths.runsRoot,
+        trashRoot: win32.join(paths.dataRoot, "trash"),
+      }),
+    listEvents: (cleanupId) => cleanupRepository.listEvents(cleanupId),
+  };
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
     "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\platform-tools\\adb.exe";
@@ -251,6 +276,7 @@ export async function createRuntimeDeviceRegistry(
     incidentService,
     resultsService,
     resultsExportRoot: paths.runsRoot,
+    cleanupService,
     close: async () => {
       await workerCoordinator.stopAll().catch(() => undefined);
       database.close();

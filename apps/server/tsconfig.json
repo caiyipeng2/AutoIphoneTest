@@ -17,6 +17,7 @@
     { "path": "../../packages/database" },
     { "path": "../../packages/deployments" },
     { "path": "../../packages/environment" },
+    { "path": "../../packages/evidence" },
     { "path": "../../packages/reports" },
     { "path": "../../packages/security" },
     { "path": "../../packages/video" },

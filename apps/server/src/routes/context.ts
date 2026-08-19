@@ -6,6 +6,7 @@ import type { ViewProvider } from "@test-center/video";
 import type { SessionRouteService } from "./sessions.js";
 import type { IncidentRouteService } from "./incidents.js";
 import type { ResultsRouteService } from "./results.js";
+import type { CleanupRouteService } from "./cleanup.js";
 
 export interface ServerSession {
   readonly csrfToken: string;
@@ -31,4 +32,5 @@ export interface ServerContext {
   readonly incidentService?: IncidentRouteService;
   readonly resultsService?: ResultsRouteService;
   readonly resultsExportRoot?: string;
+  readonly cleanupService?: CleanupRouteService;
 }
