@@ -566,6 +566,14 @@ CREATE INDEX IF NOT EXISTS idx_cleanup_audit_events_lookup
 `.trim(),
 };
 
+export const CLEANUP_PROTECTION_MIGRATION: Migration = {
+  id: "0018_cleanup_protection",
+  sql: `
+ALTER TABLE test_runs ADD COLUMN cleanup_protected INTEGER NOT NULL DEFAULT 0
+  CHECK (cleanup_protected IN (0, 1));
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");

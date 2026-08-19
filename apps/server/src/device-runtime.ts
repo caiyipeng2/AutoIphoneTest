@@ -37,6 +37,7 @@ import {
   REPORT_FINALIZATION_MIGRATION,
   CLEANUP_CONFIRMATIONS_MIGRATION,
   CLEANUP_AUDIT_MIGRATION,
+  CLEANUP_PROTECTION_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
   migrate,
@@ -96,6 +97,7 @@ import { RuntimeResultsRouteService } from "./results-runtime.js";
 import {
   CleanupAuditRepository,
   CleanupExecutionService,
+  CleanupPreviewRepository,
   CleanupTrashMover,
 } from "@test-center/evidence";
 import { CleanupConfirmationService } from "@test-center/security";
@@ -143,6 +145,7 @@ export async function createRuntimeDeviceRegistry(
     REPORT_FINALIZATION_MIGRATION,
     CLEANUP_CONFIRMATIONS_MIGRATION,
     CLEANUP_AUDIT_MIGRATION,
+    CLEANUP_PROTECTION_MIGRATION,
   ]);
   new ReportFinalizationRecoveryService(database).reconcileStale();
   const historyRepository = new ReportHistoryRepository(database);
@@ -154,6 +157,7 @@ export async function createRuntimeDeviceRegistry(
     finalizationExecutor,
   );
   const cleanupRepository = new CleanupAuditRepository(database);
+  const cleanupPreviewRepository = new CleanupPreviewRepository(database);
   const cleanupConfirmation = new CleanupConfirmationService(database);
   const cleanupExecution = new CleanupExecutionService(
     cleanupRepository,
@@ -169,6 +173,10 @@ export async function createRuntimeDeviceRegistry(
         trashRoot: win32.join(paths.dataRoot, "trash"),
       }),
     listEvents: (cleanupId) => cleanupRepository.listEvents(cleanupId),
+    preview: (retentionDays) => ({
+      retentionDays,
+      preview: cleanupPreviewRepository.preview(retentionDays, new Date().toISOString()),
+    }),
   };
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??

@@ -14,3 +14,4 @@ export * from "./cleanup-service.js";
 export * from "./cleanup-trash-mover.js";
 export * from "./cleanup-audit-repository.js";
 export * from "./cleanup-execution-service.js";
+export * from "./cleanup-preview-repository.js";

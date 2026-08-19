@@ -26,6 +26,14 @@ function service(): CleanupRouteService {
         createdAt: "2026-08-19T01:00:00.000Z",
       },
     ]),
+    preview: vi.fn((retentionDays) => ({
+      retentionDays,
+      preview: {
+        cutoffAt: "2026-07-19T00:00:00.000Z",
+        candidates: [],
+        totalEstimatedBytes: 0,
+      },
+    })),
   };
 }
 
@@ -40,6 +48,13 @@ describe("cleanup routes", () => {
       cleanupService,
     });
     const base = headers(port);
+
+    const unauthenticatedPreview = await app.inject({
+      method: "GET",
+      url: "/api/cleanup/preview?retentionDays=30",
+      headers: base,
+    });
+    expect(unauthenticatedPreview.statusCode).toBe(401);
 
     expect(
       (
@@ -112,6 +127,30 @@ describe("cleanup routes", () => {
     });
     expect(events.statusCode).toBe(200);
     expect(events.json().events).toHaveLength(1);
+
+    const preview = await app.inject({
+      method: "GET",
+      url: "/api/cleanup/preview?retentionDays=30",
+      headers: authenticated,
+    });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json()).toEqual({
+      schemaVersion: 1,
+      retentionDays: 30,
+      preview: {
+        cutoffAt: "2026-07-19T00:00:00.000Z",
+        candidates: [],
+        totalEstimatedBytes: 0,
+      },
+    });
+
+    const invalidPreview = await app.inject({
+      method: "GET",
+      url: "/api/cleanup/preview?retentionDays=0",
+      headers: authenticated,
+    });
+    expect(invalidPreview.statusCode).toBe(400);
+    expect(cleanupService.preview).toHaveBeenCalledTimes(1);
     await app.close();
   });
 

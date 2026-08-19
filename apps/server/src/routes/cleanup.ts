@@ -1,7 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
-import type { CleanupAuditEvent, CleanupExecutionResult } from "@test-center/evidence";
+import type {
+  CleanupAuditEvent,
+  CleanupExecutionResult,
+  CleanupPreview,
+} from "@test-center/evidence";
 import {
   assertAllowedHost,
   assertSameOrigin,
@@ -25,6 +29,11 @@ const CleanupExecuteSchema = CleanupTargetSchema.extend({
   cleanupId: SafeSegmentSchema,
   nonce: z.string().min(1).max(512),
 }).strict();
+const CleanupPreviewQuerySchema = z
+  .object({
+    retentionDays: z.coerce.number().int().min(1).max(3650).default(14),
+  })
+  .strict();
 
 export interface CleanupRouteTarget {
   readonly runIds: readonly string[];
@@ -40,6 +49,7 @@ export interface CleanupRouteService {
   issueConfirmation(target: CleanupRouteTarget): { nonce: string; expiresAt: string };
   execute(input: CleanupRouteExecuteInput): Promise<CleanupExecutionResult>;
   listEvents(cleanupId: string): readonly CleanupAuditEvent[];
+  preview(retentionDays: number): { retentionDays: number; preview: CleanupPreview };
 }
 
 export async function registerCleanupRoutes(
@@ -85,6 +95,22 @@ export async function registerCleanupRoutes(
       events: context.cleanupService.listEvents(cleanupId.data),
     };
   });
+
+  app.get<{ Querystring: Record<string, unknown> }>(
+    "/api/cleanup/preview",
+    async (request, reply) => {
+      if (requireSession(request, context) === undefined)
+        return await reply.code(401).send({ error: "Authentication required." });
+      if (context.cleanupService === undefined)
+        return await reply.code(503).send({ error: "Cleanup service unavailable." });
+      try {
+        const query = CleanupPreviewQuerySchema.parse(request.query);
+        return { schemaVersion: 1, ...context.cleanupService.preview(query.retentionDays) };
+      } catch (error) {
+        return await reply.code(400).send({ error: errorMessage(error) });
+      }
+    },
+  );
 }
 
 function assertMutationAllowed(request: FastifyRequest, context: ServerContext): void {
