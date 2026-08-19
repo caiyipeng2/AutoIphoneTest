@@ -68,6 +68,50 @@ describe("cleanup trash mover", () => {
     );
   });
 
+  it("restores a validated move result in reverse order", async () => {
+    const fileSystem = new FakeFileSystem();
+    const mover = new CleanupTrashMover(fileSystem);
+    const request = {
+      runsRoot: "E:\\TestCenter\\data\\runs",
+      trashRoot: "E:\\TestCenter\\data\\trash",
+      cleanupId: "cleanup-restore",
+      runIds: ["run-a", "run-b"],
+    };
+    const result = {
+      cleanupId: request.cleanupId,
+      moved: [
+        {
+          runId: "run-a",
+          sourcePath: "E:\\TestCenter\\data\\runs\\run-a",
+          trashPath: "E:\\TestCenter\\data\\trash\\cleanup-restore\\run-a",
+        },
+        {
+          runId: "run-b",
+          sourcePath: "E:\\TestCenter\\data\\runs\\run-b",
+          trashPath: "E:\\TestCenter\\data\\trash\\cleanup-restore\\run-b",
+        },
+      ],
+    } as const;
+
+    await expect(mover.restore(request, result)).resolves.toEqual(result.moved);
+    expect(fileSystem.renameCalls).toEqual([
+      {
+        source: "E:\\TestCenter\\data\\trash\\cleanup-restore\\run-b",
+        destination: "E:\\TestCenter\\data\\runs\\run-b",
+      },
+      {
+        source: "E:\\TestCenter\\data\\trash\\cleanup-restore\\run-a",
+        destination: "E:\\TestCenter\\data\\runs\\run-a",
+      },
+    ]);
+    await expect(
+      mover.restore(request, {
+        ...result,
+        moved: [{ ...result.moved[0], trashPath: "E:\\outside\\run-a" }],
+      }),
+    ).rejects.toThrow(/does not match|unexpected path/i);
+  });
+
   it("rolls back earlier moves when a later rename fails", async () => {
     const fileSystem = new FakeFileSystem();
     fileSystem.failOnRenameCall = 2;

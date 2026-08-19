@@ -68,6 +68,30 @@ export class CleanupTrashMover {
       throw error;
     }
   }
+
+  public async restore(
+    request: CleanupMoveRequest,
+    result: CleanupMoveResult,
+  ): Promise<readonly CleanupMovedRun[]> {
+    const normalized = normalizeRequest(request);
+    validateMoveResult(normalized, result, true);
+    const restored: CleanupMovedRun[] = [];
+    const failures: unknown[] = [];
+    for (const item of [...result.moved].reverse()) {
+      try {
+        await this.fileSystem.rename(item.trashPath, item.sourcePath);
+        restored.unshift(item);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) {
+      throw new Error(`Cleanup restore failed for ${failures.length} run(s).`, {
+        cause: failures[0],
+      });
+    }
+    return restored;
+  }
 }
 
 function normalizeRequest(request: CleanupMoveRequest): CleanupMoveRequest {
@@ -95,6 +119,40 @@ function normalizeRequest(request: CleanupMoveRequest): CleanupMoveRequest {
     throw new TypeError("Run IDs must not contain duplicates.");
   runIds.sort(compareSegments);
   return { ...request, runIds };
+}
+
+function validateMoveResult(
+  request: CleanupMoveRequest,
+  result: CleanupMoveResult,
+  allowSubset = false,
+): void {
+  if (
+    result.cleanupId !== request.cleanupId ||
+    (!allowSubset && result.moved.length !== request.runIds.length) ||
+    result.moved.length > request.runIds.length
+  ) {
+    throw new TypeError("Cleanup move result does not match the requested cleanup.");
+  }
+  const expectedRunIds = allowSubset ? result.moved.map((item) => item.runId) : request.runIds;
+  if (new Set(expectedRunIds).size !== expectedRunIds.length) {
+    throw new TypeError("Cleanup move result contains duplicate runs.");
+  }
+  if (expectedRunIds.some((runId) => !request.runIds.includes(runId))) {
+    throw new TypeError("Cleanup move result does not match the requested runs.");
+  }
+  for (const [index, runId] of expectedRunIds.entries()) {
+    const item = result.moved[index];
+    const expectedSource = win32.join(request.runsRoot, runId);
+    const expectedTrash = win32.join(request.trashRoot, request.cleanupId, runId);
+    if (
+      item === undefined ||
+      item.runId !== runId ||
+      item.sourcePath !== expectedSource ||
+      item.trashPath !== expectedTrash
+    ) {
+      throw new TypeError("Cleanup move result contains an unexpected path.");
+    }
+  }
 }
 
 function validateAbsoluteWindowsPath(value: string, field: string): void {
