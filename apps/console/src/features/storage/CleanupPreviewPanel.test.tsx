@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CleanupPreviewPanel } from "./CleanupPreviewPanel";
@@ -63,5 +63,37 @@ describe("CleanupPreviewPanel", () => {
 
     rerender(<CleanupPreviewPanel retentionDays={30} reloadToken={1} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("无法读取清理预览");
+  });
+
+  it("selects exact candidates before opening the destructive dialog", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        schemaVersion: 1,
+        retentionDays: 30,
+        preview: {
+          cutoffAt: "2026-07-19T00:00:00.000Z",
+          candidates: [
+            {
+              runId: "run-old",
+              state: "FINISHED",
+              completedAt: "2026-07-01T00:00:00.000Z",
+              estimatedBytes: 300,
+            },
+          ],
+          totalEstimatedBytes: 300,
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<CleanupPreviewPanel retentionDays={30} reloadToken={0} />);
+    await screen.findByText("run-old");
+    expect(screen.getByRole("button", { name: "清理选中" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "选择清理 run-old" }));
+    expect(screen.getByRole("button", { name: "清理选中" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "清理选中" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("run-old");
+    expect(screen.getByRole("dialog")).toHaveTextContent("300 B");
   });
 });

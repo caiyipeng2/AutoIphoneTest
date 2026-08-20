@@ -49,6 +49,35 @@ export interface CleanupPreviewResponse {
   };
 }
 
+export interface CleanupConfirmation {
+  nonce: string;
+  expiresAt: string;
+}
+
+export interface CleanupExecutionResult {
+  cleanupId: string;
+  state: "DELETED" | "RECOVERY_REQUIRED";
+  moved: Array<{ runId: string; sourcePath: string; trashPath: string }>;
+  deleted: string[];
+  restored: string[];
+  unresolved: string[];
+  errorMessage?: string;
+}
+
+export type CleanupAuditEventKind =
+  "STARTED" | "RUN_MOVED" | "RUN_RESTORED" | "MOVE_FAILED" | "COMPLETED" | "ROLLED_BACK";
+
+export interface CleanupAuditEvent {
+  sequence: number;
+  cleanupId: string;
+  kind: CleanupAuditEventKind;
+  runId?: string;
+  sourcePath?: string;
+  trashPath?: string;
+  errorMessage?: string;
+  createdAt: string;
+}
+
 export type DeviceState = "ONLINE" | "UNAUTHORIZED" | "OFFLINE" | "UNKNOWN";
 export interface DeviceRecord {
   serial: string;
@@ -291,6 +320,67 @@ export async function fetchCleanupPreview(
     throw new Error(payload.error ?? `cleanup-preview:${response.status}`);
   }
   return payload;
+}
+
+export async function issueCleanupConfirmation(
+  runIds: string[],
+  expectedBytes: number,
+): Promise<CleanupConfirmation> {
+  const csrfToken = readCsrfToken();
+  const response = await fetch("/api/cleanup/confirmations", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(csrfToken === undefined ? {} : { "x-test-center-csrf": csrfToken }),
+    },
+    body: JSON.stringify({ runIds, expectedBytes }),
+  });
+  const payload = (await response.json()) as {
+    confirmation?: CleanupConfirmation;
+    error?: string;
+  };
+  if (!response.ok || payload.confirmation === undefined) {
+    throw new Error(payload.error ?? `cleanup-confirmation:${response.status}`);
+  }
+  return payload.confirmation;
+}
+
+export async function executeCleanup(input: {
+  cleanupId: string;
+  nonce: string;
+  runIds: string[];
+  expectedBytes: number;
+}): Promise<CleanupExecutionResult> {
+  const csrfToken = readCsrfToken();
+  const response = await fetch("/api/cleanup/execute", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(csrfToken === undefined ? {} : { "x-test-center-csrf": csrfToken }),
+    },
+    body: JSON.stringify(input),
+  });
+  const payload = (await response.json()) as { result?: CleanupExecutionResult; error?: string };
+  if (!response.ok || payload.result === undefined) {
+    throw new Error(payload.error ?? `cleanup-execute:${response.status}`);
+  }
+  return payload.result;
+}
+
+export async function fetchCleanupEvents(cleanupId: string): Promise<{
+  cleanupId: string;
+  events: CleanupAuditEvent[];
+}> {
+  const response = await fetch(`/api/cleanup/${encodeURIComponent(cleanupId)}/events`, undefined);
+  const payload = (await response.json()) as {
+    cleanupId?: string;
+    events?: CleanupAuditEvent[];
+    error?: string;
+  };
+  if (!response.ok || payload.cleanupId === undefined || !Array.isArray(payload.events)) {
+    throw new Error(payload.error ?? `cleanup-events:${response.status}`);
+  }
+  return { cleanupId: payload.cleanupId, events: payload.events };
 }
 
 export async function fetchDevices(signal?: AbortSignal): Promise<DevicesSnapshot> {
