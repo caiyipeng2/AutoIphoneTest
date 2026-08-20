@@ -10,6 +10,26 @@ export interface SettingsSnapshot {
   values: Record<string, unknown>;
 }
 
+export type CleanupPreviewState =
+  "FINISHED" | "FAILED" | "INTERRUPTED" | "COMPLETED" | "FINALIZATION_FAILED" | "ABORTED";
+
+export interface CleanupPreviewCandidate {
+  runId: string;
+  state: CleanupPreviewState;
+  completedAt: string;
+  estimatedBytes: number;
+}
+
+export interface CleanupPreviewResponse {
+  schemaVersion: 1;
+  retentionDays: number;
+  preview: {
+    cutoffAt: string;
+    candidates: CleanupPreviewCandidate[];
+    totalEstimatedBytes: number;
+  };
+}
+
 export type DeviceState = "ONLINE" | "UNAUTHORIZED" | "OFFLINE" | "UNKNOWN";
 export interface DeviceRecord {
   serial: string;
@@ -207,6 +227,42 @@ export async function fetchSettings(signal?: AbortSignal): Promise<SettingsSnaps
   const response = await fetch("/api/settings", signal ? { signal } : undefined);
   if (!response.ok) throw new Error(`settings:${response.status}`);
   return (await response.json()) as SettingsSnapshot;
+}
+
+export async function patchSettings(
+  patch: Record<string, unknown>,
+  expectedVersion: number,
+): Promise<SettingsSnapshot> {
+  const csrf = readCsrfToken();
+  const response = await fetch("/api/settings", {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+      "if-match": `"${expectedVersion}"`,
+      ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+    },
+    body: JSON.stringify(patch),
+  });
+  const payload = (await response.json()) as SettingsSnapshot & { error?: string };
+  if (!response.ok || payload.version === undefined) {
+    throw new Error(payload.error ?? `settings:${response.status}`);
+  }
+  return payload;
+}
+
+export async function fetchCleanupPreview(
+  retentionDays: number,
+  signal?: AbortSignal,
+): Promise<CleanupPreviewResponse> {
+  const response = await fetch(
+    `/api/cleanup/preview?retentionDays=${encodeURIComponent(String(retentionDays))}`,
+    signal ? { signal } : undefined,
+  );
+  const payload = (await response.json()) as CleanupPreviewResponse & { error?: string };
+  if (!response.ok || payload.preview === undefined) {
+    throw new Error(payload.error ?? `cleanup-preview:${response.status}`);
+  }
+  return payload;
 }
 
 export async function fetchDevices(signal?: AbortSignal): Promise<DevicesSnapshot> {

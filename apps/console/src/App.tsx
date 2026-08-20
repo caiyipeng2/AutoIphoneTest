@@ -3,6 +3,7 @@ import { Bell, CircleHelp, ExternalLink, Menu, Radio, X } from "lucide-react";
 import {
   fetchHealth,
   fetchSettings,
+  patchSettings,
   exchangeBootstrapCode,
   type HealthSnapshot,
   type SettingsSnapshot,
@@ -80,6 +81,12 @@ export function App() {
     () => NAV_ITEMS.find((item) => item.key === route) ?? NAV_ITEMS[0]!,
     [route],
   );
+  const saveSettings = async (patch: { retentionDays: number }) => {
+    if (settings === null) throw new Error("设置尚未加载。");
+    const nextSettings = await patchSettings(patch, settings.version);
+    setSettings(nextSettings);
+    return nextSettings;
+  };
   const page =
     route === "devices" ? (
       <DevicesPage refreshKey={deviceRefreshKey} />
@@ -92,7 +99,7 @@ export function App() {
     ) : route === "results" ? (
       <ResultsPage />
     ) : route === "settings" ? (
-      <SettingsPage settings={settings} onSave={() => undefined} />
+      <SettingsPage settings={settings} onSave={saveSettings} />
     ) : (
       <OverviewPage
         health={health}

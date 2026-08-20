@@ -1504,6 +1504,80 @@ main {
     11px Consolas,
     monospace;
 }
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-status,
+.settings-error {
+  margin: 12px 0 0;
+}
+.settings-status {
+  color: #4c712c;
+  font-size: 12px;
+}
+.cleanup-preview-panel {
+  margin-top: 18px;
+}
+.cleanup-preview-heading {
+  margin-bottom: 11px;
+}
+.cleanup-preview-safety {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 15px;
+  color: #4c712c;
+  font-size: 11px;
+}
+.cleanup-preview-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.cleanup-preview-summary > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid #d9d2c5;
+  background: #f8f5ee;
+}
+.cleanup-preview-summary span,
+.cleanup-preview-summary small {
+  color: #899392;
+  font-size: 11px;
+}
+.cleanup-preview-summary strong {
+  color: #28383a;
+  font-size: 17px;
+}
+.cleanup-preview-table .table-head,
+.cleanup-preview-table .table-row {
+  grid-template-columns: 1.45fr 0.8fr 1fr 0.7fr;
+}
+.cleanup-preview-empty {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  min-height: 126px;
+  padding: 20px;
+  border: 1px dashed #d2cbc0;
+  color: #7b8787;
+  text-align: center;
+}
+.cleanup-preview-empty svg {
+  color: #789498;
+}
+.cleanup-preview-empty strong {
+  color: #344447;
+  font-size: 13px;
+}
+.cleanup-preview-empty span {
+  font-size: 11px;
+}
 .footer {
   display: flex;
   justify-content: space-between;
@@ -1586,6 +1660,24 @@ main {
   .form-grid,
   .choice-grid {
     grid-template-columns: 1fr;
+  }
+  .settings-footer,
+  .settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .settings-actions .button {
+    justify-content: center;
+  }
+  .cleanup-preview-summary {
+    grid-template-columns: 1fr;
+  }
+  .cleanup-preview-table .table-head,
+  .cleanup-preview-table .table-row {
+    grid-template-columns: 1.2fr 0.8fr 0.85fr 0.65fr;
+    gap: 8px;
+    padding-left: 10px;
+    padding-right: 10px;
   }
   .session-setup {
     align-items: stretch;
