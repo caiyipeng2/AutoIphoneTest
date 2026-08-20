@@ -145,6 +145,32 @@ describe("ZIP evidence manifest", () => {
     ).toThrow(/duplicate|collision/i);
   });
 
+  it("rejects duplicate evidence association IDs even when paths differ", () => {
+    expect(() =>
+      createZipManifest({
+        html: { relativePath: "reports/report.html", sha256: sha("a"), sizeBytes: 1 },
+        evidence: [
+          {
+            id: "ev-duplicate",
+            kind: "SCREENSHOT",
+            state: "READY",
+            finalRelativePath: "evidence/first.png",
+            sha256: sha("b"),
+            sizeBytes: 2,
+          },
+          {
+            id: "ev-duplicate",
+            kind: "LOGCAT_SEGMENT",
+            state: "READY",
+            finalRelativePath: "evidence/second.txt",
+            sha256: sha("c"),
+            sizeBytes: 3,
+          },
+        ],
+      }),
+    ).toThrow(/duplicate|association/i);
+  });
+
   it("rejects READY evidence missing measured metadata", () => {
     expect(() =>
       createZipManifest({

@@ -56,6 +56,7 @@ export function createZipManifest(input: ZipManifestInput): ZipManifest {
   const entries: ZipManifestEntry[] = [];
   const unavailable: ZipManifestUnavailable[] = [];
   const normalizedPaths = new Map<string, string>();
+  const associationIds = new Set<string>(["report-html"]);
 
   const htmlPath = normalizeEntryPath(input.html.relativePath);
   assertMeasuredMetadata(input.html.sha256, input.html.sizeBytes, "HTML report");
@@ -70,6 +71,10 @@ export function createZipManifest(input: ZipManifestInput): ZipManifest {
 
   for (const evidence of input.evidence) {
     requireText(evidence.id, "evidence.id");
+    if (associationIds.has(evidence.id)) {
+      throw new Error(`Duplicate ZIP associationId: ${evidence.id}`);
+    }
+    associationIds.add(evidence.id);
     requireText(evidence.kind, `evidence ${evidence.id} kind`);
     if (evidence.serial !== undefined)
       requireText(evidence.serial, `evidence ${evidence.id} serial`);
