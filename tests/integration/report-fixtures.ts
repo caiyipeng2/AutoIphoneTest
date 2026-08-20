@@ -72,8 +72,7 @@ export async function createReportFixture(scenario: ReportFixtureScenario): Prom
   ]);
 
   try {
-    const seed = scenarioSeed(scenario);
-    await seedFixture(database, runRoot, scenario, seed);
+    await seedReportFixture(database, runRoot, scenario);
     const executor = new ReportFinalizationExecutor(database, { runRoot });
     let closed = false;
     return {
@@ -92,6 +91,16 @@ export async function createReportFixture(scenario: ReportFixtureScenario): Prom
     await rm(runRoot, { recursive: true, force: true });
     throw error;
   }
+}
+
+/** Seeds a deterministic report run into either an in-memory or persistent database. */
+export async function seedReportFixture(
+  database: Database.Database,
+  runRoot: string,
+  scenario: ReportFixtureScenario,
+  runId = `fixture-${scenario}`,
+): Promise<void> {
+  await seedFixture(database, runRoot, scenario, scenarioSeed(scenario), runId);
 }
 
 function scenarioSeed(scenario: ReportFixtureScenario): {
@@ -173,8 +182,8 @@ async function seedFixture(
   runRoot: string,
   scenario: ReportFixtureScenario,
   seed: ReturnType<typeof scenarioSeed>,
+  runId: string,
 ): Promise<void> {
-  const runId = `fixture-${scenario}`;
   const timestamp = "2026-08-20T00:00:00.000Z";
   database
     .prepare(
