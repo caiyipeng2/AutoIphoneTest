@@ -7,6 +7,7 @@ import type { SessionRouteService } from "./sessions.js";
 import type { IncidentRouteService } from "./incidents.js";
 import type { ResultsRouteService } from "./results.js";
 import type { CleanupRouteService } from "./cleanup.js";
+import type { StorageOverviewRouteService } from "./storage.js";
 
 export interface ServerSession {
   readonly csrfToken: string;
@@ -33,4 +34,5 @@ export interface ServerContext {
   readonly resultsService?: ResultsRouteService;
   readonly resultsExportRoot?: string;
   readonly cleanupService?: CleanupRouteService;
+  readonly storageService?: StorageOverviewRouteService;
 }

@@ -33,6 +33,8 @@ import { registerIncidentRoutes, type IncidentRouteService } from "./routes/inci
 import { registerResultsRoutes, type ResultsRouteService } from "./routes/results.js";
 import { registerCleanupRoutes } from "./routes/cleanup.js";
 import type { CleanupRouteService } from "./routes/cleanup.js";
+import { registerStorageRoutes } from "./routes/storage.js";
+import type { StorageOverviewRouteService } from "./routes/storage.js";
 
 export interface CreateAppOptions {
   readonly port: number;
@@ -53,6 +55,7 @@ export interface CreateAppOptions {
   readonly resultsService?: ResultsRouteService;
   readonly resultsExportRoot?: string;
   readonly cleanupService?: CleanupRouteService;
+  readonly storageService?: StorageOverviewRouteService;
 }
 
 export async function createApp(options: CreateAppOptions): Promise<FastifyInstance> {
@@ -87,6 +90,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
       ? {}
       : { resultsExportRoot: options.resultsExportRoot }),
     ...(options.cleanupService === undefined ? {} : { cleanupService: options.cleanupService }),
+    ...(options.storageService === undefined ? {} : { storageService: options.storageService }),
   };
   const snapshot = options.healthSnapshot ?? createDefaultHealthSnapshot();
 
@@ -136,6 +140,7 @@ export async function createApp(options: CreateAppOptions): Promise<FastifyInsta
   await registerIncidentRoutes(app, context);
   await registerResultsRoutes(app, context);
   await registerCleanupRoutes(app, context);
+  await registerStorageRoutes(app, context);
   await registerStateGateway(app, context, snapshot);
   await registerVideoGateway(app, context);
   return app;

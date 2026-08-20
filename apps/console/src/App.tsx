@@ -3,10 +3,12 @@ import { Bell, CircleHelp, ExternalLink, Menu, Radio, X } from "lucide-react";
 import {
   fetchHealth,
   fetchSettings,
+  fetchStorageOverview,
   patchSettings,
   exchangeBootstrapCode,
   type HealthSnapshot,
   type SettingsSnapshot,
+  type StorageOverviewSnapshot,
 } from "./state/api";
 import { NAV_ITEMS, readRoute } from "./state/navigation";
 import { openStateStream } from "./state/stream";
@@ -25,6 +27,9 @@ export function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [health, setHealth] = useState<HealthSnapshot | null>(null);
   const [settings, setSettings] = useState<SettingsSnapshot | null>(null);
+  const [storage, setStorage] = useState<StorageOverviewSnapshot | null>(null);
+  const [storageLoading, setStorageLoading] = useState(true);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [deviceRefreshKey, setDeviceRefreshKey] = useState(0);
 
@@ -45,13 +50,21 @@ export function App() {
         await exchangeBootstrapCode(code).catch(() => undefined);
         window.history.replaceState(null, "", window.location.pathname + "#overview");
       }
-      const [healthResult, settingsResult] = await Promise.allSettled([
+      const [healthResult, settingsResult, storageResult] = await Promise.allSettled([
         fetchHealth(),
         fetchSettings(),
+        fetchStorageOverview(),
       ]);
       if (cancelled) return;
       if (healthResult.status === "fulfilled") setHealth(healthResult.value);
       if (settingsResult.status === "fulfilled") setSettings(settingsResult.value);
+      if (storageResult.status === "fulfilled") {
+        setStorage(storageResult.value);
+        setStorageError(null);
+      } else {
+        setStorageError("存储状态暂不可用。");
+      }
+      setStorageLoading(false);
     };
     void load();
     const timer = window.setInterval(() => {
@@ -60,6 +73,15 @@ export function App() {
           if (!cancelled) setHealth(value);
         })
         .catch(() => undefined);
+      void fetchStorageOverview()
+        .then((value) => {
+          if (cancelled) return;
+          setStorage(value);
+          setStorageError(null);
+        })
+        .catch(() => {
+          if (!cancelled) setStorageError("存储状态暂不可用。");
+        });
     }, 10_000);
     return () => {
       cancelled = true;
@@ -87,6 +109,16 @@ export function App() {
     setSettings(nextSettings);
     return nextSettings;
   };
+  const refreshStorage = () => {
+    setStorageLoading(true);
+    void fetchStorageOverview()
+      .then((value) => {
+        setStorage(value);
+        setStorageError(null);
+      })
+      .catch(() => setStorageError("存储状态暂不可用。"))
+      .finally(() => setStorageLoading(false));
+  };
   const page =
     route === "devices" ? (
       <DevicesPage refreshKey={deviceRefreshKey} />
@@ -103,11 +135,16 @@ export function App() {
     ) : (
       <OverviewPage
         health={health}
-        onRefresh={() =>
+        storage={storage}
+        storageLoading={storageLoading}
+        storageError={storageError}
+        onStorageRefresh={refreshStorage}
+        onRefresh={() => {
           void fetchHealth()
             .then(setHealth)
-            .catch(() => undefined)
-        }
+            .catch(() => undefined);
+          refreshStorage();
+        }}
       />
     );
 

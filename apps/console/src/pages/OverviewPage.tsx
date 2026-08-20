@@ -1,14 +1,24 @@
 import { ArrowUpRight, Play, RefreshCw, ShieldCheck } from "lucide-react";
 
 import type { HealthSnapshot } from "../state/api";
+import type { StorageOverviewSnapshot } from "../state/api";
 import { DataRow, Metric, PageFrame } from "../components/PageFrame";
+import { StorageOverviewPanel } from "../features/storage/StorageOverviewPanel";
 
 export function OverviewPage({
   health,
   onRefresh,
+  storage = null,
+  storageLoading = false,
+  storageError = null,
+  onStorageRefresh = onRefresh,
 }: {
   health: HealthSnapshot | null;
   onRefresh: () => void;
+  storage?: StorageOverviewSnapshot | null;
+  storageLoading?: boolean;
+  storageError?: string | null;
+  onStorageRefresh?: () => void;
 }) {
   const service = health?.service?.state ?? "STARTING";
   return (
@@ -97,6 +107,12 @@ export function OverviewPage({
           <DataRow label="实时通道" value="WebSocket" />
         </div>
       </div>
+      <StorageOverviewPanel
+        snapshot={storage}
+        loading={storageLoading}
+        error={storageError}
+        onRefresh={onStorageRefresh}
+      />
     </PageFrame>
   );
 }

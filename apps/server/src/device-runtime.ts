@@ -99,9 +99,14 @@ import {
   CleanupExecutionService,
   CleanupPreviewRepository,
   CleanupTrashMover,
+  createFileSystemFreeSpaceSource,
+  StoragePressureMonitor,
+  StoragePressurePoller,
 } from "@test-center/evidence";
 import { CleanupConfirmationService } from "@test-center/security";
 import type { CleanupRouteService } from "./routes/cleanup.js";
+import type { StorageOverviewRouteService } from "./routes/storage.js";
+import { createStorageOverviewService } from "./storage-runtime.js";
 
 export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
@@ -117,6 +122,7 @@ export interface RuntimeDeviceRegistry {
   readonly resultsService: RuntimeResultsRouteService;
   readonly resultsExportRoot: string;
   readonly cleanupService: CleanupRouteService;
+  readonly storageService: StorageOverviewRouteService;
   readonly close: () => Promise<void>;
 }
 
@@ -178,6 +184,17 @@ export async function createRuntimeDeviceRegistry(
       preview: cleanupPreviewRepository.preview(retentionDays, new Date().toISOString()),
     }),
   };
+  const storageMonitor = new StoragePressureMonitor(
+    createFileSystemFreeSpaceSource(paths.dataRoot),
+  );
+  const storagePoller = new StoragePressurePoller(storageMonitor, {
+    intervalMs: readPositiveInteger(process.env.TEST_CENTER_STORAGE_POLL_INTERVAL_MS, 30_000),
+  });
+  const storageService = createStorageOverviewService(database, storageMonitor);
+  // Sampling is intentionally best-effort during startup. The authenticated
+  // Overview request can retry on demand when a filesystem provider is slow or
+  // temporarily unavailable, while the poller keeps normal dashboards fresh.
+  void storagePoller.start().catch(() => undefined);
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
     "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\platform-tools\\adb.exe";
@@ -285,7 +302,9 @@ export async function createRuntimeDeviceRegistry(
     resultsService,
     resultsExportRoot: paths.runsRoot,
     cleanupService,
+    storageService,
     close: async () => {
+      await storagePoller.stop();
       await workerCoordinator.stopAll().catch(() => undefined);
       database.close();
     },

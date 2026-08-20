@@ -491,6 +491,69 @@ main {
   color: #28383a;
   font-size: 12px;
 }
+.storage-panel {
+  margin-top: 18px;
+}
+.storage-summary {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #ebe6dc;
+}
+.storage-summary strong,
+.storage-summary small {
+  display: block;
+}
+.storage-summary strong {
+  margin-top: 9px;
+  font:
+    700 25px "Trebuchet MS",
+    "Segoe UI",
+    sans-serif;
+}
+.storage-summary small,
+.storage-thresholds,
+.storage-updated,
+.storage-source-error {
+  color: #899392;
+  font-size: 11px;
+}
+.storage-summary small {
+  margin-top: 3px;
+}
+.storage-thresholds {
+  display: grid;
+  gap: 5px;
+  text-align: right;
+}
+.storage-data {
+  margin-top: 2px;
+}
+.storage-updated {
+  margin: 12px 0 0;
+  font-family: Consolas, monospace;
+}
+.storage-source-error {
+  margin: 12px 0 0;
+  color: #a13b32;
+}
+.panel-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 120px;
+  color: #788486;
+  font-size: 12px;
+}
+.panel-state-error {
+  justify-content: space-between;
+  color: #a13b32;
+}
+.panel-state-error .button {
+  flex-shrink: 0;
+}
 .text-good {
   color: #4c712c !important;
 }
@@ -1632,6 +1695,13 @@ main {
   }
   .content-grid {
     grid-template-columns: 1fr;
+  }
+  .storage-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .storage-thresholds {
+    text-align: left;
   }
 }
 @media (max-width: 620px) {

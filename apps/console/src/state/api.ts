@@ -10,6 +10,25 @@ export interface SettingsSnapshot {
   values: Record<string, unknown>;
 }
 
+export type StorageOverviewPressure = "NORMAL" | "WARNING" | "BLOCKED";
+
+export interface StorageOverviewSnapshot {
+  measuredAt: string;
+  pressure: StorageOverviewPressure;
+  freeBytes?: number;
+  warningBytes: number;
+  dangerBytes: number;
+  writeRateBytesPerSecond: number;
+  estimatedSecondsUntilBlocked?: number;
+  activeRunCount: number;
+  sourceError?: "FREE_SPACE_UNAVAILABLE";
+}
+
+export interface StorageOverviewResponse {
+  schemaVersion: 1;
+  overview: StorageOverviewSnapshot;
+}
+
 export type CleanupPreviewState =
   "FINISHED" | "FAILED" | "INTERRUPTED" | "COMPLETED" | "FINALIZATION_FAILED" | "ABORTED";
 
@@ -227,6 +246,15 @@ export async function fetchSettings(signal?: AbortSignal): Promise<SettingsSnaps
   const response = await fetch("/api/settings", signal ? { signal } : undefined);
   if (!response.ok) throw new Error(`settings:${response.status}`);
   return (await response.json()) as SettingsSnapshot;
+}
+
+export async function fetchStorageOverview(signal?: AbortSignal): Promise<StorageOverviewSnapshot> {
+  const response = await fetch("/api/storage/overview", signal ? { signal } : undefined);
+  const payload = (await response.json()) as Partial<StorageOverviewResponse> & { error?: string };
+  if (!response.ok || payload.overview === undefined) {
+    throw new Error(payload.error ?? `storage-overview:${response.status}`);
+  }
+  return payload.overview;
 }
 
 export async function patchSettings(
