@@ -1,0 +1,6 @@
+{
+  "formulaLeading": ["=SUM(A1)", "+1", "-1", "@user"],
+  "controlLeading": ["\\tleading", "\\nleading", "\\rleading"],
+  "unicode": "升级武器 / 日本語 / 中文",
+  "embeddedControls": "token\\u0000\\u0007value"
+}

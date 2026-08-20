@@ -17,6 +17,7 @@
     "@test-center/evidence": "0.0.0",
     "archiver": "8.0.0",
     "better-sqlite3": "13.0.2",
+    "exceljs": "4.4.0",
     "yauzl": "3.4.0"
   },
   "devDependencies": {
