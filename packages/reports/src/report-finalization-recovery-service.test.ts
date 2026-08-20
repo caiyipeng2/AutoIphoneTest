@@ -1,3 +1,7 @@
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -17,9 +21,11 @@ import {
 import { ReportFinalizationRecoveryService } from "./report-finalization-recovery-service.js";
 
 const databases: Database.Database[] = [];
+const roots: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   for (const database of databases.splice(0)) database.close();
+  for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
 function openDatabase(): Database.Database {
@@ -59,6 +65,14 @@ function openDatabase(): Database.Database {
               ('run-fresh', 'FINALIZING', 1, '2026-08-14T00:00:00.000Z', '2026-08-17T12:59:30.000Z')`,
     )
     .run();
+  database
+    .prepare(
+      `INSERT INTO report_exports
+       (id, run_id, format, state, attempt, created_at, updated_at)
+       VALUES ('export-stale', 'run-stale', 'HTML', 'PENDING', 1,
+               '2026-08-14T00:00:00.000Z', '2026-08-14T00:00:00.000Z')`,
+    )
+    .run();
   return database;
 }
 
@@ -81,6 +95,9 @@ describe("report finalization recovery service", () => {
     expect(
       database.prepare("SELECT state FROM test_runs WHERE id = 'run-stale'").pluck().get(),
     ).toBe("INTERRUPTED");
+    expect(
+      database.prepare("SELECT state FROM report_exports WHERE id = 'export-stale'").pluck().get(),
+    ).toBe("FAILED");
     expect(service.reconcileStale()).toEqual([]);
   });
 
@@ -96,5 +113,21 @@ describe("report finalization recovery service", () => {
     expect(
       database.prepare("SELECT state FROM test_runs WHERE id = 'run-fresh'").pluck().get(),
     ).toBe("FAILED");
+  });
+
+  it("removes only orphan publisher partials and preserves complete files", async () => {
+    const database = openDatabase();
+    const root = await mkdtemp(join(tmpdir(), "test-center-report-recovery-files-"));
+    roots.push(root);
+    await mkdir(join(root, "run-1", "reports"), { recursive: true });
+    await writeFile(join(root, "run-1", "reports", "report.html.partial-crash"), "partial");
+    await writeFile(join(root, "run-1", "reports", "report.html"), "complete");
+
+    const removed = await new ReportFinalizationRecoveryService(database).reconcileOrphanedPartials(
+      root,
+    );
+
+    expect(removed).toEqual(["run-1/reports/report.html.partial-crash"]);
+    expect(await readdir(join(root, "run-1", "reports"))).toEqual(["report.html"]);
   });
 });

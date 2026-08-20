@@ -153,15 +153,14 @@ export async function createRuntimeDeviceRegistry(
     CLEANUP_AUDIT_MIGRATION,
     CLEANUP_PROTECTION_MIGRATION,
   ]);
-  new ReportFinalizationRecoveryService(database).reconcileStale();
+  const reportRecovery = new ReportFinalizationRecoveryService(database);
+  await reportRecovery.reconcileOrphanedPartials(paths.runsRoot);
+  reportRecovery.reconcileStale();
   const historyRepository = new ReportHistoryRepository(database);
   const finalizationExecutor = new ReportFinalizationExecutor(database, {
     runRoot: paths.runsRoot,
   });
-  const resultsService = new RuntimeResultsRouteService(
-    historyRepository,
-    finalizationExecutor,
-  );
+  const resultsService = new RuntimeResultsRouteService(historyRepository, finalizationExecutor);
   const cleanupRepository = new CleanupAuditRepository(database);
   const cleanupPreviewRepository = new CleanupPreviewRepository(database);
   const cleanupConfirmation = new CleanupConfirmationService(database);
@@ -447,8 +446,15 @@ function createRuntimeWorkerCoordinator(
         bridgeMode === "REQUIRED"
           ? {
               bridgeForwarder,
-              bridgeSessionFactory: ({ hostPort, runNonceHash: workerNonce }: { readonly hostPort: number; readonly runNonceHash?: string }) => {
-                if (workerNonce === undefined) throw new Error("Managed worker run nonce is required.");
+              bridgeSessionFactory: ({
+                hostPort,
+                runNonceHash: workerNonce,
+              }: {
+                readonly hostPort: number;
+                readonly runNonceHash?: string;
+              }) => {
+                if (workerNonce === undefined)
+                  throw new Error("Managed worker run nonce is required.");
                 return createRuntimeBridgeSession({ hostPort, runNonceHash: workerNonce });
               },
             }
@@ -537,7 +543,8 @@ function createConfiguredActionDispatcher(
   const barrierFactory =
     bridgeMode === "REQUIRED"
       ? (serial: string, runId?: string) => {
-          if (runId === undefined) throw new Error("Action run id is required for bridge dispatch.");
+          if (runId === undefined)
+            throw new Error("Action run id is required for bridge dispatch.");
           const barrier = workerCoordinator.getActionBarrier(runId, parseDeviceSerial(serial));
           if (barrier === undefined) throw new Error(`Worker bridge is not ready: ${serial}.`);
           return barrier;
@@ -548,8 +555,12 @@ function createConfiguredActionDispatcher(
       ? new TextFocusBarrier({
           sample: async (serial, runId) => {
             if (runId === undefined) throw new Error("Text action run id is required.");
-            const snapshot = workerCoordinator.getTextFocusSnapshot(runId, parseDeviceSerial(serial));
-            if (snapshot === undefined) throw new Error(`Worker bridge state is not ready: ${serial}.`);
+            const snapshot = workerCoordinator.getTextFocusSnapshot(
+              runId,
+              parseDeviceSerial(serial),
+            );
+            if (snapshot === undefined)
+              throw new Error(`Worker bridge state is not ready: ${serial}.`);
             return snapshot;
           },
         })
@@ -617,23 +628,22 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
   return Number.isSafeInteger(parsed) && parsed >= 2 ? parsed : fallback;
 }
 
-function readDeviceViewport(
-  metadata: Readonly<Record<string, unknown>> | undefined,
-): { readonly width: number; readonly height: number } {
+function readDeviceViewport(metadata: Readonly<Record<string, unknown>> | undefined): {
+  readonly width: number;
+  readonly height: number;
+} {
   const physicalSize = metadata?.physicalSize;
   if (typeof physicalSize !== "object" || physicalSize === null) {
     return { width: 1080, height: 2340 };
   }
   const width = (physicalSize as { width?: unknown }).width;
   const height = (physicalSize as { height?: unknown }).height;
-  return (
-    typeof width === "number" &&
+  return typeof width === "number" &&
     typeof height === "number" &&
     Number.isSafeInteger(width) &&
     Number.isSafeInteger(height) &&
     width >= 2 &&
     height >= 2
-  )
     ? { width, height }
     : { width: 1080, height: 2340 };
 }

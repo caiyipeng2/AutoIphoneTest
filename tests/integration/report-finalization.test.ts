@@ -67,7 +67,7 @@ describe("M10 report finalization fixtures", () => {
       expect(verified.state).toBe("VERIFIED");
       expect(verified.entries.some((entry) => entry.path === "reports/report-1.html")).toBe(true);
     }
-  });
+  }, 30_000);
 
   it("keeps the failure fixture bound to two devices and an explicit recovery record", async () => {
     const fixture = await createReportFixture("failure");

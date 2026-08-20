@@ -1,3 +1,6 @@
+import { readdir, rm } from "node:fs/promises";
+import { join, win32 } from "node:path";
+
 import type Database from "better-sqlite3";
 
 import type {
@@ -45,6 +48,16 @@ export class ReportFinalizationRecoveryService {
     return row === undefined ? undefined : toRecord(row);
   }
 
+  /** Removes only publisher partials left behind by a hard process exit. */
+  public async reconcileOrphanedPartials(runRoot: string): Promise<readonly string[]> {
+    const normalizedRoot = normalizeRunRoot(runRoot);
+    const partials = await findPartialFiles(normalizedRoot);
+    await Promise.all(partials.map((filePath) => rm(filePath, { force: true })));
+    return partials
+      .map((filePath) => win32.relative(normalizedRoot, filePath).replaceAll("\\", "/"))
+      .sort();
+  }
+
   public reconcileStale(asOf = this.now()): readonly ReportFinalizationRecord[] {
     const asOfTime = Date.parse(asOf);
     if (!Number.isFinite(asOfTime)) throw new TypeError("asOf must be an ISO timestamp.");
@@ -73,6 +86,13 @@ export class ReportFinalizationRecoveryService {
              WHERE id = ? AND state IN ('FINISHED', 'FAILED')`,
           )
           .run(asOf, row.run_id);
+        this.database
+          .prepare(
+            `UPDATE report_exports
+             SET state = 'FAILED', error_category = 'STARTUP_INTERRUPTED', updated_at = ?
+             WHERE run_id = ? AND state = 'PENDING'`,
+          )
+          .run(asOf, row.run_id);
       }
       return stale
         .map((row) => this.get(row.run_id))
@@ -80,6 +100,31 @@ export class ReportFinalizationRecoveryService {
     });
     return transaction.immediate();
   }
+}
+
+async function findPartialFiles(runRoot: string): Promise<string[]> {
+  const files: string[] = [];
+  async function visit(directory: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(path);
+      } else if (entry.isFile() && isPartialName(entry.name)) {
+        files.push(path);
+      }
+    }
+  }
+  await visit(runRoot);
+  return files;
+}
+
+function isPartialName(name: string): boolean {
+  return name.includes(".partial-") || name.endsWith(".partial");
+}
+
+function normalizeRunRoot(value: string): string {
+  if (!win32.isAbsolute(value)) throw new TypeError("runRoot must be absolute.");
+  return win32.normalize(value);
 }
 
 function toRecord(row: FinalizationRow): ReportFinalizationRecord {
