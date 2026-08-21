@@ -506,6 +506,45 @@ CREATE INDEX IF NOT EXISTS idx_report_exports_pending
 `.trim(),
 };
 
+export const OPTIONAL_REPORT_EXPORTS_MIGRATION: Migration = {
+  id: "0019_optional_report_exports",
+  sql: `
+DROP INDEX IF EXISTS idx_report_exports_run_state;
+DROP INDEX IF EXISTS idx_report_exports_pending;
+ALTER TABLE report_exports RENAME TO report_exports_legacy;
+
+CREATE TABLE report_exports (
+  id TEXT PRIMARY KEY NOT NULL,
+  run_id TEXT NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+  format TEXT NOT NULL CHECK (format IN ('HTML', 'ZIP', 'EXCEL', 'PDF', 'JUNIT')),
+  state TEXT NOT NULL CHECK (state IN ('PENDING', 'READY', 'FAILED', 'MISSING')),
+  temp_relative_path TEXT,
+  final_relative_path TEXT,
+  sha256 TEXT CHECK (sha256 IS NULL OR (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*')),
+  size_bytes INTEGER CHECK (size_bytes IS NULL OR size_bytes >= 0),
+  error_category TEXT,
+  attempt INTEGER NOT NULL CHECK (attempt > 0),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (run_id, format, attempt)
+);
+
+INSERT INTO report_exports
+  (id, run_id, format, state, temp_relative_path, final_relative_path, sha256, size_bytes,
+   error_category, attempt, created_at, updated_at)
+SELECT id, run_id, format, state, temp_relative_path, final_relative_path, sha256, size_bytes,
+       error_category, attempt, created_at, updated_at
+FROM report_exports_legacy;
+
+DROP TABLE report_exports_legacy;
+
+CREATE INDEX idx_report_exports_run_state
+  ON report_exports(run_id, state, format, attempt);
+CREATE INDEX idx_report_exports_pending
+  ON report_exports(state, updated_at, id) WHERE state = 'PENDING';
+`.trim(),
+};
+
 export const REPORT_FINALIZATION_MIGRATION: Migration = {
   id: "0015_report_finalization",
   sql: `

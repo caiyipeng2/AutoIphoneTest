@@ -2,7 +2,7 @@ import { win32 } from "node:path";
 
 import type Database from "better-sqlite3";
 
-export type ReportExportFormat = "HTML" | "ZIP";
+export type ReportExportFormat = "HTML" | "ZIP" | "EXCEL" | "PDF" | "JUNIT";
 export type ReportExportState = "PENDING" | "READY" | "FAILED" | "MISSING";
 
 export interface ReportExportRecord {
@@ -132,6 +132,14 @@ export class ReportExportRepository {
     return rows.map((row) => this.toRecord(row));
   }
 
+  public list(runId: string): readonly ReportExportRecord[] {
+    if (!runId.trim()) throw new TypeError("Report export runId is required.");
+    const rows = this.database
+      .prepare("SELECT * FROM report_exports WHERE run_id = ? ORDER BY format ASC, attempt ASC")
+      .all(runId) as readonly ReportExportRow[];
+    return rows.map((row) => this.toRecord(row));
+  }
+
   public markReady(id: string, input: MarkReportExportReadyInput): ReportExportRecord {
     const finalRelativePath = this.normalizePath(input.finalRelativePath);
     if (!/^[a-f0-9]{64}$/.test(input.sha256)) throw new TypeError("sha256 must be lowercase hex.");
@@ -231,11 +239,14 @@ export class ReportExportRepository {
 function validateCreateInput(input: CreateReportExportInput): void {
   if (!input.id.trim() || !input.runId.trim())
     throw new TypeError("Report export id and runId are required.");
-  if (input.format !== "HTML" && input.format !== "ZIP")
-    throw new TypeError("Report export format is invalid.");
+  if (!isReportExportFormat(input.format)) throw new TypeError("Report export format is invalid.");
   if (!Number.isSafeInteger(input.attempt) || input.attempt < 1) {
     throw new TypeError("Report export attempt must be positive.");
   }
+}
+
+function isReportExportFormat(value: string): value is ReportExportFormat {
+  return ["HTML", "ZIP", "EXCEL", "PDF", "JUNIT"].includes(value);
 }
 
 function sameIdentity(

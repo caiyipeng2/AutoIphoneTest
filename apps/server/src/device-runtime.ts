@@ -26,6 +26,7 @@ import {
   DEPLOYMENTS_MIGRATION,
   DEPLOYMENT_CONTROLS_MIGRATION,
   EVIDENCE_REPORTS_MIGRATION,
+  OPTIONAL_REPORT_EXPORTS_MIGRATION,
   INSTALL_SETS_MIGRATION,
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
@@ -152,6 +153,7 @@ export async function createRuntimeDeviceRegistry(
     CLEANUP_CONFIRMATIONS_MIGRATION,
     CLEANUP_AUDIT_MIGRATION,
     CLEANUP_PROTECTION_MIGRATION,
+    OPTIONAL_REPORT_EXPORTS_MIGRATION,
   ]);
   const reportRecovery = new ReportFinalizationRecoveryService(database);
   await reportRecovery.reconcileOrphanedPartials(paths.runsRoot);
