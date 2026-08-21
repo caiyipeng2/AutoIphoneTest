@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "dataRoot": "<portable-root>\\data",
+  "adbPath": "<portable-root>\\tools\\scrcpy\\3.1\\adb.exe",
+  "appiumHome": "<portable-root>\\data\\appium-home",
+  "reports": {
+    "defaultExport": "HTML",
+    "optionalExports": ["EXCEL", "PDF", "JUNIT"]
+  },
+  "retentionDays": 14
+}
