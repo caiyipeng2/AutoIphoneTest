@@ -90,9 +90,15 @@ import { RuntimeSessionRouteService } from "./session-runtime.js";
 import { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
 import { parseBridgeMode, type BridgeMode } from "./runtime-config.js";
 import {
+  ExcelReportExporter,
+  JunitReportExporter,
   ReportFinalizationExecutor,
   ReportFinalizationRecoveryService,
+  ReportExportRepository,
+  ReportExportService,
   ReportHistoryRepository,
+  ReportSnapshotRepository,
+  PdfReportExporter,
 } from "@test-center/reports";
 import { RuntimeResultsRouteService } from "./results-runtime.js";
 import {
@@ -162,7 +168,22 @@ export async function createRuntimeDeviceRegistry(
   const finalizationExecutor = new ReportFinalizationExecutor(database, {
     runRoot: paths.runsRoot,
   });
-  const resultsService = new RuntimeResultsRouteService(historyRepository, finalizationExecutor);
+  const reportSnapshotRepository = new ReportSnapshotRepository(database);
+  const optionalExportService = new ReportExportService({
+    repository: new ReportExportRepository(database, { runRoot: paths.runsRoot }),
+    runRoot: paths.runsRoot,
+    loadModel: (runId) => reportSnapshotRepository.load(runId),
+    publishers: {
+      EXCEL: new ExcelReportExporter(),
+      PDF: new PdfReportExporter(),
+      JUNIT: new JunitReportExporter(),
+    },
+  });
+  const resultsService = new RuntimeResultsRouteService(
+    historyRepository,
+    finalizationExecutor,
+    optionalExportService,
+  );
   const cleanupRepository = new CleanupAuditRepository(database);
   const cleanupPreviewRepository = new CleanupPreviewRepository(database);
   const cleanupConfirmation = new CleanupConfirmationService(database);

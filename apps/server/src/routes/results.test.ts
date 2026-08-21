@@ -277,6 +277,80 @@ describe("results routes", () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it("downloads ready optional export formats with stable content metadata", async () => {
+    const root = await mkdtemp(
+      join(process.env.TEMP ?? process.cwd(), "test-center-results-optional-"),
+    );
+    await mkdir(join(root, "reports"), { recursive: true });
+    await writeFile(join(root, "reports", "report.xlsx"), Buffer.from("xlsx"));
+    await writeFile(join(root, "reports", "report.pdf"), Buffer.from("%PDF-1.7"));
+    await writeFile(join(root, "reports", "report.xml"), Buffer.from("<testsuite />"));
+    const optionalItem: ReportHistoryItem = {
+      ...item,
+      runId: "run-optional",
+      exports: [
+        ...item.exports,
+        ...(["EXCEL", "PDF", "JUNIT"] as const).map((format) => ({
+          id: `${format.toLowerCase()}-1`,
+          runId: "run-optional",
+          format,
+          state: "READY" as const,
+          finalRelativePath: `reports/report.${format === "EXCEL" ? "xlsx" : format === "PDF" ? "pdf" : "xml"}`,
+          attempt: 1,
+          createdAt: item.updatedAt,
+          updatedAt: item.updatedAt,
+        })),
+      ],
+    };
+    const port = 4804;
+    const app = await createApp({
+      port,
+      bootstrapCode: "results-optional-download-code",
+      launchSecret: "results-optional-download-secret",
+      resultsExportRoot: root,
+      resultsService: {
+        list: () => [optionalItem],
+        get: (runId) => (runId === optionalItem.runId ? optionalItem : undefined),
+      },
+    });
+    const base = headers(port);
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers: base,
+      payload: { code: "results-optional-download-code" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const authenticated = { ...base, cookie: cookieHeader };
+    const excel = await app.inject({
+      method: "GET",
+      url: "/api/results/run-optional/exports/EXCEL",
+      headers: authenticated,
+    });
+    expect(excel.statusCode).toBe(200);
+    expect(excel.headers["content-type"]).toContain("spreadsheetml");
+    expect(excel.headers["content-disposition"]).toContain('filename="report.xlsx"');
+    const pdf = await app.inject({
+      method: "GET",
+      url: "/api/results/run-optional/exports/PDF",
+      headers: authenticated,
+    });
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers["content-type"]).toBe("application/pdf");
+    const junit = await app.inject({
+      method: "GET",
+      url: "/api/results/run-optional/exports/JUNIT",
+      headers: authenticated,
+    });
+    expect(junit.statusCode).toBe(200);
+    expect(junit.headers["content-type"]).toContain("application/xml");
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
   it("guards finalization retry with CSRF, idempotency, and terminal state", async () => {
     const port = 4801;
     const completedItem: ReportHistoryItem = {
@@ -363,6 +437,82 @@ describe("results routes", () => {
     });
     expect(terminal.statusCode).toBe(409);
     expect(retry).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it("queues optional exports with CSRF and idempotency protection", async () => {
+    const port = 4803;
+    const requestOptionalExports = vi.fn(
+      async (runId: string, formats: readonly string[], key: string) => {
+        expect(runId).toBe("run-1");
+        expect(formats).toEqual(["PDF", "JUNIT"]);
+        expect(key).toBe("optional-1");
+        return {
+          ...item,
+          exports: [
+            ...item.exports,
+            {
+              id: "pdf-1",
+              runId,
+              format: "PDF" as const,
+              state: "PENDING" as const,
+              attempt: 1,
+              createdAt: item.updatedAt,
+              updatedAt: item.updatedAt,
+            },
+          ],
+        };
+      },
+    );
+    const app = await createApp({
+      port,
+      bootstrapCode: "results-optional-code",
+      launchSecret: "results-optional-secret",
+      resultsService: {
+        list: () => [item],
+        get: (runId) => (runId === item.runId ? item : undefined),
+        requestOptionalExports,
+      },
+    });
+    const base = headers(port);
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers: base,
+      payload: { code: "results-optional-code" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const csrf = cookieHeader?.match(/(?:^|; )tc_csrf=([^;]+)/)?.[1];
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/results/run-1/exports",
+      headers: {
+        ...base,
+        cookie: cookieHeader,
+        "x-test-center-csrf": csrf,
+        "idempotency-key": "optional-1",
+      },
+      payload: { formats: ["PDF", "JUNIT"] },
+    });
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({ schemaVersion: 1, result: { runId: "run-1" } });
+    expect(requestOptionalExports).toHaveBeenCalledWith("run-1", ["PDF", "JUNIT"], "optional-1");
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/results/run-1/exports",
+      headers: {
+        ...base,
+        cookie: cookieHeader,
+        "x-test-center-csrf": csrf,
+        "idempotency-key": "optional-2",
+      },
+      payload: { formats: ["HTML"] },
+    });
+    expect(invalid.statusCode).toBe(400);
     await app.close();
   });
 });

@@ -5,7 +5,11 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 
 import { DeviceSerialSchema } from "@test-center/contracts/device";
-import type { ReportHistoryFilter, ReportHistoryItem } from "@test-center/reports";
+import type {
+  ReportHistoryFilter,
+  ReportHistoryItem,
+  ReportOptionalExportFormat,
+} from "@test-center/reports";
 import {
   assertAllowedHost,
   assertSameOrigin,
@@ -25,13 +29,26 @@ const ResultsQuerySchema = z
     limit: z.coerce.number().int().min(1).max(100).default(50),
   })
   .strict();
-const ResultsExportFormatSchema = z.enum(["HTML", "ZIP"]);
+const ResultsExportFormatSchema = z.enum(["HTML", "ZIP", "EXCEL", "PDF", "JUNIT"]);
+const OptionalExportRequestSchema = z
+  .object({
+    formats: z
+      .array(z.enum(["EXCEL", "PDF", "JUNIT"]))
+      .min(1)
+      .max(3),
+  })
+  .strict();
 const IdempotencyKeySchema = z.string().trim().min(1).max(128);
 
 export interface ResultsRouteService {
   list(filter: ReportHistoryFilter): readonly ReportHistoryItem[];
   get(runId: string): ReportHistoryItem | undefined;
   retryFinalization?(runId: string, idempotencyKey: string): Promise<ReportHistoryItem>;
+  requestOptionalExports?(
+    runId: string,
+    formats: readonly ReportOptionalExportFormat[],
+    idempotencyKey: string,
+  ): Promise<ReportHistoryItem>;
 }
 
 export async function registerResultsRoutes(
@@ -99,6 +116,35 @@ export async function registerResultsRoutes(
     },
   );
 
+  app.post<{ Params: { id: string } }>("/api/results/:id/exports", async (request, reply) => {
+    try {
+      assertMutationAllowed(request, context);
+      if (context.resultsService === undefined)
+        return await reply.code(503).send({ error: "Results service unavailable." });
+      if (context.resultsService.requestOptionalExports === undefined)
+        return await reply.code(503).send({ error: "Optional report export unavailable." });
+
+      const runId = decodeURIComponent(request.params.id);
+      if (context.resultsService.get(runId) === undefined)
+        return await reply.code(404).send({ error: "Result not found." });
+      const rawKey = request.headers["idempotency-key"];
+      const idempotencyKey = IdempotencyKeySchema.parse(Array.isArray(rawKey) ? rawKey[0] : rawKey);
+      const body = OptionalExportRequestSchema.parse(request.body) as {
+        formats: ReportOptionalExportFormat[];
+      };
+      const result = await context.resultsService.requestOptionalExports(
+        runId,
+        body.formats,
+        idempotencyKey,
+      );
+      return await reply.code(202).send({ schemaVersion: 1, result });
+    } catch (error) {
+      return await reply
+        .code(resultsMutationErrorCode(error))
+        .send({ error: errorMessage(error, "Optional report export request rejected.") });
+    }
+  });
+
   app.get<{ Params: { id: string; format: string } }>(
     "/api/results/:id/exports/:format",
     async (request, reply) => {
@@ -126,16 +172,14 @@ export async function registerResultsRoutes(
           context.resultsExportRoot,
           reportExport.finalRelativePath,
         );
-        const metadata = await stat(exportPath);
-        reply.header(
-          "content-type",
-          format.data === "HTML" ? "text/html; charset=utf-8" : "application/zip",
-        );
+        const fileMetadata = await stat(exportPath);
+        const downloadMetadata = exportDownloadMetadata(format.data);
+        reply.header("content-type", downloadMetadata.contentType);
         reply.header(
           "content-disposition",
-          `${format.data === "HTML" ? "inline" : "attachment"}; filename="${format.data === "HTML" ? "report.html" : "evidence.zip"}"`,
+          `${downloadMetadata.inline ? "inline" : "attachment"}; filename="${downloadMetadata.filename}"`,
         );
-        reply.header("content-length", metadata.size);
+        reply.header("content-length", fileMetadata.size);
         return await reply.send(createReadStream(exportPath));
       } catch (error) {
         if (isMissingFile(error))
@@ -154,8 +198,35 @@ function assertMutationAllowed(request: FastifyRequest, context: ServerContext):
   assertValidCsrf(request.cookies.tc_csrf, Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader);
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Result finalization retry rejected.";
+function errorMessage(error: unknown, fallback = "Result finalization retry rejected."): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function exportDownloadMetadata(format: z.infer<typeof ResultsExportFormatSchema>): {
+  readonly contentType: string;
+  readonly filename: string;
+  readonly inline: boolean;
+} {
+  switch (format) {
+    case "HTML":
+      return { contentType: "text/html; charset=utf-8", filename: "report.html", inline: true };
+    case "ZIP":
+      return { contentType: "application/zip", filename: "evidence.zip", inline: false };
+    case "EXCEL":
+      return {
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename: "report.xlsx",
+        inline: false,
+      };
+    case "PDF":
+      return { contentType: "application/pdf", filename: "report.pdf", inline: false };
+    case "JUNIT":
+      return {
+        contentType: "application/xml; charset=utf-8",
+        filename: "report.xml",
+        inline: false,
+      };
+  }
 }
 
 function resultsMutationErrorCode(error: unknown): 400 | 401 | 403 | 404 | 409 | 503 {

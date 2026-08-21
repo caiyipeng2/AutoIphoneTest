@@ -208,6 +208,61 @@ describe("ResultsPage", () => {
     );
     expect(screen.getByRole("button", { name: "重试报告生成" })).toBeInTheDocument();
   });
+
+  it("requests optional report formats from the detail view", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/results?limit=50") return jsonResponse({ schemaVersion: 1, results });
+      if (url === "/api/results/run-finished") {
+        return jsonResponse({ schemaVersion: 1, result: results[0] });
+      }
+      if (url === "/api/results/run-finished/exports") {
+        expect(init?.method).toBe("POST");
+        expect(JSON.parse(String(init?.body))).toEqual({ formats: ["PDF"] });
+        return jsonResponse(
+          {
+            schemaVersion: 1,
+            result: {
+              ...results[0],
+              exports: [
+                ...results[0]!.exports,
+                {
+                  id: "pdf-1",
+                  runId: "run-finished",
+                  format: "PDF" as const,
+                  state: "PENDING" as const,
+                  attempt: 1,
+                  createdAt: results[0]!.updatedAt,
+                  updatedAt: results[0]!.updatedAt,
+                },
+              ],
+            },
+          },
+          202,
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ResultsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "查看报告 run-finished" })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "查看报告 run-finished" }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "报告详情" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "PDF" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成选中格式" }));
+    await waitFor(() => expect(screen.getByText("PDF")).toBeInTheDocument());
+    expect(screen.getByText(/等待生成/)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/results/run-finished/exports",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });
 
 function jsonResponse(body: unknown, status = 200) {

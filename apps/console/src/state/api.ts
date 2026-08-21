@@ -170,7 +170,8 @@ export interface IncidentTimeline {
 }
 
 export type ReportRunState = "FINISHED" | "FAILED" | "INTERRUPTED";
-export type ReportExportFormat = "HTML" | "ZIP";
+export type ReportExportFormat = "HTML" | "ZIP" | "EXCEL" | "PDF" | "JUNIT";
+export type ReportOptionalExportFormat = Exclude<ReportExportFormat, "HTML" | "ZIP">;
 export type ReportExportState = "PENDING" | "READY" | "FAILED" | "MISSING";
 export type ReportFinalizationState =
   "FINALIZING" | "COMPLETED" | "FINALIZATION_FAILED" | "ABORTED" | "INTERRUPTED";
@@ -480,6 +481,28 @@ export async function retryResultFinalization(
   const body = (await response.json()) as Partial<ResultDetailResponse> & { error?: string };
   if (!response.ok || body.result === undefined) {
     throw new Error(body.error ?? `result-retry:${response.status}`);
+  }
+  return body.result;
+}
+
+export async function requestResultExports(
+  runId: string,
+  formats: readonly ReportOptionalExportFormat[],
+  idempotencyKey: string,
+): Promise<ReportHistoryItem> {
+  const csrf = readCsrfToken();
+  const response = await fetch(`/api/results/${encodeURIComponent(runId)}/exports`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+      ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+    },
+    body: JSON.stringify({ formats }),
+  });
+  const body = (await response.json()) as Partial<ResultDetailResponse> & { error?: string };
+  if (!response.ok || body.result === undefined) {
+    throw new Error(body.error ?? `result-export:${response.status}`);
   }
   return body.result;
 }

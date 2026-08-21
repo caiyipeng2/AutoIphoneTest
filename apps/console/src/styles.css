@@ -859,6 +859,53 @@ main {
   padding: 0 9px;
   font-size: 11px;
 }
+.results-export-picker {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d9d2c5;
+  background: #f7f4ec;
+}
+.results-export-picker fieldset {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.results-export-picker legend {
+  margin-bottom: 5px;
+  color: #697877;
+  font-size: 11px;
+  font-weight: 700;
+}
+.results-export-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.results-export-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #344447;
+  font-size: 12px;
+}
+.results-export-options input {
+  accent-color: #527c76;
+}
+.results-export-picker .button {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 11px;
+}
+.results-export-picker .results-detail-finalization-error {
+  flex: 1 1 100%;
+}
 .results-detail-empty,
 .results-detail-finalization {
   display: flex;

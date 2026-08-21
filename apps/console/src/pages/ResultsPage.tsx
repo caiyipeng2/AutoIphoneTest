@@ -14,8 +14,10 @@ import { ResultDetail } from "../features/results/ResultDetail";
 import {
   fetchResultDetail,
   fetchResults,
+  requestResultExports,
   retryResultFinalization,
   type ReportHistoryItem,
+  type ReportOptionalExportFormat,
   type ReportRunState,
 } from "../state/api";
 
@@ -40,6 +42,8 @@ export function ResultsPage() {
   const [detailError, setDetailError] = useState<string | undefined>();
   const [retryingFinalization, setRetryingFinalization] = useState(false);
   const [retryFinalizationError, setRetryFinalizationError] = useState<string | undefined>();
+  const [requestingExports, setRequestingExports] = useState(false);
+  const [requestExportsError, setRequestExportsError] = useState<string | undefined>();
 
   const loadResults = useCallback(async () => {
     setLoading(true);
@@ -62,6 +66,7 @@ export function ResultsPage() {
     setDetail(undefined);
     setDetailError(undefined);
     setRetryFinalizationError(undefined);
+    setRequestExportsError(undefined);
     setDetailLoading(true);
     try {
       setDetail(await fetchResultDetail(runId));
@@ -88,10 +93,31 @@ export function ResultsPage() {
     }
   }, [detail]);
 
+  const requestDetailExports = useCallback(
+    async (formats: readonly ReportOptionalExportFormat[]) => {
+      if (detail === undefined) return;
+      setRequestingExports(true);
+      setRequestExportsError(undefined);
+      try {
+        const idempotencyKey =
+          globalThis.crypto?.randomUUID?.() ??
+          `export-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        setDetail(await requestResultExports(detail.runId, formats, idempotencyKey));
+      } catch (cause) {
+        setRequestExportsError(cause instanceof Error ? cause.message : "无法生成可选报告格式。");
+        throw cause;
+      } finally {
+        setRequestingExports(false);
+      }
+    },
+    [detail],
+  );
+
   const closeDetail = useCallback(() => {
     setSelectedRunId(null);
     setDetail(undefined);
     setDetailError(undefined);
+    setRequestExportsError(undefined);
   }, []);
 
   const visibleResults = useMemo(() => {
@@ -136,6 +162,9 @@ export function ResultsPage() {
               onRetryFinalization={() => void retryDetailFinalization()}
               retryingFinalization={retryingFinalization}
               retryFinalizationError={retryFinalizationError}
+              onRequestExports={requestDetailExports}
+              requestingExports={requestingExports}
+              requestExportsError={requestExportsError}
             />
           )}
         </>

@@ -8,11 +8,20 @@ import {
   ExternalLink,
   FileArchive,
   FileCode2,
+  FileSpreadsheet,
+  FileText,
   RefreshCw,
   Smartphone,
 } from "lucide-react";
+import { useState } from "react";
 
-import type { ReportHistoryItem } from "../../state/api";
+import type {
+  ReportExportFormat,
+  ReportHistoryItem,
+  ReportOptionalExportFormat,
+} from "../../state/api";
+
+const optionalFormats: readonly ReportOptionalExportFormat[] = ["EXCEL", "PDF", "JUNIT"];
 
 export function ResultDetail({
   result,
@@ -20,13 +29,20 @@ export function ResultDetail({
   onRetryFinalization,
   retryingFinalization,
   retryFinalizationError,
+  onRequestExports,
+  requestingExports = false,
+  requestExportsError,
 }: {
   result: ReportHistoryItem;
   onBack: () => void;
   onRetryFinalization?: () => void;
   retryingFinalization?: boolean;
   retryFinalizationError?: string | undefined;
+  onRequestExports?: (formats: readonly ReportOptionalExportFormat[]) => Promise<void>;
+  requestingExports?: boolean;
+  requestExportsError?: string | undefined;
 }) {
+  const [selectedFormats, setSelectedFormats] = useState<ReportOptionalExportFormat[]>([]);
   const stateLabel =
     result.state === "FINISHED" ? "已完成" : result.state === "FAILED" ? "失败" : "已中断";
   const stateTone =
@@ -116,16 +132,21 @@ export function ResultDetail({
           ) : (
             result.exports.map((reportExport) => (
               <div className="results-detail-export" key={reportExport.id}>
-                {reportExport.format === "HTML" ? (
-                  <FileCode2 size={16} />
-                ) : (
-                  <FileArchive size={16} />
-                )}
+                <ExportIcon format={reportExport.format} />
                 <div>
                   <strong>{reportExport.format}</strong>
-                  <span>{exportStateLabel[reportExport.state]}</span>
+                  <span>
+                    {exportStateLabel[reportExport.state]} · 创建{" "}
+                    {formatDate(reportExport.createdAt)} · 更新 {formatDate(reportExport.updatedAt)}
+                  </span>
                 </div>
-                <code>{reportExport.sha256 ?? "等待校验哈希"}</code>
+                <code>
+                  {reportExport.sizeBytes === undefined
+                    ? "等待文件大小"
+                    : formatBytes(reportExport.sizeBytes)}
+                  {" · "}
+                  {reportExport.sha256 ?? "等待校验哈希"}
+                </code>
                 {reportExport.state === "READY" && reportExport.finalRelativePath !== undefined && (
                   <div className="results-detail-export-actions">
                     {reportExport.format === "HTML" ? (
@@ -141,19 +162,86 @@ export function ResultDetail({
                     ) : (
                       <a
                         className="button button-quiet"
-                        href={`/api/results/${encodeURIComponent(result.runId)}/exports/ZIP`}
+                        href={`/api/results/${encodeURIComponent(result.runId)}/exports/${reportExport.format}`}
                         download
                       >
                         <Download size={14} />
-                        下载 ZIP
+                        下载 {reportExport.format}
                       </a>
                     )}
                   </div>
                 )}
+                {(reportExport.state === "FAILED" || reportExport.state === "MISSING") &&
+                  isOptionalExportFormat(reportExport.format) &&
+                  onRequestExports !== undefined && (
+                    <div className="results-detail-export-actions">
+                      <button
+                        className="button button-quiet"
+                        type="button"
+                        onClick={() =>
+                          void onRequestExports([
+                            reportExport.format as ReportOptionalExportFormat,
+                          ]).catch(() => undefined)
+                        }
+                        disabled={requestingExports}
+                      >
+                        <RefreshCw size={14} className={requestingExports ? "spin" : undefined} />
+                        重试 {reportExport.format}
+                      </button>
+                    </div>
+                  )}
               </div>
             ))
           )}
         </div>
+        {onRequestExports !== undefined && (
+          <form
+            className="results-export-picker"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (selectedFormats.length === 0 || requestingExports) return;
+              void onRequestExports(selectedFormats)
+                .then(() => setSelectedFormats([]))
+                .catch(() => undefined);
+            }}
+          >
+            <fieldset disabled={requestingExports}>
+              <legend>按需生成可选格式</legend>
+              <div className="results-export-options">
+                {optionalFormats.map((format) => (
+                  <label key={format}>
+                    <input
+                      type="checkbox"
+                      value={format}
+                      checked={selectedFormats.includes(format)}
+                      onChange={(event) =>
+                        setSelectedFormats((current) =>
+                          event.target.checked
+                            ? [...current, format]
+                            : current.filter((item) => item !== format),
+                        )
+                      }
+                    />
+                    {format}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <button
+              className="button button-quiet"
+              type="submit"
+              disabled={selectedFormats.length === 0 || requestingExports}
+            >
+              <RefreshCw size={14} className={requestingExports ? "spin" : undefined} />
+              {requestingExports ? "正在生成" : "生成选中格式"}
+            </button>
+            {requestExportsError !== undefined && (
+              <span className="results-detail-finalization-error" role="alert">
+                {requestExportsError}
+              </span>
+            )}
+          </form>
+        )}
       </section>
 
       {result.finalization && (
@@ -185,6 +273,34 @@ export function ResultDetail({
       )}
     </div>
   );
+}
+
+function ExportIcon({ format }: { format: ReportExportFormat }) {
+  if (format === "HTML") return <FileCode2 size={16} />;
+  if (format === "ZIP") return <FileArchive size={16} />;
+  if (format === "EXCEL") return <FileSpreadsheet size={16} />;
+  return <FileText size={16} />;
+}
+
+function isOptionalExportFormat(format: ReportExportFormat): format is ReportOptionalExportFormat {
+  return format === "EXCEL" || format === "PDF" || format === "JUNIT";
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const exportStateLabel = {

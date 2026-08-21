@@ -6,6 +6,7 @@ import {
   executeCleanup,
   fetchCleanupEvents,
   issueCleanupConfirmation,
+  requestResultExports,
   retryResultFinalization,
 } from "./api";
 
@@ -58,6 +59,36 @@ describe("retryResultFinalization", () => {
     await expect(retryResultFinalization("run-1", "retry-1")).rejects.toThrow(
       "Result finalization is not retryable.",
     );
+  });
+});
+
+describe("requestResultExports", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.cookie = "";
+  });
+
+  it("sends selected optional formats with CSRF and idempotency", async () => {
+    document.cookie = "tc_csrf=export-csrf";
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 202,
+      json: async () => ({ schemaVersion: 1, result }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(requestResultExports("run/1", ["PDF", "JUNIT"], "export-1")).resolves.toEqual(
+      result,
+    );
+    expect(fetchMock).toHaveBeenCalledWith("/api/results/run%2F1/exports", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "export-1",
+        "x-test-center-csrf": "export-csrf",
+      },
+      body: JSON.stringify({ formats: ["PDF", "JUNIT"] }),
+    });
   });
 });
 
