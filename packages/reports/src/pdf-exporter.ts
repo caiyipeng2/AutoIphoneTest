@@ -91,7 +91,16 @@ export class PdfReportExporter {
   private readonly maxPages: number;
 
   public constructor(options: PdfReportExporterOptions = {}) {
-    this.browserFactory = options.browserFactory ?? createPlaywrightPdfBrowserFactory();
+    const configuredExecutablePath = process.env.TEST_CENTER_PDF_EXECUTABLE_PATH?.trim();
+    // Keep the bundled Playwright default, while allowing constrained machines to point at
+    // an already-installed Chrome/Chromium binary without changing report generation code.
+    this.browserFactory =
+      options.browserFactory ??
+      createPlaywrightPdfBrowserFactory(
+        configuredExecutablePath === undefined || configuredExecutablePath === ""
+          ? {}
+          : { executablePath: configuredExecutablePath },
+      );
     this.maxPages = options.maxPages ?? DEFAULT_MAX_PAGES;
     if (!Number.isSafeInteger(this.maxPages) || this.maxPages < 1) {
       throw new TypeError("PDF maxPages must be a positive safe integer.");
