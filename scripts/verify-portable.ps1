@@ -10,7 +10,10 @@ $root = [System.IO.Path]::GetFullPath($PortableRoot)
 if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "Portable root does not exist: $root" }
 $manifestPath = Join-Path $root 'manifest.sha256.json'
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw 'manifest.sha256.json is missing.' }
-$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+# The manifest is UTF-8 and can contain legitimate Unicode fixture paths. An
+# explicit encoding keeps Windows PowerShell from decoding those names using
+# the active system code page before LiteralPath receives them.
+$manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 foreach ($entry in @($manifest.files)) {
     $path = Join-Path $root ($entry.path.Replace('/', '\'))
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Manifest file is missing: $($entry.path)" }
