@@ -85,9 +85,23 @@ The analyzer uses the fixed thresholds in `docs/superpowers/plans/2026-07-31-m11
 
 Repository-wide ESLint/Prettier commands still report pre-existing findings in generated Unity `Library/Bee` files and unrelated legacy scripts; those files were not changed by this slice.
 
+## Post-M11 runtime video smoke
+
+The follow-up runtime wiring was exercised against the existing data directory and one real device after waking the device from `Dozing`:
+
+| Check        | Result                                                                |
+| ------------ | --------------------------------------------------------------------- |
+| Evidence     | `data/hardware-m11-runtime-video/runtime-video.json`                  |
+| Device       | `R5CX211TXNT`                                                         |
+| Provider     | Serial-bound Tango scrcpy provider                                    |
+| Frame        | H.264, `1080x2336`, frame `16`, payload `2,053` bytes                 |
+| Reused state | Existing `ONLINE` device record was synchronized at coordinator start |
+| Cleanup      | Provider returned to `STOPPED`; runtime closed successfully           |
+
 ## Known limitations and acceptance boundary
 
-- The current server assembly persists `leaderVideoEnabled`, and managed workers capture logcat, but the portable `main.ts` path does not yet wire a real scrcpy/video provider or periodic screenshot publisher into the runtime context. The 60-minute result therefore proves Appium actions, logcat/resource stability, report finalization, and cleanup; it does not claim a recorded leader-video artifact.
+- The portable runtime now wires the pinned scrcpy 3.1 server asset into a serial-bound Tango `ViewProvider` when the asset is present, and the authenticated video gateway starts it on demand. The 60-minute result in this acceptance predates that wiring and therefore still proves Appium actions, logcat/resource stability, report finalization, and cleanup without claiming a recorded leader-video artifact.
+- Periodic Appium screenshot fallback and video recording publication remain outside this follow-up slice; an unavailable scrcpy asset keeps the runtime in the existing degraded/no-provider state instead of blocking server startup.
 - The Unity command build provider remains intentionally unimplemented; use an imported APK/AAB or an installed fixture.
 - Fault injection and active-session recovery acceptance remain skipped per prior user confirmation.
 
@@ -97,6 +111,6 @@ Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1]
 
 ## Decision
 
-**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, and 60-minute Appium-only two-device run: PASS locally. Leader-video/screenshot capture remains a documented limitation.**
+**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, and 60-minute Appium-only two-device run: PASS locally. Runtime scrcpy provider wiring is now implemented locally; periodic screenshot fallback and recorded leader-video publication remain outside this slice.**
 
 All source changes are intentionally uncommitted and unpushed pending explicit user approval. Do not merge, tag, create a GitHub Release, or delete the clean extraction before final acceptance.

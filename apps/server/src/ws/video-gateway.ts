@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import { parseDeviceSerial } from "@test-center/contracts/device";
-import type { EncodedFrame } from "@test-center/video";
+import type { EncodedFrame, ViewProvider } from "@test-center/video";
 import { assertAllowedHost, assertSameOrigin } from "@test-center/security/request-policy";
 
 import { requireSession } from "../routes/bootstrap.js";
@@ -66,6 +66,16 @@ export function encodeVideoFrame(frame: EncodedFrame): VideoFrameMessage {
   return message;
 }
 
+export async function openVideoProvider(
+  provider: ViewProvider,
+  onFrame: (frame: EncodedFrame) => void,
+): Promise<() => void> {
+  await provider.start();
+  const latest = provider.getLatestFrame();
+  if (latest !== undefined) onFrame(latest);
+  return provider.subscribe(onFrame);
+}
+
 export async function registerVideoGateway(
   app: FastifyInstance,
   context: ServerContext,
@@ -75,32 +85,32 @@ export async function registerVideoGateway(
     { websocket: true },
     (socket: VideoSocket, request: FastifyRequest<{ Params: { serial: string } }>) => {
       let unsubscribe: (() => void) | undefined;
-      try {
-        assertAllowedHost(request.headers.host, context.port);
-        assertSameOrigin(request.headers.origin, context.port);
-        if (requireSession(request, context) === undefined) {
-          throw new TypeError("Authentication required.");
-        }
-        const serial = parseDeviceSerial(decodeURIComponent(request.params.serial));
-        const provider = context.views?.get(serial);
-        if (provider === undefined || provider.serial !== serial) {
-          throw new TypeError("Video provider is unavailable for this serial.");
-        }
-        const sendFrame = (frame: EncodedFrame): void => {
-          try {
-            socket.send(JSON.stringify(encodeVideoFrame(frame)));
-          } catch {
-            socket.close(1011, "Video frame could not be encoded.");
+      void (async () => {
+        try {
+          assertAllowedHost(request.headers.host, context.port);
+          assertSameOrigin(request.headers.origin, context.port);
+          if (requireSession(request, context) === undefined) {
+            throw new TypeError("Authentication required.");
           }
-        };
-        const latest = provider.getLatestFrame();
-        if (latest !== undefined) sendFrame(latest);
-        unsubscribe = provider.subscribe(sendFrame);
-        socket.on?.("close", () => unsubscribe?.());
-      } catch {
-        unsubscribe?.();
-        socket.close(1008, "Unauthorized or unavailable video stream.");
-      }
+          const serial = parseDeviceSerial(decodeURIComponent(request.params.serial));
+          const provider = context.views?.get(serial);
+          if (provider === undefined || provider.serial !== serial) {
+            throw new TypeError("Video provider is unavailable for this serial.");
+          }
+          const sendFrame = (frame: EncodedFrame): void => {
+            try {
+              socket.send(JSON.stringify(encodeVideoFrame(frame)));
+            } catch {
+              socket.close(1011, "Video frame could not be encoded.");
+            }
+          };
+          unsubscribe = await openVideoProvider(provider, sendFrame);
+          socket.on?.("close", () => unsubscribe?.());
+        } catch {
+          unsubscribe?.();
+          socket.close(1008, "Unauthorized or unavailable video stream.");
+        }
+      })();
     },
   );
 }

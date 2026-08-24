@@ -20,6 +20,9 @@ const app = await createApp(
         incidentService: runtimeDevices.incidentService,
         resultsService: runtimeDevices.resultsService,
         resultsExportRoot: runtimeDevices.resultsExportRoot,
+        ...(runtimeDevices.viewProviders === undefined
+          ? {}
+          : { viewProviders: runtimeDevices.viewProviders }),
         cleanupService: runtimeDevices.cleanupService,
         storageService: runtimeDevices.storageService,
       }
@@ -32,6 +35,9 @@ const app = await createApp(
         incidentService: runtimeDevices.incidentService,
         resultsService: runtimeDevices.resultsService,
         resultsExportRoot: runtimeDevices.resultsExportRoot,
+        ...(runtimeDevices.viewProviders === undefined
+          ? {}
+          : { viewProviders: runtimeDevices.viewProviders }),
         cleanupService: runtimeDevices.cleanupService,
         storageService: runtimeDevices.storageService,
       },

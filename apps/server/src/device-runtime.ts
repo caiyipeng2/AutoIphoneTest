@@ -114,6 +114,10 @@ import { CleanupConfirmationService } from "@test-center/security";
 import type { CleanupRouteService } from "./routes/cleanup.js";
 import type { StorageOverviewRouteService } from "./routes/storage.js";
 import { createStorageOverviewService } from "./storage-runtime.js";
+import {
+  createConfiguredRuntimeVideoCoordinator,
+  type RuntimeVideoCoordinator,
+} from "./runtime-video.js";
 
 export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
@@ -130,6 +134,8 @@ export interface RuntimeDeviceRegistry {
   readonly resultsExportRoot: string;
   readonly cleanupService: CleanupRouteService;
   readonly storageService: StorageOverviewRouteService;
+  readonly viewProviders?: ReadonlyMap<string, import("@test-center/video").ViewProvider>;
+  readonly videoCoordinator?: RuntimeVideoCoordinator;
   readonly close: () => Promise<void>;
 }
 
@@ -232,6 +238,11 @@ export async function createRuntimeDeviceRegistry(
     new DeviceRepository(database),
     createAdbDiscoverySource(client),
   );
+  const videoCoordinator = createConfiguredRuntimeVideoCoordinator({
+    registry,
+    projectRoot,
+    adbPath,
+  });
   const bridgeMode = parseBridgeMode(process.env);
   const workerCoordinator = createRuntimeWorkerCoordinator(
     paths,
@@ -325,8 +336,12 @@ export async function createRuntimeDeviceRegistry(
     resultsExportRoot: paths.runsRoot,
     cleanupService,
     storageService,
+    ...(videoCoordinator === undefined
+      ? {}
+      : { viewProviders: videoCoordinator.providers, videoCoordinator }),
     close: async () => {
       await storagePoller.stop();
+      await videoCoordinator?.close();
       await workerCoordinator.stopAll().catch(() => undefined);
       database.close();
     },
