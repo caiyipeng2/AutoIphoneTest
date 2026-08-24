@@ -39,8 +39,10 @@ function createHarness() {
   const client = {
     createSession: vi.fn(async () => fence),
     deleteSession: vi.fn(async () => undefined),
+    screenshot: vi.fn(async () => "base64-png"),
   } as unknown as AppiumW3cClient & {
     createSession: ReturnType<typeof vi.fn>;
+    screenshot: ReturnType<typeof vi.fn>;
   };
   const logcat = {
     start: vi.fn(async () => undefined),
@@ -60,7 +62,7 @@ function createHarness() {
     clientFactory: vi.fn(() => client),
     logcatFactory: vi.fn(() => logcat),
   });
-  return { worker, client, logcat, allocator, identity };
+  return { worker, client, logcat, allocator, identity, fence };
 }
 
 function createManagedHarness() {
@@ -311,6 +313,32 @@ describe("DeviceWorker", () => {
       serial: "serial-a",
       generation: 1,
     });
+  });
+
+  it("captures a screenshot through the current session fence while READY", async () => {
+    const { worker, client, fence } = createHarness();
+
+    await worker.start();
+
+    await expect(worker.captureScreenshot()).resolves.toEqual({
+      base64: "base64-png",
+      width: 1080,
+      height: 2340,
+    });
+    expect(client.screenshot).toHaveBeenCalledWith(fence);
+  });
+
+  it("rejects screenshot capture unless the worker owns a READY session", async () => {
+    const { worker, client } = createHarness();
+
+    await expect(worker.captureScreenshot()).rejects.toMatchObject({ code: "INVALID_STATE" });
+    expect(client.screenshot).not.toHaveBeenCalled();
+
+    await worker.start();
+    await worker.stop();
+
+    await expect(worker.captureScreenshot()).rejects.toMatchObject({ code: "INVALID_STATE" });
+    expect(client.screenshot).toHaveBeenCalledTimes(0);
   });
 
   it("rejects an identity mismatch before allocating ports or creating a session", async () => {

@@ -1,6 +1,6 @@
 import type { DeviceSerial } from "@test-center/contracts/device";
 
-import type { DeviceWorker } from "@test-center/sessions";
+import type { DeviceWorker, DeviceWorkerScreenshot } from "@test-center/sessions";
 import type { ActionBarrier, RuntimeFaultEvent, TextFocusSnapshot } from "@test-center/sessions";
 import type { LogcatRecord } from "@test-center/contracts/logcat";
 import type { ActionCommand } from "@test-center/sessions";
@@ -19,6 +19,7 @@ export type RuntimeWorkerFactory = (
   input: RuntimeWorkerFactoryInput,
 ) => Pick<DeviceWorker, "start" | "stop"> &
   Partial<Pick<DeviceWorker, "executeAction">> &
+  Partial<Pick<DeviceWorker, "captureScreenshot">> &
   Partial<Pick<DeviceWorker, "getActionBarrier" | "getTextFocusSnapshot">>;
 
 export class RuntimeWorkerCoordinator {
@@ -101,6 +102,22 @@ export class RuntimeWorkerCoordinator {
     return snapshot === undefined ? undefined : { ...snapshot, serial };
   }
 
+  public getScreenshotCapture(
+    runId: string,
+    serial: DeviceSerial,
+  ): (() => Promise<DeviceWorkerScreenshot>) | undefined {
+    if (this.runs.get(runId)?.get(serial)?.captureScreenshot === undefined) return undefined;
+    return async () => {
+      const worker = this.runs.get(runId)?.get(serial);
+      if (worker?.captureScreenshot === undefined) {
+        throw new Error(
+          `Screenshot capture is unavailable for run '${runId}', serial '${serial}'.`,
+        );
+      }
+      return await worker.captureScreenshot();
+    };
+  }
+
   public subscribeLogcat(listener: (record: LogcatRecord) => void): () => void {
     this.logcatListeners.add(listener);
     return () => this.logcatListeners.delete(listener);
@@ -134,4 +151,5 @@ export class RuntimeWorkerCoordinator {
 
 type RuntimeWorkerFactoryReturn = Pick<DeviceWorker, "start" | "stop"> &
   Partial<Pick<DeviceWorker, "executeAction">> &
+  Partial<Pick<DeviceWorker, "captureScreenshot">> &
   Partial<Pick<DeviceWorker, "getActionBarrier" | "getTextFocusSnapshot">>;

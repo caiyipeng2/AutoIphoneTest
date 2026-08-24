@@ -76,7 +76,7 @@ The analyzer uses the fixed thresholds in `docs/superpowers/plans/2026-07-31-m11
 
 | Check                      | Result                                                                                 |
 | -------------------------- | -------------------------------------------------------------------------------------- |
-| Full Vitest suite          | PASS, 142 files, 550 tests; 1 file and 2 tests skipped by existing suite configuration |
+| Full Vitest suite          | PASS, 143 files, 560 tests; 1 file and 2 tests skipped by existing suite configuration |
 | M11 analyzer tests         | PASS, 5 tests                                                                          |
 | TypeScript build           | PASS, `npm run typecheck`                                                              |
 | New M11 files ESLint       | PASS                                                                                   |
@@ -97,6 +97,19 @@ The follow-up runtime wiring was exercised against the existing data directory a
 | Frame        | H.264, `1080x2336`, frame `16`, payload `2,053` bytes                 |
 | Reused state | Existing `ONLINE` device record was synchronized at coordinator start |
 | Cleanup      | Provider returned to `STOPPED`; runtime closed successfully           |
+
+## Post-M11 Appium screenshot capture foundation
+
+The worker-owned Appium session now exposes a lifecycle-safe screenshot capture contract:
+
+| Check                              | Result                                                                                 |
+| ---------------------------------- | -------------------------------------------------------------------------------------- |
+| `DeviceWorker.captureScreenshot()` | READY-only, current `SessionFence` bound, returns base64 plus action viewport metadata |
+| Runtime worker coordinator         | Returns a run/serial-scoped capture handle; stopped runs invalidate the handle         |
+| Focused tests                      | PASS, 17 tests across worker and coordinator suites                                    |
+| Full regression                    | PASS, 143 files / 560 tests                                                            |
+
+This is the integration foundation for the periodic Appium screenshot provider. The video gateway and configured runtime provider selection are intentionally unchanged in this slice; no fallback stream is claimed until that wiring is implemented and exercised.
 
 ## Known limitations and acceptance boundary
 

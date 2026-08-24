@@ -17,6 +17,7 @@ function createFactory(
     {
       start: ReturnType<typeof vi.fn>;
       stop: ReturnType<typeof vi.fn>;
+      captureScreenshot: ReturnType<typeof vi.fn>;
       getActionBarrier: ReturnType<typeof vi.fn>;
       getTextFocusSnapshot: ReturnType<typeof vi.fn>;
     }
@@ -27,6 +28,11 @@ function createFactory(
         if (input.serial === options.failSerial) throw new Error(`start failed: ${input.serial}`);
       }),
       stop: vi.fn(async () => undefined),
+      captureScreenshot: vi.fn(async () => ({
+        base64: "base64-png",
+        width: 1080,
+        height: 2340,
+      })),
       getActionBarrier: vi.fn(() => ({ arm: vi.fn() })),
       getTextFocusSnapshot: vi.fn(() => undefined),
     };
@@ -50,10 +56,28 @@ describe("RuntimeWorkerCoordinator", () => {
       arm: expect.any(Function),
     });
     expect(coordinator.getTextFocusSnapshot("run-1", serials[0]!)).toBeUndefined();
+    const captureScreenshot = coordinator.getScreenshotCapture("run-1", serials[0]!);
+    expect(captureScreenshot).toBeTypeOf("function");
+    await expect(captureScreenshot!()).resolves.toEqual({
+      base64: "base64-png",
+      width: 1080,
+      height: 2340,
+    });
+    expect(workers.get(serials[0]!)?.captureScreenshot).toHaveBeenCalledTimes(1);
 
     await coordinator.stop("run-1");
     expect([...workers.values()].every((worker) => worker.stop.mock.calls.length === 1)).toBe(true);
     expect(coordinator.list("run-1")).toEqual([]);
+    await expect(captureScreenshot!()).rejects.toThrow("Screenshot capture is unavailable");
+  });
+
+  it("returns no screenshot capture for an unknown run or serial", async () => {
+    const { factory } = createFactory();
+    const coordinator = new RuntimeWorkerCoordinator(factory);
+
+    expect(coordinator.getScreenshotCapture("missing-run", serials[0]!)).toBeUndefined();
+    await coordinator.start("run-screenshot", [serials[0]!], "com.example.game", "sha256:nonce");
+    expect(coordinator.getScreenshotCapture("run-screenshot", serials[1]!)).toBeUndefined();
   });
 
   it("stops already-started workers when one worker fails", async () => {

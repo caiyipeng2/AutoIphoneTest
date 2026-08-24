@@ -23,6 +23,12 @@ export interface DeviceWorkerIdentity {
   readonly packageName: string;
 }
 
+export interface DeviceWorkerScreenshot {
+  readonly base64: string;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface DeviceWorkerOwner {
   readonly ownerPid: number;
   readonly ownerToken: string;
@@ -392,6 +398,25 @@ export class DeviceWorker {
   public getTextFocusSnapshot(): TextFocusSnapshot | undefined {
     if (this._state !== "READY") return undefined;
     return this.bridgeSession?.getTextFocusSnapshot?.();
+  }
+
+  /**
+   * Capture through the worker-owned Appium session. The viewport metadata is
+   * kept with the payload so the video fallback can publish a stable frame
+   * shape without creating a second session or decoding the image on the
+   * server hot path.
+   */
+  public async captureScreenshot(): Promise<DeviceWorkerScreenshot> {
+    if (this._state !== "READY" || this.client === undefined || this.fence === undefined) {
+      throw new DeviceWorkerError("INVALID_STATE", "Worker is not ready for screenshot capture.");
+    }
+    const fence = this.fence;
+    const base64 = await this.client.screenshot(fence);
+    return {
+      base64,
+      width: this.actionViewport.width,
+      height: this.actionViewport.height,
+    };
   }
 
   /** Execute against the worker-owned Appium session so managed runs do not
