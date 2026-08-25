@@ -4,6 +4,7 @@ import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/dev
 
 export type ScrcpyPrimaryProcessState = "STOPPED" | "STARTING" | "READY" | "ERROR";
 export type ScrcpyProcessEvent = "spawn" | "error" | "exit";
+export type ScrcpyRecordFormat = "mkv" | "mp4";
 
 export interface ScrcpyProcessHandle {
   once(event: ScrcpyProcessEvent, listener: (...args: unknown[]) => void): this;
@@ -21,6 +22,8 @@ export interface ScrcpyPrimaryProcessOptions {
   readonly executablePath: string;
   readonly recordPath: string;
   readonly spawnProcess?: ScrcpyProcessSpawner;
+  readonly stopTimeoutMs?: number;
+  readonly recordFormat?: ScrcpyRecordFormat;
 }
 
 const DEFAULT_SCRCPY_ARGS = [
@@ -30,6 +33,7 @@ const DEFAULT_SCRCPY_ARGS = [
   "--no-clipboard-autosync",
   "--video-codec=h264",
 ] as const;
+const DEFAULT_STOP_TIMEOUT_MS = 3_000;
 
 /**
  * Owns one serial-bound scrcpy process. This is deliberately separate from
@@ -41,6 +45,7 @@ export class ScrcpyPrimaryProcess {
   public readonly executablePath: string;
   public readonly args: readonly string[];
   public readonly spawnProcess: ScrcpyProcessSpawner;
+  private readonly stopTimeoutMs: number;
   private child: ScrcpyProcessHandle | undefined;
   private _state: ScrcpyPrimaryProcessState = "STOPPED";
 
@@ -51,9 +56,13 @@ export class ScrcpyPrimaryProcess {
       `--serial=${this.serial}`,
       ...DEFAULT_SCRCPY_ARGS,
       `--record=${options.recordPath}`,
-      "--record-format=mkv",
+      `--record-format=${options.recordFormat ?? "mkv"}`,
     ];
     this.spawnProcess = options.spawnProcess ?? defaultSpawnProcess;
+    this.stopTimeoutMs = options.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS;
+    if (!Number.isSafeInteger(this.stopTimeoutMs) || this.stopTimeoutMs < 1) {
+      throw new TypeError("scrcpy stop timeout must be a positive safe integer.");
+    }
   }
 
   public get state(): ScrcpyPrimaryProcessState {
@@ -82,7 +91,7 @@ export class ScrcpyPrimaryProcess {
   public async stop(): Promise<void> {
     const child = this.child;
     this.child = undefined;
-    if (child !== undefined) child.kill();
+    if (child !== undefined) await terminateProcess(child, this.stopTimeoutMs);
     this._state = "STOPPED";
   }
 }
@@ -99,5 +108,20 @@ function waitForSpawn(child: ScrcpyProcessHandle): Promise<void> {
   return new Promise((resolve, reject) => {
     child.once("spawn", () => resolve());
     child.once("error", (error) => reject(error ?? new Error("unknown spawn error")));
+  });
+}
+
+function terminateProcess(child: ScrcpyProcessHandle, timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    child.once("exit", finish);
+    child.kill();
   });
 }

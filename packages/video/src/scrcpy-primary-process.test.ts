@@ -6,7 +6,7 @@ interface FakeProcess {
   readonly args: readonly string[];
   readonly executable: string;
   readonly killed: { value: boolean };
-  emit(event: "error" | "spawn"): void;
+  emit(event: "error" | "spawn" | "exit"): void;
 }
 
 function createFakeProcess(): {
@@ -32,6 +32,7 @@ function createFakeProcess(): {
       },
       kill() {
         killed.value = true;
+        listeners.get("exit")?.();
         return true;
       },
     };

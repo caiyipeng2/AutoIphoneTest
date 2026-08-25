@@ -102,10 +102,13 @@ import {
 } from "@test-center/reports";
 import { RuntimeResultsRouteService } from "./results-runtime.js";
 import {
+  AtomicEvidencePublisher,
   CleanupAuditRepository,
   CleanupExecutionService,
   CleanupPreviewRepository,
   CleanupTrashMover,
+  EvidencePublicationService,
+  EvidenceRepository,
   createFileSystemFreeSpaceSource,
   StoragePressureMonitor,
   StoragePressurePoller,
@@ -118,6 +121,7 @@ import {
   createConfiguredRuntimeVideoCoordinator,
   type RuntimeVideoCoordinator,
 } from "./runtime-video.js";
+import { LeaderVideoRecorder } from "./leader-video-recorder.js";
 
 export interface RuntimeDeviceRegistry {
   readonly registry: DeviceRegistry;
@@ -173,6 +177,19 @@ export async function createRuntimeDeviceRegistry(
   const historyRepository = new ReportHistoryRepository(database);
   const finalizationExecutor = new ReportFinalizationExecutor(database, {
     runRoot: paths.runsRoot,
+  });
+  const evidenceRepository = new EvidenceRepository(database, { runRoot: paths.runsRoot });
+  const leaderVideoRecorder = new LeaderVideoRecorder({
+    runRoot: paths.runsRoot,
+    executablePath:
+      process.env.TEST_CENTER_SCRCPY_EXECUTABLE_PATH ??
+      win32.join(projectRoot, "tools", "scrcpy", "3.1", "scrcpy.exe"),
+    evidenceRepository,
+    publicationServiceFactory: (runId) =>
+      new EvidencePublicationService(
+        evidenceRepository,
+        new AtomicEvidencePublisher({ runRoot: win32.join(paths.runsRoot, runId) }),
+      ),
   });
   const reportSnapshotRepository = new ReportSnapshotRepository(database);
   const optionalExportService = new ReportExportService({
@@ -271,6 +288,7 @@ export async function createRuntimeDeviceRegistry(
     workerCoordinator,
     actionOutbox,
     finalizationExecutor,
+    leaderVideoRecorder,
   );
   const incidentMonitor = new IncidentMonitor(
     new IncidentRepository(database),
@@ -343,6 +361,7 @@ export async function createRuntimeDeviceRegistry(
       : { viewProviders: videoCoordinator.providers, videoCoordinator }),
     close: async () => {
       await storagePoller.stop();
+      await leaderVideoRecorder.stopAll().catch(() => undefined);
       await videoCoordinator?.close();
       await workerCoordinator.stopAll().catch(() => undefined);
       database.close();

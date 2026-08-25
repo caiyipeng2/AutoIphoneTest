@@ -129,10 +129,29 @@ Evidence: `data/hardware-m11-runtime-screenshot-fallback/runtime-screenshot-fall
 
 The acceptance script is `scripts/accept-m11-runtime-screenshot-fallback.mjs`; it uses an isolated E-drive data root and removes its invalid primary fixture after the run.
 
+## Post-M11 leader video publication smoke
+
+The same Appium-only runtime now starts the optional leader recorder at session start, stops it before report finalization, and publishes the run-relative video artifact through the atomic evidence publisher.
+
+Evidence: `data/hardware-m11-runtime-screenshot-fallback/runtime-screenshot-fallback.json`
+Run: `run-90315d0a-9abf-4a79-8843-f18937ffac63`
+
+| Check        | Result                                                             |
+| ------------ | ------------------------------------------------------------------ |
+| Device       | `R5CX211TXNT` (USB, `SM-S9280`)                                    |
+| Package      | `com.hg.idleweaponshoptycoon.android`                              |
+| Recording    | `video/leader.mp4`, `1,048,624` bytes, `VIDEO=READY`               |
+| Hash         | `d92e576e66d814b5fcaaa87854401455b80c2672fdefc0009e6e8dc3b1df1e39` |
+| HTML / ZIP   | Both `READY`; ZIP `1,051,890` bytes                                |
+| Finalization | `COMPLETED`                                                        |
+| Cleanup      | Runtime closed, invalid scrcpy fixture removed, session `FINISHED` |
+
+The recorder uses MP4 for the current scrcpy 3.1 plus Android 16 device combination: the same real-device H.264 stream produced a zero-byte MKV on graceful shutdown but a valid MP4 artifact. The low-level process keeps MKV as its backwards-compatible default and accepts an explicit format.
+
 ## Known limitations and acceptance boundary
 
-- The portable runtime now wires the pinned scrcpy 3.1 server asset into a serial-bound Tango `ViewProvider` when the asset is present, and the authenticated video gateway starts it on demand. The 60-minute result in this acceptance predates that wiring and therefore still proves Appium actions, logcat/resource stability, report finalization, and cleanup without claiming a recorded leader-video artifact.
-- Appium screenshot fallback is now implemented and verified on a real Android device. It requires an active `RUNNING` worker-owned Appium session; without one, the provider remains unavailable. Video recording publication remains outside this follow-up slice.
+- The portable runtime now wires the pinned scrcpy 3.1 server asset into a serial-bound Tango `ViewProvider` when the asset is present, and the authenticated video gateway starts it on demand. The 60-minute result in this acceptance predates runtime video recording; the separate post-M11 smoke above proves the current leader-video publication path.
+- Appium screenshot fallback and leader-video publication are implemented and verified on a real Android device. Screenshot fallback still requires an active `RUNNING` worker-owned Appium session; without one, the degraded provider remains unavailable.
 - The Unity command build provider remains intentionally unimplemented; use an imported APK/AAB or an installed fixture.
 - Fault injection and active-session recovery acceptance remain skipped per prior user confirmation.
 
@@ -142,6 +161,6 @@ Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1]
 
 ## Decision
 
-**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, and 60-minute Appium-only two-device run: PASS locally. Runtime scrcpy provider wiring and screenshot fallback are implemented locally; recorded leader-video publication remains outside this slice.**
+**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, and 60-minute Appium-only two-device run: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
 
 All source changes are intentionally uncommitted and unpushed pending explicit user approval. Do not merge, tag, create a GitHub Release, or delete the clean extraction before final acceptance.

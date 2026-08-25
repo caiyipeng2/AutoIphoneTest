@@ -18,6 +18,15 @@ import type {
   SessionView,
 } from "./routes/sessions.js";
 
+export interface SessionVideoRecorder {
+  start(input: {
+    readonly runId: string;
+    readonly serial: DeviceSerial;
+    readonly enabled: boolean;
+  }): Promise<void>;
+  stop(runId: string): Promise<unknown>;
+}
+
 interface SessionRow {
   readonly id: string;
   readonly client_request_id: string;
@@ -51,6 +60,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     private readonly workerCoordinator?: Pick<RuntimeWorkerCoordinator, "start" | "stop">,
     private readonly actionOutbox = new ActionOutbox(database),
     private readonly finalization?: Pick<ReportFinalizationExecutor, "startFinalization">,
+    private readonly videoRecorder?: SessionVideoRecorder,
   ) {}
 
   public async create(
@@ -143,8 +153,16 @@ export class RuntimeSessionRouteService implements SessionRouteService {
       );
     }
     try {
+      await this.videoRecorder
+        ?.start({
+          runId: current.id,
+          serial: current.leader.serial,
+          enabled: current.leaderVideoEnabled,
+        })
+        .catch(() => undefined);
       return await this.transition(id, "PREFLIGHT", "RUNNING", "SESSION_STARTED");
     } catch (error) {
+      await this.videoRecorder?.stop(id).catch(() => undefined);
       await this.workerCoordinator?.stop(id).catch(() => undefined);
       throw error;
     }
@@ -156,6 +174,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     if (current === undefined) throw new Error("Session not found.");
     if (current.state !== "RUNNING") throw new Error("Session state must be RUNNING.");
     await this.workerCoordinator?.stop(id);
+    await this.videoRecorder?.stop(id).catch(() => undefined);
     this.actionOutbox.cancelQueuedForRun(id, "SESSION_PAUSED");
     const now = new Date().toISOString();
     const update = this.database.transaction(() => {
@@ -187,6 +206,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     }
 
     await this.workerCoordinator?.stop(id);
+    await this.videoRecorder?.stop(id).catch(() => undefined);
     this.actionOutbox.cancelQueuedForRun(id, "SESSION_COMPLETED");
     const now = new Date().toISOString();
     const update = this.database.transaction(() => {

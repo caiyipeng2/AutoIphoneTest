@@ -1,6 +1,7 @@
 /* global process, console, URL, Buffer */
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { win32 } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { createRuntimeDeviceRegistry } from "../apps/server/dist/device-runtime.js";
 
@@ -47,6 +48,7 @@ const evidence = {
   provider: {},
   session: {},
   frame: {},
+  video: {},
   cleanup: {},
 };
 
@@ -90,6 +92,7 @@ try {
     height: frame.height,
     byteSize: frame.data.byteLength,
   };
+  await delay(3_000);
 } catch (error) {
   failure = error instanceof Error ? error.message : String(error);
 } finally {
@@ -103,6 +106,17 @@ try {
     finalSessionState = runtime.sessionService.get(sessionId)?.state;
   }
   if (runtime !== undefined) await runtime.close().catch(() => undefined);
+  if (sessionId !== undefined) {
+    const videoPath = win32.join(dataRoot, "runs", sessionId, "video", "leader.mp4");
+    try {
+      const video = await stat(videoPath);
+      evidence.video = { path: videoPath, exists: video.isFile(), sizeBytes: video.size };
+      if (!video.isFile() || video.size <= 0) failure ??= "Leader video recording is empty.";
+    } catch {
+      evidence.video = { path: videoPath, exists: false, sizeBytes: 0 };
+      failure ??= "Leader video recording was not published.";
+    }
+  }
   await rm(invalidServerPath, { force: true });
   evidence.cleanup = {
     runtimeClosed: runtime !== undefined,

@@ -544,6 +544,52 @@ describe("RuntimeSessionRouteService", () => {
       reason: "SESSION_COMPLETED:operator-finished",
     });
   });
+
+  it("starts and finalizes leader video around the session lifecycle", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const coordinator = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
+    const videoRecorder = {
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      undefined,
+      undefined,
+      coordinator,
+      undefined,
+      undefined,
+      videoRecorder,
+    );
+    const created = await service.create({
+      clientRequestId: "request-video-lifecycle",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    await service.complete(created.session.id, {
+      state: "FINISHED",
+      reason: "operator-finished",
+    });
+
+    expect(videoRecorder.start).toHaveBeenCalledWith({
+      runId: created.session.id,
+      serial,
+      enabled: true,
+    });
+    expect(videoRecorder.stop).toHaveBeenCalledWith(created.session.id);
+  });
 });
 
 async function createDatabase(): Promise<Database.Database> {
