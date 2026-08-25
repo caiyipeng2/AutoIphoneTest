@@ -74,4 +74,74 @@ describe("AppsPage", () => {
     expect(screen.getByRole("dialog", { name: "导入 Android 包体" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "包体类型" })).toHaveValue("APK");
   });
+
+  it("loads providers and shows the build result timeline", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/artifacts/providers")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            schemaVersion: 1,
+            providers: [
+              { id: "artifact-import", default: true },
+              { id: "unity-command", default: false },
+            ],
+          }),
+        });
+      }
+      if (url.endsWith("/api/artifacts/build")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            schemaVersion: 1,
+            state: "CREATED",
+            buildId: "build-ui-1",
+            artifact: {
+              artifactId: "artifact-ui-1",
+              kind: "APK",
+              sha256: digest,
+              publishState: "CREATED",
+            },
+            events: [
+              {
+                buildId: "build-ui-1",
+                phase: "validate",
+                status: "completed",
+                at: "2026-08-25T03:00:00.000Z",
+              },
+              {
+                buildId: "build-ui-1",
+                phase: "build",
+                status: "completed",
+                at: "2026-08-25T03:00:01.000Z",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ schemaVersion: 1, artifacts: [] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AppsPage />);
+    await screen.findByText("暂无符合筛选条件的制品。");
+    const buildButton = await screen.findByRole("button", { name: /按提供器构建/ });
+    expect(buildButton).toBeEnabled();
+    fireEvent.click(buildButton);
+    expect(screen.getByRole("dialog", { name: "按提供器构建包体" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "构建提供器" }), {
+      target: { value: "unity-command" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "构建输出路径" }), {
+      target: { value: "Builds/game.apk" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始构建" }));
+    expect(await screen.findByText("包体已发布")).toBeInTheDocument();
+    expect(screen.getByText("validate")).toBeInTheDocument();
+    expect(screen.getByText("build")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/artifacts/build",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });

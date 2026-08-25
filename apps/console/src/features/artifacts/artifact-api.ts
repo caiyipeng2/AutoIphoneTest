@@ -45,6 +45,29 @@ export interface ArtifactImportResponse {
     versionCode?: number;
     publishState: "CREATED" | "DEDUPLICATED";
   };
+  events?: BuildEventRecord[];
+}
+
+export interface BuildProviderRecord {
+  id: string;
+  default: boolean;
+}
+
+export interface BuildProvidersSnapshot {
+  schemaVersion: 1;
+  providers: BuildProviderRecord[];
+}
+
+export interface BuildEventRecord {
+  buildId: string;
+  phase: "validate" | "build" | "hash" | "parse" | "publish";
+  status: "completed" | "failed";
+  at: string;
+  message?: string;
+  sha256?: string;
+  sizeBytes?: number;
+  artifactId?: string;
+  publishState?: "CREATED" | "DEDUPLICATED";
 }
 
 export interface InstalledRegistrationResponse {
@@ -68,6 +91,19 @@ export async function fetchArtifacts(
   return (await response.json()) as ArtifactsSnapshot;
 }
 
+export async function fetchBuildProviders(signal?: AbortSignal): Promise<BuildProvidersSnapshot> {
+  const response = await fetch(
+    "/api/artifacts/providers",
+    signal === undefined ? undefined : { signal },
+  );
+  if (!response.ok) throw await apiError(response, "artifact-providers");
+  const payload = (await response.json()) as Partial<BuildProvidersSnapshot>;
+  return {
+    schemaVersion: 1,
+    providers: Array.isArray(payload.providers) ? payload.providers : [],
+  };
+}
+
 export async function importArtifact(
   file: File,
   kind: "APK" | "AAB",
@@ -85,6 +121,26 @@ export async function importArtifact(
     ...(signal === undefined ? {} : { signal }),
   });
   if (!response.ok) throw await apiError(response, "artifact-import");
+  return (await response.json()) as ArtifactImportResponse;
+}
+
+export async function buildArtifact(
+  input: {
+    providerId: string;
+    kind: "APK" | "AAB";
+    artifactPath: string;
+    importSource: string;
+    originalName: string;
+  },
+  signal?: AbortSignal,
+): Promise<ArtifactImportResponse> {
+  const response = await fetch("/api/artifacts/build", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...csrfHeaders() },
+    body: JSON.stringify(input),
+    ...(signal === undefined ? {} : { signal }),
+  });
+  if (!response.ok) throw await apiError(response, "artifact-build");
   return (await response.json()) as ArtifactImportResponse;
 }
 

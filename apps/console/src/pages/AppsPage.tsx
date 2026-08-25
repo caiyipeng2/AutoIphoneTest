@@ -1,19 +1,24 @@
-import { FileUp, PackageOpen, Plus, RefreshCw, Search, Smartphone } from "lucide-react";
+import { FileUp, Hammer, PackageOpen, Plus, RefreshCw, Search, Smartphone } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { PageFrame } from "../components/PageFrame";
 import {
+  buildArtifact,
   fetchArtifacts,
+  fetchBuildProviders,
   importArtifact,
   registerInstalledArtifact,
+  type BuildProviderRecord,
   type ArtifactRecord,
 } from "../features/artifacts/artifact-api";
 import { ArtifactTable } from "../features/artifacts/ArtifactTable";
+import { BuildArtifactDialog } from "../features/artifacts/BuildArtifactDialog";
 import { ImportArtifactDialog } from "../features/artifacts/ImportArtifactDialog";
 import { RegisterInstalledDialog } from "../features/artifacts/RegisterInstalledDialog";
 
 export function AppsPage() {
   const [artifacts, setArtifacts] = useState<ArtifactRecord[]>([]);
+  const [providers, setProviders] = useState<BuildProviderRecord[]>([]);
   const [filter, setFilter] = useState<"ALL" | ArtifactRecord["kind"]>("ALL");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -21,6 +26,7 @@ export function AppsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [installedOpen, setInstalledOpen] = useState(false);
+  const [buildOpen, setBuildOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = () => {
@@ -36,6 +42,11 @@ export function AppsPage() {
       .finally(() => setLoading(false));
   };
   useEffect(load, []);
+  useEffect(() => {
+    void fetchBuildProviders()
+      .then((snapshot) => setProviders(Array.isArray(snapshot.providers) ? snapshot.providers : []))
+      .catch(() => setProviders([]));
+  }, []);
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -94,6 +105,28 @@ export function AppsPage() {
     }
   };
 
+  const handleBuild = async (input: {
+    providerId: string;
+    kind: "APK" | "AAB";
+    artifactPath: string;
+    importSource: string;
+    originalName: string;
+  }) => {
+    setBusy(true);
+    try {
+      const result = await buildArtifact(input);
+      setNotice(
+        result.state === "DEDUPLICATED"
+          ? "构建完成，内容摘要已匹配现有制品。"
+          : "构建完成，包体已登记。",
+      );
+      load();
+      return result;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const copyHash = (hash: string) => {
     const write = navigator.clipboard?.writeText(hash);
     if (write === undefined) {
@@ -117,6 +150,13 @@ export function AppsPage() {
           </button>
           <button className="button button-primary" onClick={() => setImportOpen(true)}>
             <FileUp size={15} /> 导入包体
+          </button>
+          <button
+            className="button button-quiet"
+            onClick={() => setBuildOpen(true)}
+            disabled={providers.length === 0}
+          >
+            <Hammer size={15} /> 按提供器构建
           </button>
         </div>
       </div>
@@ -183,6 +223,14 @@ export function AppsPage() {
         error={error}
         onClose={() => setInstalledOpen(false)}
         onSubmit={handleInstalled}
+      />
+      <BuildArtifactDialog
+        open={buildOpen}
+        busy={busy}
+        error={error}
+        providers={providers}
+        onClose={() => setBuildOpen(false)}
+        onSubmit={handleBuild}
       />
     </PageFrame>
   );
