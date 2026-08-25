@@ -25,7 +25,7 @@ describe("SessionsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "连接主视图" }));
 
     expect(screen.getByRole("heading", { name: "主设备画面" })).toBeInTheDocument();
-    expect(screen.getByText("浏览器不支持 H.264 解码")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("正在建立降级截图通道");
   });
 
   it("creates and starts a synchronized session for two online devices", async () => {

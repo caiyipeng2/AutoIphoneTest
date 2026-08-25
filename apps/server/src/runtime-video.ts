@@ -5,7 +5,10 @@ import type { DeviceRegistry, DeviceRegistryEvent } from "@test-center/devices";
 import type { DeviceSerial } from "@test-center/contracts/device";
 import {
   AdbScrcpyVideoTransport,
+  FailoverViewProvider,
+  MjpegViewProvider,
   TangoScrcpyViewProvider,
+  type ScreenshotCaptureResult,
   type ViewProvider,
 } from "@test-center/video";
 
@@ -25,6 +28,9 @@ export interface ConfiguredRuntimeVideoOptions {
   readonly projectRoot: string;
   readonly adbPath: string;
   readonly serverPath?: string;
+  readonly getScreenshotCapture?: (
+    serial: DeviceSerial,
+  ) => (() => Promise<ScreenshotCaptureResult>) | undefined;
 }
 
 export function createConfiguredRuntimeVideoCoordinator(
@@ -37,18 +43,41 @@ export function createConfiguredRuntimeVideoCoordinator(
   );
   if (!win32.isAbsolute(serverPath)) throw new TypeError("scrcpy server path must be absolute.");
   if (!win32.isAbsolute(options.adbPath)) throw new TypeError("adb path must be absolute.");
-  if (!existsSync(serverPath)) return undefined;
+  const hasPrimary = existsSync(serverPath);
+  if (!hasPrimary && options.getScreenshotCapture === undefined) return undefined;
   return createRuntimeVideoCoordinator({
     registry: options.registry,
-    createProvider: (serial) =>
-      new TangoScrcpyViewProvider({
-        serial,
-        transport: new AdbScrcpyVideoTransport({
-          serial,
-          adbPath: options.adbPath,
-          serverPath,
-        }),
-      }),
+    createProvider: (serial) => {
+      const primary = hasPrimary
+        ? new TangoScrcpyViewProvider({
+            serial,
+            transport: new AdbScrcpyVideoTransport({
+              serial,
+              adbPath: options.adbPath,
+              serverPath,
+            }),
+          })
+        : undefined;
+      const fallback =
+        options.getScreenshotCapture === undefined
+          ? undefined
+          : new MjpegViewProvider({
+              serial,
+              captureScreenshot: async () => {
+                const capture = options.getScreenshotCapture?.(serial);
+                if (capture === undefined) {
+                  throw new Error(`Screenshot capture is unavailable for serial: ${serial}.`);
+                }
+                return await capture();
+              },
+            });
+      if (primary === undefined && fallback === undefined) {
+        throw new Error(`No video provider is configured for serial: ${serial}.`);
+      }
+      if (primary === undefined) return fallback!;
+      if (fallback === undefined) return primary;
+      return new FailoverViewProvider({ serial, primary, fallback });
+    },
   });
 }
 

@@ -63,16 +63,14 @@ export function VideoViewport({ serial, codec = "avc1.4D0033" }: VideoViewportPr
     }
 
     const globals = globalThis as typeof globalThis & WebCodecsGlobals;
-    if (globals.VideoDecoder === undefined || globals.EncodedVideoChunk === undefined) {
-      setStatus("unsupported");
-      setStatusDetail("浏览器不支持 H.264 解码");
-      return;
-    }
+    const supportsH264 =
+      globals.VideoDecoder !== undefined && globals.EncodedVideoChunk !== undefined;
+    if (!supportsH264) setStatusDetail("正在建立降级截图通道");
 
     let cancelled = false;
     const socket = new WebSocket(buildVideoSocketUrl(serial));
     setStatus("connecting");
-    setStatusDetail("正在建立主视图通道");
+    setStatusDetail(supportsH264 ? "正在建立主视图通道" : "正在建立降级截图通道");
 
     const closeDecoder = () => {
       decoderRef.current?.close();
@@ -128,6 +126,10 @@ export function VideoViewport({ serial, codec = "avc1.4D0033" }: VideoViewportPr
       const frame = message.frame;
       if (frame.format === "jpeg") {
         void drawJpeg(frame).catch(() => showError("降级截图解码失败"));
+        return;
+      }
+      if (!supportsH264) {
+        showError("浏览器不支持 H.264 解码");
         return;
       }
       try {

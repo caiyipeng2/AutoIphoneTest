@@ -76,7 +76,7 @@ The analyzer uses the fixed thresholds in `docs/superpowers/plans/2026-07-31-m11
 
 | Check                      | Result                                                                                 |
 | -------------------------- | -------------------------------------------------------------------------------------- |
-| Full Vitest suite          | PASS, 143 files, 560 tests; 1 file and 2 tests skipped by existing suite configuration |
+| Full Vitest suite          | PASS, 144 files, 565 tests; 1 file and 2 tests skipped by existing suite configuration |
 | M11 analyzer tests         | PASS, 5 tests                                                                          |
 | TypeScript build           | PASS, `npm run typecheck`                                                              |
 | New M11 files ESLint       | PASS                                                                                   |
@@ -107,14 +107,32 @@ The worker-owned Appium session now exposes a lifecycle-safe screenshot capture 
 | `DeviceWorker.captureScreenshot()` | READY-only, current `SessionFence` bound, returns base64 plus action viewport metadata |
 | Runtime worker coordinator         | Returns a run/serial-scoped capture handle; stopped runs invalidate the handle         |
 | Focused tests                      | PASS, 17 tests across worker and coordinator suites                                    |
-| Full regression                    | PASS, 143 files / 560 tests                                                            |
+| Full regression                    | PASS, 144 files / 565 tests                                                            |
 
-This is the integration foundation for the periodic Appium screenshot provider. The video gateway and configured runtime provider selection are intentionally unchanged in this slice; no fallback stream is claimed until that wiring is implemented and exercised.
+This contract is consumed by the configured runtime provider and video gateway in the smoke recorded below; the separate acceptance boundary is the recorded leader-video artifact, which is still not published.
+
+## Post-M11 Appium screenshot fallback smoke
+
+The configured runtime now selects the serial-bound Appium screenshot provider when the pinned scrcpy asset is absent, and fails over to it when the primary provider cannot start. The console keeps the WebSocket open without H.264 support so a degraded JPEG frame can still be displayed.
+
+Evidence: `data/hardware-m11-runtime-screenshot-fallback/runtime-screenshot-fallback.json`
+
+| Check    | Result                                                      |
+| -------- | ----------------------------------------------------------- |
+| Mode     | `APPIUM_ONLY`, no Unity QA Bridge injection                 |
+| Device   | `192.168.22.73:5555`                                        |
+| Package  | `com.hg.idleweaponshoptycoon.android`                       |
+| Primary  | Invalid scrcpy fixture intentionally failed                 |
+| Fallback | `screenshot`, `DEGRADED`, `PRIMARY_PROVIDER_UNAVAILABLE`    |
+| Frame    | JPEG, `1080x2340`, frame `1`, payload `113,572` bytes       |
+| Cleanup  | Runtime closed, invalid fixture removed, session `FINISHED` |
+
+The acceptance script is `scripts/accept-m11-runtime-screenshot-fallback.mjs`; it uses an isolated E-drive data root and removes its invalid primary fixture after the run.
 
 ## Known limitations and acceptance boundary
 
 - The portable runtime now wires the pinned scrcpy 3.1 server asset into a serial-bound Tango `ViewProvider` when the asset is present, and the authenticated video gateway starts it on demand. The 60-minute result in this acceptance predates that wiring and therefore still proves Appium actions, logcat/resource stability, report finalization, and cleanup without claiming a recorded leader-video artifact.
-- Periodic Appium screenshot fallback and video recording publication remain outside this follow-up slice; an unavailable scrcpy asset keeps the runtime in the existing degraded/no-provider state instead of blocking server startup.
+- Appium screenshot fallback is now implemented and verified on a real Android device. It requires an active `RUNNING` worker-owned Appium session; without one, the provider remains unavailable. Video recording publication remains outside this follow-up slice.
 - The Unity command build provider remains intentionally unimplemented; use an imported APK/AAB or an installed fixture.
 - Fault injection and active-session recovery acceptance remain skipped per prior user confirmation.
 
@@ -124,6 +142,6 @@ Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1]
 
 ## Decision
 
-**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, and 60-minute Appium-only two-device run: PASS locally. Runtime scrcpy provider wiring is now implemented locally; periodic screenshot fallback and recorded leader-video publication remain outside this slice.**
+**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, and 60-minute Appium-only two-device run: PASS locally. Runtime scrcpy provider wiring and screenshot fallback are implemented locally; recorded leader-video publication remains outside this slice.**
 
 All source changes are intentionally uncommitted and unpushed pending explicit user approval. Do not merge, tag, create a GitHub Release, or delete the clean extraction before final acceptance.

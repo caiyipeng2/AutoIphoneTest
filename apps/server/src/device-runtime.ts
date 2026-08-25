@@ -238,11 +238,6 @@ export async function createRuntimeDeviceRegistry(
     new DeviceRepository(database),
     createAdbDiscoverySource(client),
   );
-  const videoCoordinator = createConfiguredRuntimeVideoCoordinator({
-    registry,
-    projectRoot,
-    adbPath,
-  });
   const bridgeMode = parseBridgeMode(process.env);
   const workerCoordinator = createRuntimeWorkerCoordinator(
     paths,
@@ -251,6 +246,13 @@ export async function createRuntimeDeviceRegistry(
     registry,
     bridgeMode,
   );
+  const videoCoordinator = createConfiguredRuntimeVideoCoordinator({
+    registry,
+    projectRoot,
+    adbPath,
+    getScreenshotCapture: (serial) =>
+      readRunningScreenshotCapture(database, workerCoordinator, serial),
+  });
   const uidService = new UidService(database);
   const actionRepository = new RunActionRepository(database);
   const actionOutbox = new ActionOutbox(database);
@@ -346,6 +348,24 @@ export async function createRuntimeDeviceRegistry(
       database.close();
     },
   };
+}
+
+function readRunningScreenshotCapture(
+  database: Database.Database,
+  workerCoordinator: Pick<RuntimeWorkerCoordinator, "getScreenshotCapture">,
+  serial: DeviceSerial,
+) {
+  const runs = database
+    .prepare(
+      `SELECT r.id
+       FROM test_runs r
+       JOIN run_devices d ON d.run_id = r.id AND d.epoch = r.current_epoch
+       WHERE r.state = 'RUNNING' AND d.serial = ? AND d.membership_state = 'ACTIVE'
+       ORDER BY r.id ASC`,
+    )
+    .all(serial) as readonly { id: string }[];
+  if (runs.length !== 1) return undefined;
+  return workerCoordinator.getScreenshotCapture(runs[0]!.id, serial);
 }
 
 function readRunningLogcatFaultRuns(database: Database.Database) {

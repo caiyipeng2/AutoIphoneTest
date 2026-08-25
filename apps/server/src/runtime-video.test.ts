@@ -179,4 +179,34 @@ describe("runtime video coordinator", () => {
     });
     await runtime?.close();
   });
+
+  it("creates a screenshot provider when scrcpy is unavailable but capture is configured", async () => {
+    const registry = new FakeRegistry();
+    const capture = vi.fn(async () => ({ base64: "AQID", width: 1080, height: 2340 }));
+    const runtime = createConfiguredRuntimeVideoCoordinator({
+      registry,
+      projectRoot: "E:\\Projects\\TestCenter",
+      adbPath: "E:\\Android\\platform-tools\\adb.exe",
+      serverPath: "E:\\Projects\\TestCenter\\tools\\scrcpy\\3.1\\scrcpy-server",
+      getScreenshotCapture: () => capture,
+    });
+
+    expect(runtime).toBeDefined();
+    registry.emit("R5CX211TXNT", "ONLINE");
+    const configured = runtime?.providers.get("R5CX211TXNT");
+    expect(configured).toMatchObject({
+      serial: "R5CX211TXNT",
+      kind: "screenshot",
+      degraded: true,
+      state: "STOPPED",
+    });
+
+    await configured?.start();
+    expect(capture).toHaveBeenCalledOnce();
+    expect(configured?.getLatestFrame()).toMatchObject({
+      provider: "screenshot",
+      degraded: true,
+    });
+    await runtime?.close();
+  });
 });

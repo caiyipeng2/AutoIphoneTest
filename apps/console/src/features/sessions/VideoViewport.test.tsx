@@ -38,13 +38,77 @@ afterEach(() => {
 });
 
 describe("VideoViewport", () => {
-  it("reports a recoverable browser capability error", () => {
+  it("keeps the socket open for screenshot fallback without H.264 support", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
     vi.stubGlobal("VideoDecoder", undefined);
+    vi.stubGlobal("EncodedVideoChunk", undefined);
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({ close: vi.fn() })),
+    );
+    const context = { drawImage: vi.fn(), clearRect: vi.fn() };
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      context as unknown as CanvasRenderingContext2D,
+    );
 
     render(<VideoViewport serial="R5CX211TXNT" />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("浏览器不支持 H.264 解码");
+    expect(screen.getByRole("status")).toHaveTextContent("正在建立降级截图通道");
+    const socket = FakeWebSocket.instances[0]!;
+    socket.emitOpen();
+    socket.emitMessage({
+      type: "video.frame",
+      frame: {
+        schemaVersion: 1,
+        frameId: 1,
+        serial: "R5CX211TXNT",
+        capturedAtMonotonicMs: 12,
+        metricsEpoch: 1,
+        width: 1080,
+        height: 2340,
+        format: "jpeg",
+        degraded: true,
+        provider: "screenshot",
+        degradedReason: "PRIMARY_PROVIDER_UNAVAILABLE",
+        dataBase64: "AQID",
+      },
+    });
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("降级截图"));
+    expect(context.drawImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a recoverable browser capability error when an H.264 frame arrives", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    vi.stubGlobal("VideoDecoder", undefined);
+    vi.stubGlobal("EncodedVideoChunk", undefined);
+
+    render(<VideoViewport serial="R5CX211TXNT" />);
+
+    const socket = FakeWebSocket.instances[0]!;
+    socket.emitMessage({
+      type: "video.frame",
+      frame: {
+        schemaVersion: 1,
+        frameId: 1,
+        serial: "R5CX211TXNT",
+        capturedAtMonotonicMs: 12,
+        metricsEpoch: 1,
+        width: 1080,
+        height: 2340,
+        format: "h264",
+        degraded: false,
+        provider: "tango",
+        keyFrame: true,
+        config: false,
+        presentationTimestampUs: "42",
+        dataBase64: "AQID",
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent("浏览器不支持 H.264 解码"),
+    );
     expect(screen.getByRole("button", { name: "重试主视图" })).toBeInTheDocument();
   });
 
