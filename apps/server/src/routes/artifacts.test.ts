@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -59,7 +59,9 @@ function installedArtifact(): InstalledArtifact {
   };
 }
 
-function createService(): ArtifactRouteService & { lastBuild: BuildRequest | undefined } {
+function createService(
+  additionalProviders: readonly BuildProvider[] = [],
+): ArtifactRouteService & { lastBuild: BuildRequest | undefined } {
   const artifacts = [sourceArtifact(), installedArtifact()];
   let lastBuild: BuildRequest | undefined;
   const provider: BuildProvider = {
@@ -85,6 +87,7 @@ function createService(): ArtifactRouteService & { lastBuild: BuildRequest | und
   };
   return {
     provider,
+    providers: [provider, ...additionalProviders],
     list: () => artifacts,
     get: (id) => artifacts.find((artifact) => artifact.id === id),
     registerInstalled: async () => ({
@@ -260,6 +263,168 @@ describe("artifact routes", () => {
     });
 
     expect(response.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it("selects a provider, resolves relative paths below the import root, and returns events", async () => {
+    const root = await mkdtemp(join(tmpdir(), "test-center-provider-build-"));
+    roots.push(root);
+    let received: BuildRequest | undefined;
+    const commandProvider: BuildProvider = {
+      id: "unity-command",
+      validate: () => ({ valid: true, errors: [] }),
+      build: async (request, sink): Promise<BuildResult> => {
+        received = request;
+        await sink({
+          buildId: "command-build-1",
+          phase: "validate",
+          status: "completed",
+          at: "2026-08-25T03:00:00.000Z",
+        });
+        await sink({
+          buildId: "command-build-1",
+          phase: "build",
+          status: "completed",
+          at: "2026-08-25T03:00:01.000Z",
+        });
+        return {
+          buildId: "command-build-1",
+          artifact: {
+            artifactId: "artifact-command-1",
+            kind: "APK",
+            sha256: digest,
+            publishState: "CREATED",
+          },
+        };
+      },
+      cancel: async () => undefined,
+    };
+    const port = 4786;
+    const app = await createApp({
+      port,
+      bootstrapCode: "provider-build-bootstrap",
+      launchSecret: "provider-build-secret",
+      artifactService: createService([commandProvider]),
+      artifactImportRoot: root,
+    });
+    const headers = await authenticatedHeaders(app, port, "provider-build-bootstrap");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/artifacts/build",
+      headers: { ...headers, "content-type": "application/json" },
+      payload: {
+        providerId: "unity-command",
+        kind: "APK",
+        importSource: "Builds",
+        artifactPath: "Builds/game.apk",
+        originalName: "game.apk",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      schemaVersion: 1,
+      buildId: "command-build-1",
+      artifact: { artifactId: "artifact-command-1" },
+      events: [
+        { phase: "validate", status: "completed" },
+        { phase: "build", status: "completed" },
+      ],
+    });
+    expect(received).toMatchObject({
+      providerId: "unity-command",
+      importSource: win32.join(root, "Builds"),
+      artifactPath: win32.join(root, "Builds", "game.apk"),
+    });
+    await app.close();
+  });
+
+  it("uses the configured import root when importSource is omitted", async () => {
+    const root = await mkdtemp(join(tmpdir(), "test-center-provider-build-default-"));
+    roots.push(root);
+    let received: BuildRequest | undefined;
+    const provider: BuildProvider = {
+      id: "default-source-provider",
+      validate: () => ({ valid: true, errors: [] }),
+      build: async (request): Promise<BuildResult> => {
+        received = request;
+        return {
+          buildId: "default-source-build-1",
+          artifact: {
+            artifactId: "artifact-default-source-1",
+            kind: "APK",
+            sha256: digest,
+            publishState: "DEDUPLICATED",
+          },
+        };
+      },
+      cancel: async () => undefined,
+    };
+    const port = 4788;
+    const app = await createApp({
+      port,
+      bootstrapCode: "provider-build-default-bootstrap",
+      launchSecret: "provider-build-default-secret",
+      artifactService: createService([provider]),
+      artifactImportRoot: root,
+    });
+    const headers = await authenticatedHeaders(app, port, "provider-build-default-bootstrap");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/artifacts/build",
+      headers: { ...headers, "content-type": "application/json" },
+      payload: {
+        providerId: "default-source-provider",
+        kind: "APK",
+        artifactPath: "game.apk",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(received?.importSource).toBe(win32.normalize(root));
+    await app.close();
+  });
+
+  it("rejects unknown providers and paths outside the import root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "test-center-provider-build-safe-"));
+    roots.push(root);
+    const service = createService();
+    const port = 4787;
+    const app = await createApp({
+      port,
+      bootstrapCode: "provider-build-safe-bootstrap",
+      launchSecret: "provider-build-safe-secret",
+      artifactService: service,
+      artifactImportRoot: root,
+    });
+    const headers = await authenticatedHeaders(app, port, "provider-build-safe-bootstrap");
+    const unknown = await app.inject({
+      method: "POST",
+      url: "/api/artifacts/build",
+      headers: { ...headers, "content-type": "application/json" },
+      payload: {
+        providerId: "missing",
+        kind: "APK",
+        artifactPath: "game.apk",
+      },
+    });
+    expect(unknown.statusCode).toBe(404);
+
+    const escaped = await app.inject({
+      method: "POST",
+      url: "/api/artifacts/build",
+      headers: { ...headers, "content-type": "application/json" },
+      payload: {
+        providerId: "artifact-import",
+        kind: "APK",
+        importSource: "..",
+        artifactPath: "..\\outside.apk",
+      },
+    });
+    expect(escaped.statusCode).toBe(400);
+    expect(service.lastBuild).toBeUndefined();
     await app.close();
   });
 

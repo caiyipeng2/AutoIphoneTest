@@ -14,3 +14,5 @@ The provider intentionally does not guess a project's Unity static build method,
 ## Provider discovery API
 
 Authenticated clients can call `GET /api/artifacts/providers` to discover the provider IDs exposed by the current server. The response contains only `{ id, default }` descriptors and a schema version; executable paths, argument builders, signing data, and artifact storage paths are never returned. The default `artifact-import` provider remains available even when no optional provider is configured.
+
+Authenticated clients can submit `POST /api/artifacts/build` with `providerId`, `kind`, `artifactPath`, and an optional `importSource`/`originalName`. Both paths are relative to the configured import root; absolute paths and `..` escapes are rejected before provider execution. The selected provider receives normalized absolute paths and returns the same artifact reference plus ordered build events. The existing multipart `POST /api/artifacts/import` route remains the default upload workflow.

@@ -31,6 +31,15 @@ const InstalledRegistrationSchema = z
     packageName: z.string().min(1),
   })
   .strict();
+const BuildRouteRequestSchema = z
+  .object({
+    providerId: z.string().min(1),
+    kind: z.enum(["APK", "AAB"]),
+    importSource: z.string().trim().max(512).optional(),
+    artifactPath: z.string().trim().min(1).max(1024),
+    originalName: z.string().trim().min(1).max(128).optional(),
+  })
+  .strict();
 
 export interface InstalledRegistrationResult {
   readonly artifact: InstalledArtifact;
@@ -103,6 +112,55 @@ export async function registerArtifactsRoutes(
         default: provider.id === context.artifacts?.provider.id,
       })),
     };
+  });
+
+  app.post("/api/artifacts/build", async (request, reply) => {
+    let buildRequest: BuildRequest | undefined;
+    try {
+      assertMutationAllowed(request, context);
+      if (context.artifacts === undefined) {
+        return await reply.code(503).send({ error: "Artifact service unavailable." });
+      }
+      const payload = BuildRouteRequestSchema.parse(request.body);
+      const providers = context.artifacts.providers ?? [context.artifacts.provider];
+      const provider = providers.find((candidate) => candidate.id === payload.providerId);
+      if (provider === undefined) {
+        return await reply
+          .code(404)
+          .send({ error: `Build provider '${payload.providerId}' not found.` });
+      }
+      const importSource =
+        payload.importSource === undefined || payload.importSource.trim() === ""
+          ? normalizedImportRoot
+          : resolveBuildPath(normalizedImportRoot, payload.importSource, "importSource");
+      const artifactPath = resolveBuildPath(
+        normalizedImportRoot,
+        payload.artifactPath,
+        "artifactPath",
+      );
+      buildRequest = {
+        providerId: provider.id,
+        kind: payload.kind,
+        importSource,
+        artifactPath,
+        ...(payload.originalName === undefined ? {} : { originalName: payload.originalName }),
+      };
+      const events: BuildEvent[] = [];
+      const result = await provider.build(buildRequest, (event) => {
+        events.push(event);
+      });
+      return {
+        schemaVersion: 1,
+        state: result.artifact.publishState,
+        buildId: result.buildId,
+        artifact: result.artifact,
+        events,
+      };
+    } catch (error) {
+      return await reply.code(errorCode(error)).send({
+        error: error instanceof Error ? error.message : "Artifact build rejected.",
+      });
+    }
   });
 
   app.post("/api/artifacts/import", async (request, reply) => {
@@ -236,6 +294,23 @@ function resolveImportSource(root: string, value: string | undefined): string {
         : win32.normalize(win32.join(root, value));
   if (!isWithin(root, candidate))
     throw new TypeError("importSource must remain below the configured import root.");
+  return candidate;
+}
+
+function resolveBuildPath(root: string, value: string, field: string): string {
+  const normalizedValue = value.trim();
+  if (
+    normalizedValue === "" ||
+    win32.isAbsolute(normalizedValue) ||
+    normalizedValue.startsWith("\\") ||
+    normalizedValue.startsWith("/")
+  ) {
+    throw new TypeError(`${field} must be a relative path below the configured import root.`);
+  }
+  const candidate = win32.normalize(win32.join(root, normalizedValue));
+  if (!isWithin(root, candidate)) {
+    throw new TypeError(`${field} must remain below the configured import root.`);
+  }
   return candidate;
 }
 
