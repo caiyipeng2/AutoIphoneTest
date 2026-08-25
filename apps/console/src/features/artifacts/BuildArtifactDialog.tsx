@@ -1,7 +1,11 @@
-import { CheckCircle2, Hammer, LoaderCircle, X, XCircle } from "lucide-react";
+import { CheckCircle2, Hammer, LoaderCircle, ShieldCheck, X, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import type { ArtifactImportResponse, BuildProviderRecord } from "./artifact-api";
+import type {
+  ArtifactImportResponse,
+  BuildProviderRecord,
+  BuildValidationResponse,
+} from "./artifact-api";
 
 interface BuildArtifactDialogProps {
   open: boolean;
@@ -9,6 +13,13 @@ interface BuildArtifactDialogProps {
   error: string | null;
   providers: BuildProviderRecord[];
   onClose: () => void;
+  onValidate: (input: {
+    providerId: string;
+    kind: "APK" | "AAB";
+    artifactPath: string;
+    importSource: string;
+    originalName: string;
+  }) => Promise<BuildValidationResponse>;
   onSubmit: (input: {
     providerId: string;
     kind: "APK" | "AAB";
@@ -24,6 +35,7 @@ export function BuildArtifactDialog({
   error,
   providers,
   onClose,
+  onValidate,
   onSubmit,
 }: BuildArtifactDialogProps) {
   const defaultProvider = useMemo(
@@ -36,6 +48,8 @@ export function BuildArtifactDialog({
   const [artifactPath, setArtifactPath] = useState("");
   const [originalName, setOriginalName] = useState("");
   const [result, setResult] = useState<ArtifactImportResponse | null>(null);
+  const [validation, setValidation] = useState<BuildValidationResponse | null>(null);
+  const [validationBusy, setValidationBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,11 +60,17 @@ export function BuildArtifactDialog({
       setArtifactPath("");
       setOriginalName("");
       setResult(null);
+      setValidation(null);
+      setValidationBusy(false);
       setLocalError(null);
     } else if (providerId === "" && defaultProvider !== "") {
       setProviderId(defaultProvider);
     }
   }, [defaultProvider, open, providerId]);
+
+  useEffect(() => {
+    setValidation(null);
+  }, [artifactPath, importSource, kind, originalName, providerId]);
 
   if (!open) return null;
 
@@ -69,6 +89,27 @@ export function BuildArtifactDialog({
       setResult(next);
     } catch (reason: unknown) {
       setLocalError(reason instanceof Error ? reason.message : "构建失败");
+    }
+  };
+
+  const validate = async () => {
+    if (providerId === "" || artifactPath.trim() === "") return;
+    setLocalError(null);
+    setValidationBusy(true);
+    try {
+      const next = await onValidate({
+        providerId,
+        kind,
+        artifactPath: artifactPath.trim(),
+        importSource: importSource.trim(),
+        originalName: originalName.trim(),
+      });
+      setValidation(next);
+    } catch (reason: unknown) {
+      setValidation(null);
+      setLocalError(reason instanceof Error ? reason.message : "构建预检失败");
+    } finally {
+      setValidationBusy(false);
     }
   };
 
@@ -166,8 +207,21 @@ export function BuildArtifactDialog({
             {localError ?? error}
           </div>
         )}
+        {validation && <BuildValidationResult result={validation} />}
         {result && <BuildResult result={result} />}
         <div className="dialog-actions">
+          <button
+            className="button button-quiet"
+            onClick={() => void validate()}
+            disabled={busy || validationBusy || providerId === "" || artifactPath.trim() === ""}
+          >
+            {validationBusy ? (
+              <LoaderCircle className="spin" size={15} />
+            ) : (
+              <ShieldCheck size={15} />
+            )}
+            {validationBusy ? "预检中..." : "构建预检"}
+          </button>
           <button className="button button-quiet" onClick={onClose} disabled={busy}>
             关闭
           </button>
@@ -181,6 +235,42 @@ export function BuildArtifactDialog({
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function BuildValidationResult({ result }: { result: BuildValidationResponse }) {
+  return (
+    <div
+      className={`build-result ${result.valid ? "" : "is-invalid"}`}
+      role={result.valid ? "status" : "alert"}
+    >
+      <div className="build-result-heading">
+        <div>
+          <p className="eyebrow">BUILD PREFLIGHT / {result.providerId}</p>
+          <strong>{result.valid ? "预检通过，可以启动构建" : "预检未通过，未启动构建"}</strong>
+        </div>
+        {result.valid ? <CheckCircle2 size={20} /> : <XCircle size={20} />}
+      </div>
+      {!result.valid && (
+        <ol className="build-event-list">
+          {result.errors.length === 0 ? (
+            <li className="is-failed">
+              <XCircle size={14} />
+              <span>UNKNOWN</span>
+              <small>提供器没有返回具体原因。</small>
+            </li>
+          ) : (
+            result.errors.map((issue) => (
+              <li className="is-failed" key={`${issue.code}-${issue.message}`}>
+                <XCircle size={14} />
+                <span>{issue.code}</span>
+                <small>{issue.message}</small>
+              </li>
+            ))
+          )}
+        </ol>
+      )}
     </div>
   );
 }

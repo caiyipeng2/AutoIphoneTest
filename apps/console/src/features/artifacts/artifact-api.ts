@@ -70,6 +70,18 @@ export interface BuildEventRecord {
   publishState?: "CREATED" | "DEDUPLICATED";
 }
 
+export interface BuildValidationIssueRecord {
+  code: string;
+  message: string;
+}
+
+export interface BuildValidationResponse {
+  schemaVersion: 1;
+  providerId: string;
+  valid: boolean;
+  errors: BuildValidationIssueRecord[];
+}
+
 export interface InstalledRegistrationResponse {
   schemaVersion: 1;
   state: "CREATED" | "DEDUPLICATED";
@@ -142,6 +154,26 @@ export async function buildArtifact(
   });
   if (!response.ok) throw await apiError(response, "artifact-build");
   return (await response.json()) as ArtifactImportResponse;
+}
+
+export async function validateBuildArtifact(
+  input: {
+    providerId: string;
+    kind: "APK" | "AAB";
+    artifactPath: string;
+    importSource: string;
+    originalName: string;
+  },
+  signal?: AbortSignal,
+): Promise<BuildValidationResponse> {
+  const response = await fetch("/api/artifacts/build/validate", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...csrfHeaders() },
+    body: JSON.stringify(input),
+    ...(signal === undefined ? {} : { signal }),
+  });
+  if (!response.ok) throw await apiError(response, "artifact-build-validate");
+  return (await response.json()) as BuildValidationResponse;
 }
 
 export async function registerInstalledArtifact(

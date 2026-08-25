@@ -266,6 +266,74 @@ describe("artifact routes", () => {
     await app.close();
   });
 
+  it("preflights a selected provider without starting its build", async () => {
+    const root = await mkdtemp(join(tmpdir(), "test-center-provider-preflight-"));
+    roots.push(root);
+    let received: BuildRequest | undefined;
+    const commandProvider: BuildProvider = {
+      id: "unity-command",
+      validate: async (request) => {
+        received = request;
+        return {
+          valid: false,
+          errors: [
+            {
+              code: "UNITY_PROJECT_NOT_FOUND",
+              message: "Unity projectPath does not exist.",
+            },
+          ],
+        };
+      },
+      build: async () => {
+        throw new Error("preflight must not start the build");
+      },
+      cancel: async () => undefined,
+    };
+    const port = 4787;
+    const app = await createApp({
+      port,
+      bootstrapCode: "provider-preflight-bootstrap",
+      launchSecret: "provider-preflight-secret",
+      artifactService: createService([commandProvider]),
+      artifactImportRoot: root,
+    });
+    const headers = await authenticatedHeaders(app, port, "provider-preflight-bootstrap");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/artifacts/build/validate",
+      headers: { ...headers, "content-type": "application/json" },
+      payload: {
+        providerId: "unity-command",
+        kind: "AAB",
+        importSource: "Builds",
+        artifactPath: "Builds/game.aab",
+        originalName: "game.aab",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      schemaVersion: 1,
+      providerId: "unity-command",
+      valid: false,
+      errors: [
+        {
+          code: "UNITY_PROJECT_NOT_FOUND",
+          message: "Unity projectPath does not exist.",
+        },
+      ],
+    });
+    expect(received).toMatchObject({
+      providerId: "unity-command",
+      kind: "AAB",
+      importSource: win32.join(root, "Builds"),
+      artifactPath: win32.join(root, "Builds", "game.aab"),
+      originalName: "game.aab",
+    });
+    await app.close();
+  });
+
   it("selects a provider, resolves relative paths below the import root, and returns events", async () => {
     const root = await mkdtemp(join(tmpdir(), "test-center-provider-build-"));
     roots.push(root);

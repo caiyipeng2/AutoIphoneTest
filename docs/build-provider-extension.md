@@ -17,6 +17,8 @@ Authenticated clients can call `GET /api/artifacts/providers` to discover the pr
 
 Authenticated clients can submit `POST /api/artifacts/build` with `providerId`, `kind`, `artifactPath`, and an optional `importSource`/`originalName`. Both paths are relative to the configured import root; absolute paths and `..` escapes are rejected before provider execution. The selected provider receives normalized absolute paths and returns the same artifact reference plus ordered build events. The existing multipart `POST /api/artifacts/import` route remains the default upload workflow.
 
+Before starting a long-running provider, clients can submit the same payload to `POST /api/artifacts/build/validate`. The route resolves the paths using the same import-root boundary, calls only the selected provider's `validate()` method, and returns `{ providerId, valid, errors }`. It never invokes the build command or publishes an artifact. The Apps page exposes this as `构建预检` and announces failed issues before the user starts a build.
+
 ## Enabling Unity command builds
 
 The runtime registers `unity-command` only when all three environment variables are present:

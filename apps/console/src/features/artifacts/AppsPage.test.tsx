@@ -144,4 +144,60 @@ describe("AppsPage", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("shows Unity preflight issues before starting a build", async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/artifacts/providers")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            schemaVersion: 1,
+            providers: [
+              { id: "artifact-import", default: true },
+              { id: "unity-command", default: false },
+            ],
+          }),
+        });
+      }
+      if (url.endsWith("/api/artifacts/build/validate")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            schemaVersion: 1,
+            providerId: "unity-command",
+            valid: false,
+            errors: [
+              {
+                code: "UNITY_PROJECT_NOT_FOUND",
+                message: "Unity 项目目录不存在",
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ schemaVersion: 1, artifacts: [] }) });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AppsPage />);
+    await screen.findByText("暂无符合筛选条件的制品。");
+    fireEvent.click(await screen.findByRole("button", { name: /按提供器构建/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "构建提供器" }), {
+      target: { value: "unity-command" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "构建输出路径" }), {
+      target: { value: "Builds/game.aab" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "构建预检" }));
+
+    expect(await screen.findByText("Unity 项目目录不存在")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/artifacts/build/validate",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/artifacts/build",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });

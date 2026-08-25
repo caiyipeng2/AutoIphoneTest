@@ -1106,6 +1106,11 @@ main {
   background: #f3f8ec;
   color: #344b32;
 }
+.build-result.is-invalid {
+  border-color: #e2b8ae;
+  background: #fff3f0;
+  color: #68362f;
+}
 .build-result-heading {
   display: flex;
   align-items: flex-start;
@@ -1115,6 +1120,9 @@ main {
 .build-result-heading > svg {
   flex: 0 0 auto;
   color: #5b8b4b;
+}
+.build-result.is-invalid .build-result-heading > svg {
+  color: #a34d3c;
 }
 .build-result-heading strong {
   display: block;

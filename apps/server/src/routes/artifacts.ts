@@ -114,8 +114,7 @@ export async function registerArtifactsRoutes(
     };
   });
 
-  app.post("/api/artifacts/build", async (request, reply) => {
-    let buildRequest: BuildRequest | undefined;
+  app.post("/api/artifacts/build/validate", async (request, reply) => {
     try {
       assertMutationAllowed(request, context);
       if (context.artifacts === undefined) {
@@ -129,22 +128,36 @@ export async function registerArtifactsRoutes(
           .code(404)
           .send({ error: `Build provider '${payload.providerId}' not found.` });
       }
-      const importSource =
-        payload.importSource === undefined || payload.importSource.trim() === ""
-          ? normalizedImportRoot
-          : resolveBuildPath(normalizedImportRoot, payload.importSource, "importSource");
-      const artifactPath = resolveBuildPath(
-        normalizedImportRoot,
-        payload.artifactPath,
-        "artifactPath",
-      );
-      buildRequest = {
+      const buildRequest = resolveBuildRequest(payload, normalizedImportRoot, provider.id);
+      const validation = await provider.validate(buildRequest);
+      return {
+        schemaVersion: 1,
         providerId: provider.id,
-        kind: payload.kind,
-        importSource,
-        artifactPath,
-        ...(payload.originalName === undefined ? {} : { originalName: payload.originalName }),
+        valid: validation.valid,
+        errors: validation.errors,
       };
+    } catch (error) {
+      return await reply.code(errorCode(error)).send({
+        error: error instanceof Error ? error.message : "Artifact build validation rejected.",
+      });
+    }
+  });
+
+  app.post("/api/artifacts/build", async (request, reply) => {
+    try {
+      assertMutationAllowed(request, context);
+      if (context.artifacts === undefined) {
+        return await reply.code(503).send({ error: "Artifact service unavailable." });
+      }
+      const payload = BuildRouteRequestSchema.parse(request.body);
+      const providers = context.artifacts.providers ?? [context.artifacts.provider];
+      const provider = providers.find((candidate) => candidate.id === payload.providerId);
+      if (provider === undefined) {
+        return await reply
+          .code(404)
+          .send({ error: `Build provider '${payload.providerId}' not found.` });
+      }
+      const buildRequest = resolveBuildRequest(payload, normalizedImportRoot, provider.id);
       const events: BuildEvent[] = [];
       const result = await provider.build(buildRequest, (event) => {
         events.push(event);
@@ -312,6 +325,25 @@ function resolveBuildPath(root: string, value: string, field: string): string {
     throw new TypeError(`${field} must remain below the configured import root.`);
   }
   return candidate;
+}
+
+function resolveBuildRequest(
+  payload: z.infer<typeof BuildRouteRequestSchema>,
+  root: string,
+  providerId: string,
+): BuildRequest {
+  const importSource =
+    payload.importSource === undefined || payload.importSource.trim() === ""
+      ? root
+      : resolveBuildPath(root, payload.importSource, "importSource");
+  const artifactPath = resolveBuildPath(root, payload.artifactPath, "artifactPath");
+  return {
+    providerId,
+    kind: payload.kind,
+    importSource,
+    artifactPath,
+    ...(payload.originalName === undefined ? {} : { originalName: payload.originalName }),
+  };
 }
 
 function filterArtifacts(

@@ -8,7 +8,9 @@ import {
   fetchBuildProviders,
   importArtifact,
   registerInstalledArtifact,
+  validateBuildArtifact,
   type BuildProviderRecord,
+  type BuildValidationResponse,
   type ArtifactRecord,
 } from "../features/artifacts/artifact-api";
 import { ArtifactTable } from "../features/artifacts/ArtifactTable";
@@ -127,6 +129,14 @@ export function AppsPage() {
     }
   };
 
+  const handleBuildValidation = async (input: {
+    providerId: string;
+    kind: "APK" | "AAB";
+    artifactPath: string;
+    importSource: string;
+    originalName: string;
+  }): Promise<BuildValidationResponse> => validateBuildArtifact(input);
+
   const copyHash = (hash: string) => {
     const write = navigator.clipboard?.writeText(hash);
     if (write === undefined) {
@@ -230,6 +240,7 @@ export function AppsPage() {
         error={error}
         providers={providers}
         onClose={() => setBuildOpen(false)}
+        onValidate={handleBuildValidation}
         onSubmit={handleBuild}
       />
     </PageFrame>
