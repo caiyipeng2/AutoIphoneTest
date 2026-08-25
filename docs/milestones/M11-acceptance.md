@@ -158,7 +158,7 @@ The recorder uses MP4 for the current scrcpy 3.1 plus Android 16 device combinat
 
 ## M0-M11 traceability
 
-Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), and [M11 Task 4](M11-task4-portable-acceptance.md).
+Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), and [M11 Task 6](M11-task6-real-package-acceptance.md).
 
 ## Decision
 
