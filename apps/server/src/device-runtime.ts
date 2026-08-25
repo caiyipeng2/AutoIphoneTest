@@ -14,8 +14,11 @@ import {
 } from "@test-center/artifacts";
 import {
   ArtifactImportProvider,
+  createUnityCommandArgumentBuilder,
+  UnityCommandBuildProvider,
   type ArtifactImportFileRequest,
   type ArtifactImportService,
+  type BuildProvider,
 } from "@test-center/build-provider";
 import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/device";
 import type Database from "better-sqlite3";
@@ -87,8 +90,13 @@ import type { DeploymentRouteService } from "./routes/deployments.js";
 import type { ArtifactRouteService, InstalledRegistrationResult } from "./routes/artifacts.js";
 import type { SessionRouteService } from "./routes/sessions.js";
 import { RuntimeSessionRouteService } from "./session-runtime.js";
+import {
+  parseBridgeMode,
+  parseUnityCommandConfig,
+  type BridgeMode,
+  type UnityCommandConfig,
+} from "./runtime-config.js";
 import { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
-import { parseBridgeMode, type BridgeMode } from "./runtime-config.js";
 import {
   ExcelReportExporter,
   JunitReportExporter,
@@ -250,6 +258,8 @@ export async function createRuntimeDeviceRegistry(
     client,
     projectRoot,
     paths.tempRoot,
+    undefined,
+    parseUnityCommandConfig(process.env),
   );
   const registry = new DeviceRegistry(
     new DeviceRepository(database),
@@ -736,6 +746,7 @@ export interface RuntimeArtifactMetadataParser {
 
 export class RuntimeArtifactRouteService implements ArtifactRouteService {
   public readonly provider: ArtifactImportProvider;
+  public readonly providers: readonly BuildProvider[];
   private readonly repository: ArtifactRepository;
   private readonly installedExecutor;
   private readonly metadataParser: RuntimeArtifactMetadataParser;
@@ -747,6 +758,7 @@ export class RuntimeArtifactRouteService implements ArtifactRouteService {
     projectRoot: string,
     tempRoot: string,
     metadataParser?: RuntimeArtifactMetadataParser,
+    unityCommandConfig?: UnityCommandConfig,
   ) {
     this.repository = new ArtifactRepository(database, store);
     const javaPath =
@@ -792,6 +804,21 @@ export class RuntimeArtifactRouteService implements ArtifactRouteService {
       discard: async (staged) => await this.removeStaged(staged),
     };
     this.provider = new ArtifactImportProvider(importService);
+    this.providers = [
+      this.provider,
+      ...(unityCommandConfig === undefined
+        ? []
+        : [
+            new UnityCommandBuildProvider(this.provider, {
+              executablePath: unityCommandConfig.executablePath,
+              projectPath: unityCommandConfig.projectPath,
+              args: createUnityCommandArgumentBuilder({
+                projectPath: unityCommandConfig.projectPath,
+                argumentTemplates: unityCommandConfig.argumentTemplates,
+              }),
+            }),
+          ]),
+    ];
   }
 
   public list() {

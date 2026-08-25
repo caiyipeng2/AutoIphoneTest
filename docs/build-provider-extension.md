@@ -16,3 +16,13 @@ The provider intentionally does not guess a project's Unity static build method,
 Authenticated clients can call `GET /api/artifacts/providers` to discover the provider IDs exposed by the current server. The response contains only `{ id, default }` descriptors and a schema version; executable paths, argument builders, signing data, and artifact storage paths are never returned. The default `artifact-import` provider remains available even when no optional provider is configured.
 
 Authenticated clients can submit `POST /api/artifacts/build` with `providerId`, `kind`, `artifactPath`, and an optional `importSource`/`originalName`. Both paths are relative to the configured import root; absolute paths and `..` escapes are rejected before provider execution. The selected provider receives normalized absolute paths and returns the same artifact reference plus ordered build events. The existing multipart `POST /api/artifacts/import` route remains the default upload workflow.
+
+## Enabling Unity command builds
+
+The runtime registers `unity-command` only when all three environment variables are present:
+
+- `TEST_CENTER_UNITY_EXECUTABLE_PATH` — absolute `Unity.exe` path.
+- `TEST_CENTER_UNITY_PROJECT_PATH` — absolute Unity project directory.
+- `TEST_CENTER_UNITY_BUILD_ARGS_JSON` — a non-empty JSON string array.
+
+Argument templates support only `${projectPath}`, `${artifactPath}`, `${importSource}`, `${kind}`, and `${originalName}`. The resolved values are passed as individual `spawn` arguments with `shell: false`; unknown placeholders or partial configuration fail before the provider is advertised. With no Unity configuration, the runtime exposes only `artifact-import` and the default upload flow is unchanged.

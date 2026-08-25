@@ -84,4 +84,39 @@ describe("RuntimeArtifactRouteService", () => {
       signerSha256: digest,
     });
   });
+
+  it("registers the optional Unity command provider only with explicit configuration", async () => {
+    const root = await mkdtemp(join(tmpdir(), "test-center-runtime-unity-provider-"));
+    roots.push(root);
+    const database = new Database(":memory:");
+    databases.push(database);
+    configureDatabase(database);
+    migrate(database, [FOUNDATION_MIGRATION, ARTIFACTS_MIGRATION]);
+    const service = new RuntimeArtifactRouteService(
+      database,
+      new ContentStore({ rootPath: win32.join(root, "artifacts") }),
+      new AdbClient({
+        adbPath: "D:\\Android\\platform-tools\\adb.exe",
+        cwd: root,
+        runner: {
+          run: async () => {
+            throw new Error("ADB should not run");
+          },
+        },
+      }),
+      root,
+      win32.join(root, "temp"),
+      undefined,
+      {
+        executablePath: "D:\\Unity\\Editor\\Unity.exe",
+        projectPath: root,
+        argumentTemplates: ["-batchmode", "-projectPath", "${projectPath}", "${artifactPath}"],
+      },
+    );
+
+    expect(service.providers.map((provider) => provider.id)).toEqual([
+      "artifact-import",
+      "unity-command",
+    ]);
+  });
 });

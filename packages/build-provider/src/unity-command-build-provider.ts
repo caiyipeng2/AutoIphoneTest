@@ -37,6 +37,27 @@ export interface UnityCommandBuildOptions {
   readonly execute?: UnityCommandExecution["execute"];
 }
 
+export interface UnityCommandArgumentTemplateConfig {
+  readonly projectPath: string;
+  readonly argumentTemplates: readonly string[];
+}
+
+export function createUnityCommandArgumentBuilder(
+  config: UnityCommandArgumentTemplateConfig,
+): (request: BuildRequest) => readonly string[] {
+  return (request) =>
+    config.argumentTemplates.map((template) =>
+      template.replace(/\$\{([^}]+)\}/g, (match, key: string) => {
+        if (key === "artifactPath") return request.artifactPath;
+        if (key === "importSource") return request.importSource;
+        if (key === "kind") return request.kind;
+        if (key === "originalName") return request.originalName ?? "";
+        if (key === "projectPath") return config.projectPath;
+        throw new TypeError(`Unsupported Unity command argument placeholder '${match}'.`);
+      }),
+    );
+}
+
 interface ActiveBuild {
   readonly controller: AbortController;
   delegatedBuildId?: string;

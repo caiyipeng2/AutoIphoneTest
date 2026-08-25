@@ -13,6 +13,7 @@ import {
 } from "./build-provider.js";
 import {
   UnityCommandBuildProvider,
+  createUnityCommandArgumentBuilder,
   type UnityCommandExecution,
   type UnityCommandExecutionInput,
 } from "./unity-command-build-provider.js";
@@ -83,6 +84,55 @@ function executor(run: (input: UnityCommandExecutionInput) => Promise<void>) {
 }
 
 describe("unity command build provider", () => {
+  it("expands only the documented argument placeholders without invoking a shell", () => {
+    const buildArgs = createUnityCommandArgumentBuilder({
+      projectPath: "E:\\Games\\IdleWeaponShopTycoon",
+      argumentTemplates: [
+        "-batchmode",
+        "-projectPath",
+        "${projectPath}",
+        "-buildPath",
+        "${artifactPath}",
+        "${kind}",
+        "${originalName}",
+      ],
+    });
+
+    expect(
+      buildArgs({
+        providerId: "unity-command",
+        kind: "APK",
+        importSource: "E:\\Imports",
+        artifactPath: "E:\\Imports\\Builds\\game.apk",
+        originalName: "game.apk",
+      }),
+    ).toEqual([
+      "-batchmode",
+      "-projectPath",
+      "E:\\Games\\IdleWeaponShopTycoon",
+      "-buildPath",
+      "E:\\Imports\\Builds\\game.apk",
+      "APK",
+      "game.apk",
+    ]);
+  });
+
+  it("rejects unknown argument placeholders before spawning Unity", () => {
+    const buildArgs = createUnityCommandArgumentBuilder({
+      projectPath: "E:\\Games\\IdleWeaponShopTycoon",
+      argumentTemplates: ["-method", "${unknown}"],
+    });
+
+    expect(() =>
+      buildArgs({
+        providerId: "unity-command",
+        kind: "APK",
+        importSource: "E:\\Imports",
+        artifactPath: "E:\\Imports\\game.apk",
+      }),
+    ).toThrow("Unsupported Unity command argument placeholder");
+  });
+
   it("runs a configured argument-array command and republishes through artifact-import", async () => {
     const { root, projectPath, executablePath } = await fixture();
     const imported: BuildEvent[] = [];
