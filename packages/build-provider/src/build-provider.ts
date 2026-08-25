@@ -25,7 +25,7 @@ export type BuildValidation = z.infer<typeof BuildValidationSchema>;
 
 export const BuildEventSchema = z.object({
   buildId: z.string().min(1),
-  phase: z.enum(["validate", "hash", "parse", "publish"]),
+  phase: z.enum(["validate", "build", "hash", "parse", "publish"]),
   status: z.enum(["completed", "failed"]),
   at: z.string().datetime({ offset: true }),
   message: z.string().optional(),
@@ -73,6 +73,16 @@ export type BuildProviderErrorCode =
   | "PATH_NOT_FOUND"
   | "PATH_NOT_FILE"
   | "KIND_EXTENSION_MISMATCH"
+  | "UNITY_EXECUTABLE_NOT_ABSOLUTE"
+  | "UNITY_EXECUTABLE_NOT_FOUND"
+  | "UNITY_EXECUTABLE_NOT_FILE"
+  | "UNITY_PROJECT_NOT_ABSOLUTE"
+  | "UNITY_PROJECT_NOT_FOUND"
+  | "UNITY_PROJECT_NOT_DIRECTORY"
+  | "BUILD_OUTPUT_NOT_ABSOLUTE"
+  | "BUILD_OUTPUT_OUTSIDE_IMPORT_SOURCE"
+  | "COMMAND_NOT_FOUND"
+  | "COMMAND_FAILED"
   | "CANCELLED";
 
 const BUILD_PROVIDER_ERROR_CODES: ReadonlySet<string> = new Set([
@@ -88,6 +98,16 @@ const BUILD_PROVIDER_ERROR_CODES: ReadonlySet<string> = new Set([
   "PATH_NOT_FOUND",
   "PATH_NOT_FILE",
   "KIND_EXTENSION_MISMATCH",
+  "UNITY_EXECUTABLE_NOT_ABSOLUTE",
+  "UNITY_EXECUTABLE_NOT_FOUND",
+  "UNITY_EXECUTABLE_NOT_FILE",
+  "UNITY_PROJECT_NOT_ABSOLUTE",
+  "UNITY_PROJECT_NOT_FOUND",
+  "UNITY_PROJECT_NOT_DIRECTORY",
+  "BUILD_OUTPUT_NOT_ABSOLUTE",
+  "BUILD_OUTPUT_OUTSIDE_IMPORT_SOURCE",
+  "COMMAND_NOT_FOUND",
+  "COMMAND_FAILED",
   "CANCELLED",
 ]);
 

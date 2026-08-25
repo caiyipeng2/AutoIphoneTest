@@ -152,7 +152,7 @@ The recorder uses MP4 for the current scrcpy 3.1 plus Android 16 device combinat
 
 - The portable runtime now wires the pinned scrcpy 3.1 server asset into a serial-bound Tango `ViewProvider` when the asset is present, and the authenticated video gateway starts it on demand. The 60-minute result in this acceptance predates runtime video recording; the separate post-M11 smoke above proves the current leader-video publication path.
 - Appium screenshot fallback and leader-video publication are implemented and verified on a real Android device. Screenshot fallback still requires an active `RUNNING` worker-owned Appium session; without one, the degraded provider remains unavailable.
-- The Unity command build provider remains intentionally unimplemented; use an imported APK/AAB or an installed fixture.
+- The `unity-command` build provider is available as an opt-in adapter. It invokes a configured absolute Unity executable with shell-free argument arrays and reuses the immutable artifact-import pipeline. The default Apps route still uses `artifact-import`; enabling command builds for a concrete Unity project requires an explicit arguments builder, signing profile, and real package acceptance.
 - Fault injection and active-session recovery acceptance remain skipped per prior user confirmation.
 
 ## M0-M11 traceability

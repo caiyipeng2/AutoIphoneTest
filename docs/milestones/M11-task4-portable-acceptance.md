@@ -8,7 +8,7 @@ This atomic slice assembles a self-contained Windows directory and an atomic ZIP
 - `scripts/write-release-manifest.mjs` rejects symbolic links and records a license component for every shipped file.
 - `scripts/verify-portable.ps1` verifies every manifest hash and the bundled Node version after extraction.
 - `tests/integration/portable-layout.test.ts` checks required runtime layout and rejects source paths, escaping links, caches, secrets, imported apps, and historical runs.
-- `config/settings.example.json`, `THIRD_PARTY_NOTICES.md`, and the operating/extension guides document the supported workflow and the unimplemented Unity command build provider.
+- `config/settings.example.json`, `THIRD_PARTY_NOTICES.md`, and the operating/extension guides document the supported workflow and the opt-in Unity command build provider.
 
 ## Verification
 
