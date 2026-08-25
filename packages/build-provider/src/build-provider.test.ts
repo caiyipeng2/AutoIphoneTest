@@ -44,4 +44,23 @@ describe("build provider registry", () => {
       expect.objectContaining<Partial<BuildProviderError>>({ code: "UNKNOWN_PROVIDER" }),
     );
   });
+
+  it("lists provider ids in registration order without exposing provider internals", () => {
+    const first: BuildProvider = {
+      id: "first",
+      validate: () => ({ valid: true, errors: [] }),
+      build: async () => ({ buildId: "build-1", artifact }),
+      cancel: async () => undefined,
+    };
+    const second: BuildProvider = {
+      id: "second",
+      validate: () => ({ valid: true, errors: [] }),
+      build: async () => ({ buildId: "build-2", artifact }),
+      cancel: async () => undefined,
+    };
+    const registry = new BuildProviderRegistry([first, second]);
+
+    expect(registry.list()).toEqual([first, second]);
+    expect(registry.list()).not.toBe((registry as unknown as { providers: unknown }).providers);
+  });
 });

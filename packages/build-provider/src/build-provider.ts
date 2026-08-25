@@ -149,4 +149,8 @@ export class BuildProviderRegistry {
     }
     return provider;
   }
+
+  public list(): readonly BuildProvider[] {
+    return [...this.providers.values()];
+  }
 }

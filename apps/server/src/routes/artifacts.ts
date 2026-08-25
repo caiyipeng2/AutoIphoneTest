@@ -39,6 +39,7 @@ export interface InstalledRegistrationResult {
 
 export interface ArtifactRouteService {
   readonly provider: BuildProvider;
+  readonly providers?: readonly BuildProvider[];
   list(): readonly AppArtifact[];
   get(id: string): AppArtifact | undefined;
   registerInstalled(input: {
@@ -85,6 +86,23 @@ export async function registerArtifactsRoutes(
     const artifact = context.artifacts?.get(decodeURIComponent(request.params.id));
     if (artifact === undefined) return await reply.code(404).send({ error: "Artifact not found." });
     return { schemaVersion: 1, artifact };
+  });
+
+  app.get("/api/artifacts/providers", async (request, reply) => {
+    if (requireSession(request, context) === undefined) {
+      return await reply.code(401).send({ error: "Authentication required." });
+    }
+    if (context.artifacts === undefined) {
+      return await reply.code(503).send({ error: "Artifact service unavailable." });
+    }
+    const providers = context.artifacts.providers ?? [context.artifacts.provider];
+    return {
+      schemaVersion: 1,
+      providers: providers.map((provider) => ({
+        id: provider.id,
+        default: provider.id === context.artifacts?.provider.id,
+      })),
+    };
   });
 
   app.post("/api/artifacts/import", async (request, reply) => {

@@ -216,6 +216,53 @@ describe("artifact routes", () => {
     await app.close();
   });
 
+  it("lists the default and optional build providers without leaking configuration", async () => {
+    const root = await mkdtemp(join(tmpdir(), "test-center-provider-route-"));
+    roots.push(root);
+    const port = 4784;
+    const app = await createApp({
+      port,
+      bootstrapCode: "providers-bootstrap",
+      launchSecret: "providers-secret",
+      artifactService: createService(),
+      artifactImportRoot: root,
+    });
+    const headers = await authenticatedHeaders(app, port, "providers-bootstrap");
+
+    const providers = await app.inject({ method: "GET", url: "/api/artifacts/providers", headers });
+
+    expect(providers.statusCode).toBe(200);
+    expect(providers.json()).toEqual({
+      schemaVersion: 1,
+      providers: [{ id: "artifact-import", default: true }],
+    });
+    expect(JSON.stringify(providers.json())).not.toContain("storedPath");
+    expect(JSON.stringify(providers.json())).not.toContain("artifactPath");
+    await app.close();
+  });
+
+  it("protects provider discovery with the existing session boundary", async () => {
+    const root = await mkdtemp(join(tmpdir(), "test-center-provider-auth-"));
+    roots.push(root);
+    const port = 4785;
+    const app = await createApp({
+      port,
+      bootstrapCode: "providers-auth-bootstrap",
+      launchSecret: "providers-auth-secret",
+      artifactService: createService(),
+      artifactImportRoot: root,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/artifacts/providers",
+      headers: { host: `127.0.0.1:${String(port)}` },
+    });
+
+    expect(response.statusCode).toBe(401);
+    await app.close();
+  });
+
   it("rejects missing CSRF and maps a truncated upload to 413", async () => {
     const root = await mkdtemp(join(tmpdir(), "test-center-artifact-limit-"));
     roots.push(root);
