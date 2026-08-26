@@ -76,7 +76,7 @@ The analyzer uses the fixed thresholds in `docs/superpowers/plans/2026-07-31-m11
 
 | Check                      | Result                                                                                 |
 | -------------------------- | -------------------------------------------------------------------------------------- |
-| Full Vitest suite          | PASS, 144 files, 565 tests; 1 file and 2 tests skipped by existing suite configuration |
+| Full Vitest suite          | PASS, 146 files, 589 tests; 1 file and 2 tests skipped by existing suite configuration |
 | M11 analyzer tests         | PASS, 5 tests                                                                          |
 | TypeScript build           | PASS, `npm run typecheck`                                                              |
 | New M11 files ESLint       | PASS                                                                                   |
@@ -84,6 +84,15 @@ The analyzer uses the fixed thresholds in `docs/superpowers/plans/2026-07-31-m11
 | Portable manifest verifier | PASS, 41,254 files                                                                     |
 
 Repository-wide ESLint/Prettier commands still report pre-existing findings in generated Unity `Library/Bee` files and unrelated legacy scripts; those files were not changed by this slice.
+
+## Current-main portable revalidation
+
+M11 Task 9 reran the portable build and real two-device flow from the current
+source tree after the shared ADB-port change. The new clean runtime root is
+`E:\M11-Portable-Verify-20260826-v61`, with 41,303 manifest files verified by
+`scripts/verify-portable.ps1`. The two-device run, optional exports, downloaded
+hashes, and the two Windows compatibility fixes are recorded in
+[M11 Task 9](M11-task9-current-main-portable-revalidation.md).
 
 ## Post-M11 runtime video smoke
 
@@ -158,10 +167,12 @@ The recorder uses MP4 for the current scrcpy 3.1 plus Android 16 device combinat
 
 ## M0-M11 traceability
 
-Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), and [M11 Task 6](M11-task6-real-package-acceptance.md).
+Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), and [M11 Task 9](M11-task9-current-main-portable-revalidation.md).
 
 ## Decision
 
-**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, and 60-minute Appium-only two-device run: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
+**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, 60-minute Appium-only two-device run, and current-main two-device revalidation: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
 
-All source changes are intentionally uncommitted and unpushed pending explicit user approval. Do not merge, tag, create a GitHub Release, or delete the clean extraction before final acceptance.
+The Task 9 source changes and acceptance record are currently uncommitted and
+unpushed pending explicit user approval. Do not merge, tag, create a GitHub
+Release, or delete the clean extraction before final acceptance.

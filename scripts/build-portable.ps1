@@ -20,11 +20,11 @@ function Copy-Tree([string]$Source, [string]$Destination) {
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
     foreach ($entry in Get-ChildItem -LiteralPath $Source -Force) {
         $target = Join-Path $Destination $entry.Name
-        if ($entry.LinkType) {
+        $linkTypeProperty = $entry.PSObject.Properties['LinkType']
+        if ($null -ne $linkTypeProperty -and -not [string]::IsNullOrWhiteSpace([string]$linkTypeProperty.Value)) {
             # npm/Appium may use workspace junctions. Resolve them into ordinary
             # copied files so the extracted release never depends on the build host.
-            $resolved = $entry.ResolvedTarget
-            if ([string]::IsNullOrWhiteSpace($resolved)) { throw "Unable to resolve source link: $($entry.FullName)" }
+            $resolved = Resolve-LinkTarget $entry
             if ($entry.PSIsContainer) {
                 Copy-Tree $resolved $target
             } else {
@@ -38,6 +38,28 @@ function Copy-Tree([string]$Source, [string]$Destination) {
             Copy-Item -LiteralPath $entry.FullName -Destination $target -Force
         }
     }
+}
+function Resolve-LinkTarget($Entry) {
+    # Windows PowerShell 5.1 does not expose ResolvedTarget consistently on
+    # FileInfo/DirectoryInfo objects. Read link metadata defensively and fall
+    # back to LinkTarget/Target, resolving relative targets beside the link.
+    $resolvedProperty = $Entry.PSObject.Properties['ResolvedTarget']
+    $resolved = if ($null -ne $resolvedProperty) { $resolvedProperty.Value } else { $null }
+    if ([string]::IsNullOrWhiteSpace([string]$resolved)) {
+        $linkTargetProperty = $Entry.PSObject.Properties['LinkTarget']
+        $resolved = if ($null -ne $linkTargetProperty) { $linkTargetProperty.Value } else { $null }
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$resolved)) {
+        $targetProperty = $Entry.PSObject.Properties['Target']
+        $resolved = if ($null -ne $targetProperty) { $targetProperty.Value } else { $null }
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$resolved)) {
+        throw "Unable to resolve source link: $($Entry.FullName)"
+    }
+    if (-not [System.IO.Path]::IsPathRooted([string]$resolved)) {
+        $resolved = Join-Path (Split-Path -Parent $Entry.FullName) ([string]$resolved)
+    }
+    return Resolve-FullPath ([string]$resolved)
 }
 function Copy-File([string]$Source, [string]$Destination) {
     Require-File $Source 'Required source file'

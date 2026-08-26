@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { mkdir, writeFile } from "node:fs/promises";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { createServer } from "node:net";
 import { win32 } from "node:path";
 
 interface ProductProcess {
@@ -211,7 +212,7 @@ async function runAdb(
 }
 
 async function startProduct(): Promise<ProductProcess> {
-  const port = 4780 + Math.floor(Math.random() * 400);
+  const port = await allocateLoopbackPort();
   const bootstrapCode = randomUUID();
   const launchSecret = randomUUID();
   const child = spawn(nodePath, [serverPath], {
@@ -266,6 +267,28 @@ async function startProduct(): Promise<ProductProcess> {
     throw new Error(`Portable server readiness verification failed: ${JSON.stringify(readiness)}.`);
   }
   return { child, port, bootstrapCode, launchSecret };
+}
+
+async function allocateLoopbackPort(): Promise<number> {
+  const probe = createServer();
+  await new Promise<void>((resolve, reject) => {
+    probe.once("error", reject);
+    probe.listen({ host: "127.0.0.1", port: 0 }, () => resolve());
+  });
+  const address = probe.address();
+  if (address === null || typeof address === "string") {
+    await closeServer(probe);
+    throw new Error("The operating system did not return a loopback port.");
+  }
+  const port = address.port;
+  await closeServer(probe);
+  return port;
+}
+
+async function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error === undefined ? resolve() : reject(error)));
+  });
 }
 
 async function readJsonLine(
