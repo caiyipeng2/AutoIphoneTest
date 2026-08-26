@@ -13,6 +13,9 @@ import {
   migrate,
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
+  ACTION_COMMANDS_MIGRATION,
+  RUN_MEMBERSHIP_MIGRATION,
+  RUN_FAILURE_POLICY_MIGRATION,
 } from "../packages/database/dist/index.js";
 import {
   ActionDispatcher,
@@ -43,6 +46,9 @@ migrate(database, [
   DEVICES_MIGRATION,
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
+  ACTION_COMMANDS_MIGRATION,
+  RUN_MEMBERSHIP_MIGRATION,
+  RUN_FAILURE_POLICY_MIGRATION,
 ]);
 for (const serial of serials) {
   database
