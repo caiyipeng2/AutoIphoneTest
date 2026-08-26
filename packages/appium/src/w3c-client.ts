@@ -13,6 +13,8 @@ const CapabilitiesSchema = z
     udid: z.string().min(1).max(256),
     systemPort: z.number().int().min(1).max(65_535),
     mjpegServerPort: z.number().int().min(1).max(65_535),
+    adbPort: z.number().int().min(1).max(65_535).optional(),
+    suppressKillServer: z.boolean().optional(),
     noReset: z.literal(true),
     newCommandTimeout: z.number().int().positive().max(86_400),
   })
@@ -447,6 +449,10 @@ function toW3cCapabilities(capabilities: DeviceSessionCapabilities): Record<stri
     "appium:udid": capabilities.udid,
     "appium:systemPort": capabilities.systemPort,
     "appium:mjpegServerPort": capabilities.mjpegServerPort,
+    ...(capabilities.adbPort === undefined ? {} : { "appium:adbPort": capabilities.adbPort }),
+    ...(capabilities.suppressKillServer === undefined
+      ? {}
+      : { "appium:suppressKillServer": capabilities.suppressKillServer }),
     "appium:noReset": capabilities.noReset,
     "appium:newCommandTimeout": capabilities.newCommandTimeout,
   };

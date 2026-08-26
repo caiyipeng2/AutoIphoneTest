@@ -13,6 +13,9 @@ const packageName = process.env.TEST_CENTER_PACKAGE ?? "com.hg.idleweaponshoptyc
 const appiumPort = Number(process.env.TEST_CENTER_M9_APPIUM_PORT ?? 4723);
 const systemPort = Number(process.env.TEST_CENTER_M9_SYSTEM_PORT ?? 8200);
 const mjpegPort = Number(process.env.TEST_CENTER_M9_MJPEG_PORT ?? 7810);
+const adbPort = readOptionalPort(
+  process.env.TEST_CENTER_APPIUM_ADB_PORT ?? process.env.TEST_CENTER_ADB_SERVER_PORT,
+);
 const dataRoot = win32.join(projectRoot, "data", "hardware-m9-longpress-drag");
 const logPath = win32.join(dataRoot, "appium.log");
 const appiumHome = win32.join(projectRoot, "data", "appium-home");
@@ -41,6 +44,8 @@ try {
     udid: serial,
     systemPort,
     mjpegServerPort: mjpegPort,
+    ...(adbPort === undefined ? {} : { adbPort }),
+    ...(adbPort === undefined ? {} : { suppressKillServer: true }),
     noReset: true,
     newCommandTimeout: 60,
   });
@@ -82,6 +87,15 @@ try {
 } finally {
   if (fence !== undefined) await client.deleteSession(fence).catch(() => undefined);
   await service.stop().catch(() => undefined);
+}
+
+function readOptionalPort(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 65_535) {
+    throw new TypeError(`Invalid Appium ADB port: ${value}.`);
+  }
+  return parsed;
 }
 
 async function waitForPackage(

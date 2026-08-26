@@ -16,6 +16,10 @@ const adbPath =
 const appiumPort = Number(process.env.TEST_CENTER_M9_TERMINATE_APPIUM_PORT ?? 4726);
 const systemPort = Number(process.env.TEST_CENTER_M9_TERMINATE_SYSTEM_PORT ?? 8203);
 const mjpegPort = Number(process.env.TEST_CENTER_M9_TERMINATE_MJPEG_PORT ?? 7813);
+const adbPort = readOptionalPort(
+  process.env.TEST_CENTER_APPIUM_ADB_PORT ?? process.env.TEST_CENTER_ADB_SERVER_PORT,
+);
+const adbEnv = createAdbEnvironment(adbPort);
 const dataRoot = win32.join(projectRoot, "data", "hardware-m9-terminate");
 const service = new AppiumService({
   executablePath: process.execPath,
@@ -30,7 +34,7 @@ const client = new AppiumW3cClient({
   serial,
   generation: 1,
 });
-const adb = new AdbClient({ adbPath, cwd: projectRoot });
+const adb = new AdbClient({ adbPath, cwd: projectRoot, env: adbEnv });
 
 let fence: SessionFence | undefined;
 try {
@@ -41,6 +45,8 @@ try {
     udid: serial,
     systemPort,
     mjpegServerPort: mjpegPort,
+    ...(adbPort === undefined ? {} : { adbPort }),
+    ...(adbPort === undefined ? {} : { suppressKillServer: true }),
     noReset: true,
     newCommandTimeout: 60,
   });
@@ -66,6 +72,24 @@ try {
 } finally {
   if (fence !== undefined) await client.deleteSession(fence).catch(() => undefined);
   await service.stop().catch(() => undefined);
+}
+
+function readOptionalPort(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 65_535) {
+    throw new TypeError(`Invalid Appium ADB port: ${value}.`);
+  }
+  return parsed;
+}
+
+function createAdbEnvironment(port: number | undefined): NodeJS.ProcessEnv {
+  if (port === undefined) return process.env;
+  return {
+    ...process.env,
+    ADB_SERVER_SOCKET: `tcp:127.0.0.1:${String(port)}`,
+    ANDROID_ADB_SERVER_PORT: String(port),
+  };
 }
 
 async function readPid(): Promise<string | undefined> {

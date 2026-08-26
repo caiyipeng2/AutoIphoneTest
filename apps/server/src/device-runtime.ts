@@ -251,6 +251,9 @@ export async function createRuntimeDeviceRegistry(
   const adbPath =
     process.env.TEST_CENTER_ADB_PATH ??
     "D:\\Unity\\Editor\\Data\\PlaybackEngines\\AndroidPlayer\\SDK\\platform-tools\\adb.exe";
+  const appiumAdbPort = readOptionalPort(
+    process.env.TEST_CENTER_APPIUM_ADB_PORT ?? process.env.TEST_CENTER_ADB_SERVER_PORT,
+  );
   const client = new AdbClient({ adbPath, cwd: projectRoot });
   const artifactService = new RuntimeArtifactRouteService(
     database,
@@ -272,6 +275,7 @@ export async function createRuntimeDeviceRegistry(
     adbPath,
     registry,
     bridgeMode,
+    appiumAdbPort,
   );
   const videoCoordinator = createConfiguredRuntimeVideoCoordinator({
     registry,
@@ -476,6 +480,7 @@ function createRuntimeWorkerCoordinator(
   adbPath: string,
   registry: DeviceRegistry,
   bridgeMode: BridgeMode,
+  appiumAdbPort: number | undefined,
 ): RuntimeWorkerCoordinator {
   const ownerPid = process.pid;
   const client = new AdbClient({ adbPath, cwd: projectRoot });
@@ -552,6 +557,9 @@ function createRuntimeWorkerCoordinator(
         owner: workerOwner,
         runId,
         resourceManager: resources,
+        ...(appiumAdbPort === undefined
+          ? {}
+          : { adbPort: appiumAdbPort, suppressKillServer: true }),
         ...bridgeOptions,
         runNonceHash,
         actionViewport: readDeviceViewport(registry.get(serial)?.metadata),
@@ -600,7 +608,16 @@ function createConfiguredPreflightProbe(): AppiumPreflightProbe | undefined {
   if (baseUrl === undefined || baseUrl.trim() === "") return undefined;
   const systemPort = Number(process.env.TEST_CENTER_APPIUM_SYSTEM_PORT ?? 8201);
   const mjpegServerPort = Number(process.env.TEST_CENTER_APPIUM_MJPEG_PORT ?? 7811);
-  return new AppiumPreflightProbe({ baseUrl, systemPort, mjpegServerPort });
+  const adbPort = readOptionalPort(
+    process.env.TEST_CENTER_APPIUM_ADB_PORT ?? process.env.TEST_CENTER_ADB_SERVER_PORT,
+  );
+  return new AppiumPreflightProbe({
+    baseUrl,
+    systemPort,
+    mjpegServerPort,
+    ...(adbPort === undefined ? {} : { adbPort }),
+    ...(adbPort === undefined ? {} : { suppressKillServer: true }),
+  });
 }
 
 function createConfiguredActionDispatcher(
@@ -616,6 +633,9 @@ function createConfiguredActionDispatcher(
   const baseUrl = process.env.TEST_CENTER_APPIUM_URL?.trim();
   const systemPort = Number(process.env.TEST_CENTER_APPIUM_SYSTEM_PORT ?? 8201);
   const mjpegServerPort = Number(process.env.TEST_CENTER_APPIUM_MJPEG_PORT ?? 7811);
+  const adbPort = readOptionalPort(
+    process.env.TEST_CENTER_APPIUM_ADB_PORT ?? process.env.TEST_CENTER_ADB_SERVER_PORT,
+  );
   const viewport = {
     width: readPositiveInteger(process.env.TEST_CENTER_APPIUM_VIEWPORT_WIDTH, 1080),
     height: readPositiveInteger(process.env.TEST_CENTER_APPIUM_VIEWPORT_HEIGHT, 2340),
@@ -682,6 +702,8 @@ function createConfiguredActionDispatcher(
             baseUrl,
             systemPort: systemPort + portIndex,
             mjpegServerPort: mjpegServerPort + portIndex,
+            ...(adbPort === undefined ? {} : { adbPort }),
+            ...(adbPort === undefined ? {} : { suppressKillServer: true }),
             viewport,
             faultSink: (event) => workerCoordinator.publishFault(toRuntimeFaultEvent(event)),
           });
@@ -713,6 +735,15 @@ function toRuntimeFaultEvent(event: AppiumActionFaultEvent) {
 function readPositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value ?? fallback);
   return Number.isSafeInteger(parsed) && parsed >= 2 ? parsed : fallback;
+}
+
+function readOptionalPort(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 65_535) {
+    throw new TypeError(`Invalid Appium ADB port: ${value}.`);
+  }
+  return parsed;
 }
 
 function readDeviceViewport(metadata: Readonly<Record<string, unknown>> | undefined): {

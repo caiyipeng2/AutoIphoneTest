@@ -15,6 +15,8 @@ describe("AppiumPreflightProbe", () => {
           udid: fence.serial,
           systemPort: 8201,
           mjpegServerPort: 7811,
+          adbPort: 5038,
+          suppressKillServer: true,
           noReset: true,
         });
         return fence;
@@ -27,6 +29,8 @@ describe("AppiumPreflightProbe", () => {
       baseUrl: "http://127.0.0.1:4723",
       systemPort: 8201,
       mjpegServerPort: 7811,
+      adbPort: 5038,
+      suppressKillServer: true,
       clientFactory: () => client,
     });
 

@@ -45,6 +45,8 @@ export interface AppiumActionExecutorOptions {
   readonly baseUrl: string;
   readonly systemPort: number;
   readonly mjpegServerPort: number;
+  readonly adbPort?: number;
+  readonly suppressKillServer?: boolean;
   readonly viewport: ViewportSize;
   readonly requestTimeoutMs?: number;
   readonly foregroundTimeoutMs?: number;
@@ -73,6 +75,12 @@ export interface AppiumActionResult {
 export class AppiumActionExecutor {
   public constructor(private readonly options: AppiumActionExecutorOptions) {
     assertViewport(options.viewport);
+    if (
+      options.adbPort !== undefined &&
+      (!Number.isSafeInteger(options.adbPort) || options.adbPort < 1 || options.adbPort > 65_535)
+    ) {
+      throw new TypeError("Appium adbPort is invalid.");
+    }
   }
 
   public async execute(input: AppiumActionInput): Promise<AppiumActionResult> {
@@ -95,6 +103,10 @@ export class AppiumActionExecutor {
         udid: input.serial,
         systemPort: this.options.systemPort,
         mjpegServerPort: this.options.mjpegServerPort,
+        ...(this.options.adbPort === undefined ? {} : { adbPort: this.options.adbPort }),
+        ...(this.options.suppressKillServer === undefined
+          ? {}
+          : { suppressKillServer: this.options.suppressKillServer }),
         noReset: true,
         newCommandTimeout: 60,
       });

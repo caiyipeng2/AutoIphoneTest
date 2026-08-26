@@ -130,6 +130,25 @@ describe("AppiumW3cClient", () => {
     expect(alwaysMatch.udid).toBeUndefined();
   });
 
+  it("passes an explicit ADB server port to UiAutomator2", async () => {
+    let requestBody = "";
+    const baseUrl = await createFakeServer(async (_request, init) => {
+      requestBody = String(init?.body ?? "");
+      return Response.json({
+        sessionId: "session-adb-port",
+        value: { sessionId: "session-adb-port", capabilities: {} },
+      });
+    });
+    const client = new AppiumW3cClient({ baseUrl, serial: "serial-a", generation: 1 });
+
+    await client.createSession({ ...capabilities(), adbPort: 5038, suppressKillServer: true });
+
+    expect(JSON.parse(requestBody).capabilities.alwaysMatch).toMatchObject({
+      "appium:adbPort": 5038,
+      "appium:suppressKillServer": true,
+    });
+  });
+
   it("supports only the narrow product endpoints and preserves the fence on responses", async () => {
     const requests: string[] = [];
     const baseUrl = await createFakeServer(async (request) => {

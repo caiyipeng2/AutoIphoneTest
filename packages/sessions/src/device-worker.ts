@@ -98,6 +98,8 @@ export interface DeviceWorkerOptions {
     input: DeviceWorkerAppiumServiceFactoryInput,
   ) => AppiumServiceLike;
   readonly appiumBaseUrl?: (lease: PortLease) => string;
+  readonly adbPort?: number;
+  readonly suppressKillServer?: boolean;
   readonly bridgeForwarder?: DeviceWorkerBridgeForwarder;
   readonly bridgeSessionFactory?: (
     input: DeviceWorkerBridgeSessionFactoryInput,
@@ -135,6 +137,8 @@ export class DeviceWorker {
   private readonly resourceManager: DeviceWorkerOptions["resourceManager"];
   private readonly appiumServiceFactory: DeviceWorkerOptions["appiumServiceFactory"];
   private readonly appiumBaseUrl: (lease: PortLease) => string;
+  private readonly adbPort: number | undefined;
+  private readonly suppressKillServer: boolean | undefined;
   private readonly stateListeners = new Set<(state: DeviceWorkerState) => void>();
   private _state: DeviceWorkerState = "DISCONNECTED";
   private _generation = 1;
@@ -173,6 +177,14 @@ export class DeviceWorker {
     this.runId = options.runId;
     this.resourceManager = options.resourceManager;
     this.appiumServiceFactory = options.appiumServiceFactory;
+    if (
+      options.adbPort !== undefined &&
+      (!Number.isSafeInteger(options.adbPort) || options.adbPort < 1 || options.adbPort > 65_535)
+    ) {
+      throw new TypeError("Device worker adbPort is invalid.");
+    }
+    this.adbPort = options.adbPort;
+    this.suppressKillServer = options.suppressKillServer;
     this.bridgeForwarder = options.bridgeForwarder;
     this.bridgeSessionFactory = options.bridgeSessionFactory;
     this.bridgeDevicePort = options.bridgeDevicePort ?? 17_501;
@@ -491,6 +503,10 @@ export class DeviceWorker {
       udid: this.serial,
       systemPort: lease.systemPort,
       mjpegServerPort: lease.mjpegPort,
+      ...(this.adbPort === undefined ? {} : { adbPort: this.adbPort }),
+      ...(this.suppressKillServer === undefined
+        ? {}
+        : { suppressKillServer: this.suppressKillServer }),
       noReset: true,
       newCommandTimeout: 60,
     };
