@@ -17,17 +17,36 @@ M10 交付历史结果、离线 HTML、原子证据 ZIP、报告最终化恢复�
 
 ## 新鲜自动化验证
 
-| 检查                  | 命令                                                                                                                                                                                | 结果                           |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| M10 报告定向测试      | `npx vitest run tests/integration/report-finalization.test.ts tests/integration/report-persistent-crash-recovery.test.ts tests/security/report-output.test.ts packages/reports/src` | 16 个测试文件、48 个测试通过   |
-| 全量单元/集成测试     | `npm test`                                                                                                                                                                          | 135 个测试文件、522 个测试通过 |
-| TypeScript            | `npm run typecheck`                                                                                                                                                                 | 通过                           |
-| ESLint                | `npm run lint`                                                                                                                                                                      | 通过                           |
-| 控制台生产构建        | `npm run build --workspace @test-center/console`                                                                                                                                    | 通过                           |
-| Playwright E2E        | `node .\\node_modules\\@playwright\\test\\cli.js test --workers=1`                                                                                                                  | 14 个用例通过，退出码 0        |
-| 离线 fixture 静态预检 | `powershell -ExecutionPolicy Bypass -File scripts/verify-report.ps1 -OutputRoot output/playwright/m10-acceptance-fixtures`                                                          | 通过，3 个 HTML 与 3 个 ZIP    |
+| 检查                  | 命令                                                                                                                                                                                | 结果                                                                                |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| M10 报告定向测试      | `npx vitest run tests/integration/report-finalization.test.ts tests/integration/report-persistent-crash-recovery.test.ts tests/security/report-output.test.ts packages/reports/src` | 16 个测试文件、48 个测试通过                                                        |
+| 全量单元/集成测试     | `npm test`                                                                                                                                                                          | 146 个测试文件、589 个测试通过                                                      |
+| TypeScript            | `npm run typecheck`                                                                                                                                                                 | 通过                                                                                |
+| ESLint                | `npm run lint`                                                                                                                                                                      | 变更文件定向通过；仓库全量仍有既有 `scripts/write-release-manifest.mjs` 的 6 个错误 |
+| 控制台生产构建        | `npm run build --workspace @test-center/console`                                                                                                                                    | 通过                                                                                |
+| Playwright E2E        | `node .\\node_modules\\@playwright\\test\\cli.js test --workers=1`                                                                                                                  | 14 个用例通过，退出码 0                                                             |
+| 离线 fixture 静态预检 | `powershell -ExecutionPolicy Bypass -File scripts/verify-report.ps1 -OutputRoot output/playwright/m10-acceptance-fixtures`                                                          | 通过，3 个 HTML 与 3 个 ZIP                                                         |
 
-并行执行时曾出现一次与 M10 无关的 `DeviceDetails` 5 秒超时；该测试单独复现通过，随后独立全量重跑 135/522 全部通过，未确认存在稳定回归。
+并行执行时曾出现一次与 M10 无关的 `DeviceDetails` 5 秒超时；该测试单独复现通过，随后独立全量重跑 146/589 全部通过，未确认存在稳定回归。
+
+## 真实 Android 双机报告验收（2026-08-26）
+
+本次使用项目当前构建产物和已安装的 `Idle Weapon Shop Tycoon` 包，在两台真实 Android 设备上验证报告主链路。运行时通过 Appium-only 模式启动，ADB 使用当前设备实际在线的 `5037` 服务端口。
+
+| 项目         | 结果                                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------------------------- |
+| 设备         | `R5CX211TXNT`（LEADER）、`R5CWB17PN0Y`（FOLLOWER），2/2 在线                                          |
+| 包标识       | `com.hg.idleweaponshoptycoon.android`，通过 ADB 安装态校验                                            |
+| 会话         | `run-8da3fbb3-ba50-4c14-85c8-917d6b4894b7`，`PREFLIGHT -> RUNNING -> FINISHED`                        |
+| 动作         | `tap`、`swipe`，2/2 设备目标均 `SUCCEEDED`                                                            |
+| 默认报告     | HTML `READY`，7,551 bytes，SHA-256 `d2326b7d1c7054ad309ca04e4e4ab60baf1d2c99a8bb0cb3c4996d3666d5fcf4` |
+| 默认证据包   | ZIP `READY`，2,713 bytes，SHA-256 `ffde66280dedf59e0018de9c0f5d4597e34cc528b67e814516e7492392b55579`  |
+| ZIP manifest | 与 HTML 条目大小和 SHA-256 一致；解压后无路径越界                                                     |
+| 收尾         | 服务端、Appium 临时端口已释放；两台设备仍保持 `device` 在线                                           |
+
+原始本地证据位于 `data/hardware-m10-real-report-20260826/m11-portable-smoke.json`（`data/` 被 `.gitignore` 忽略）。HTML 报告为内联 CSS、CSP `default-src 'none'`、无脚本和远程资源，设备矩阵和动作结果可离线打开。
+
+本次运行同时验证了 Excel/PDF/JUnit 可选导出，但这些输出属于 M11 能力，不计入 M10 默认报告门禁。
 
 ## 崩溃与恢复证据
 
@@ -73,5 +92,5 @@ M10 交付历史结果、离线 HTML、原子证据 ZIP、报告最终化恢复�
 
 - 375px 窄屏密集表格保留内部横向滚动；当前 M10 目标以桌面报告为主。
 - 视觉验收为人工截图和结构断言，没有建立像素差异基线或 CI 浏览器回归任务。
-- 本记录没有宣称真实 Android 设备已完成 M10 报告产出；本次门禁使用确定性 fixture、持久化 crash 子进程和本地 E2E。
-- 当前文档改动尚未提交或推送。待用户确认 M10 总验收后，才提交并推送 `main`，随后再开始 M11。
+- Appium-only 模式不会注入 Unity QA Bridge，因此本次报告的 UID 列为 `Not recorded`；若要求报告必须展示游戏 UID，需要先接入 QA Bridge 或实现受控的应用侧 UID 读取，再单独进行 UID 门禁验收。
+- 本次真机证据和文档修改目前只保留在本地，尚未提交或推送；待用户确认 M10 总验收后，才提交并推送 `main`，随后再开始 M11。
