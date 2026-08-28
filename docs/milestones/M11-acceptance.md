@@ -182,7 +182,7 @@ Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1]
 
 **M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, 60-minute Appium-only two-device run, current-main two-device revalidation, and current release ZIP clean-extraction validation: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
 
-Task 9 is committed as `e228dd5`. Task 10 release ZIP changes and this acceptance
-update are currently uncommitted and unpushed pending explicit user approval.
-Do not merge, tag, create a GitHub Release, or delete the clean extraction before
-final acceptance.
+Task 9 is committed as `e228dd5`; Task 10 release ZIP changes and this acceptance
+update are committed as `6d8bbb5` and pushed to `origin/main`. The generated ZIP
+and clean extraction remain local build artifacts and are intentionally not tracked.
+Do not merge or create a GitHub Release without a separate release approval.

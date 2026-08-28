@@ -69,6 +69,6 @@ already has a separate two-device acceptance in [M11 Task 9](M11-task9-current-m
 This slice does not claim four-device capacity, QA Bridge UID handshake, Unity
 source-project builds, or the user-deferred fault-injection/recovery acceptance.
 
-The release artifact, clean extraction, and local evidence are retained for the
-next approval step. Source changes are local and uncommitted pending explicit
-user confirmation.
+The release artifact, clean extraction, and local evidence are retained locally.
+The source changes are committed as `6d8bbb5` and pushed to `origin/main`; the
+generated ZIP remains an ignored build artifact rather than a Git-tracked file.
