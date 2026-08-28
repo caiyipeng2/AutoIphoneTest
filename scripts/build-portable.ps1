@@ -83,7 +83,10 @@ $node = Join-Path $root 'tools\node\22.23.1\node.exe'
 $npm = Join-Path $root 'tools\node\22.23.1\npm.cmd'
 $launcherProject = Join-Path $root 'apps\launcher\src\TestCenter.Launcher\TestCenter.Launcher.csproj'
 $staging = "$output.partial"
-$zipPartial = Join-Path $release 'TestCenterLauncher.zip.partial'
+# Compress-Archive validates the destination extension under Windows
+# PowerShell 5.1, so keep the temporary marker before the required .zip
+# suffix and atomically rename it to the final archive after compression.
+$zipPartial = Join-Path $release 'TestCenterLauncher.partial.zip'
 $zipFinal = Join-Path $release 'TestCenterLauncher.zip'
 
 Require-File $node 'Portable Node'
@@ -162,7 +165,16 @@ try {
     if (-not $SkipZip) {
         New-Item -ItemType Directory -Force -Path $release | Out-Null
         Remove-Item -LiteralPath $zipPartial -Force -ErrorAction SilentlyContinue
-        Compress-Archive -LiteralPath (Join-Path $output '*') -DestinationPath $zipPartial -CompressionLevel Optimal
+        # Compress-Archive's LiteralPath does not expand the root wildcard and
+        # its Path mode skips hidden files. ZipFile walks the directory itself,
+        # preserving manifest coverage for entries such as data\.gitkeep.
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::CreateFromDirectory(
+            $output,
+            $zipPartial,
+            [System.IO.Compression.CompressionLevel]::Optimal,
+            $false
+        )
         Move-Item -LiteralPath $zipPartial -Destination $zipFinal -Force
         Write-Output "Portable ZIP: $zipFinal"
     }

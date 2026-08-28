@@ -94,6 +94,15 @@ source tree after the shared ADB-port change. The new clean runtime root is
 hashes, and the two Windows compatibility fixes are recorded in
 [M11 Task 9](M11-task9-current-main-portable-revalidation.md).
 
+M11 Task 10 then generated `dist/releases/m11-20260826-current/TestCenterLauncher.zip`
+from the fixed publisher. The 644,479,165-byte ZIP has SHA-256
+`47992EAD2ADBC87789527F3EA691FAAC9AAADC126265CDBA7862B7BE18C4AE8F`, contains
+the 41,303-file manifest and hidden `data\\.gitkeep`, and passed clean extraction
+verification at `E:\M11-Release-Verify-20260826`. The release ZIP completed a
+real one-device flow with default and optional reports; the second device was
+temporarily absent from ADB during the first two-device attempt. See
+[M11 Task 10](M11-task10-release-zip-acceptance.md).
+
 ## Post-M11 runtime video smoke
 
 The follow-up runtime wiring was exercised against the existing data directory and one real device after waking the device from `Dozing`:
@@ -167,12 +176,13 @@ The recorder uses MP4 for the current scrcpy 3.1 plus Android 16 device combinat
 
 ## M0-M11 traceability
 
-Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), and [M11 Task 9](M11-task9-current-main-portable-revalidation.md).
+Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), [M11 Task 9](M11-task9-current-main-portable-revalidation.md), and [M11 Task 10](M11-task10-release-zip-acceptance.md).
 
 ## Decision
 
-**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, 60-minute Appium-only two-device run, and current-main two-device revalidation: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
+**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, 60-minute Appium-only two-device run, current-main two-device revalidation, and current release ZIP clean-extraction validation: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
 
-The Task 9 source changes and acceptance record are currently uncommitted and
-unpushed pending explicit user approval. Do not merge, tag, create a GitHub
-Release, or delete the clean extraction before final acceptance.
+Task 9 is committed as `e228dd5`. Task 10 release ZIP changes and this acceptance
+update are currently uncommitted and unpushed pending explicit user approval.
+Do not merge, tag, create a GitHub Release, or delete the clean extraction before
+final acceptance.
