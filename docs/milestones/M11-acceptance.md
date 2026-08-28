@@ -103,6 +103,11 @@ real one-device flow with default and optional reports; the second device was
 temporarily absent from ADB during the first two-device attempt. See
 [M11 Task 10](M11-task10-release-zip-acceptance.md).
 
+M11 Task 11 installed the latest user-provided v63 APKS (`versionName=2.0.9`)
+on the currently online `R5CWB17PN0Y` and reran the clean-extraction single-device
+flow. Tap, swipe, default reports, optional exports, and cleanup all passed;
+the second device was offline at the time. See [M11 Task 11](M11-task11-v63-real-package-acceptance.md).
+
 ## Post-M11 runtime video smoke
 
 The follow-up runtime wiring was exercised against the existing data directory and one real device after waking the device from `Dozing`:
@@ -176,11 +181,11 @@ The recorder uses MP4 for the current scrcpy 3.1 plus Android 16 device combinat
 
 ## M0-M11 traceability
 
-Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), [M11 Task 9](M11-task9-current-main-portable-revalidation.md), and [M11 Task 10](M11-task10-release-zip-acceptance.md).
+Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), [M11 Task 9](M11-task9-current-main-portable-revalidation.md), [M11 Task 10](M11-task10-release-zip-acceptance.md), and [M11 Task 11](M11-task11-v63-real-package-acceptance.md).
 
 ## Decision
 
-**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, 60-minute Appium-only two-device run, current-main two-device revalidation, and current release ZIP clean-extraction validation: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
+**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, 60-minute Appium-only two-device run, current-main two-device revalidation, current release ZIP clean-extraction validation, and latest v63 single-device revalidation: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
 
 Task 9 is committed as `e228dd5`; Task 10 release ZIP changes and this acceptance
 update are committed as `6d8bbb5` and pushed to `origin/main`. The generated ZIP
