@@ -1,6 +1,8 @@
+/* global console, process */
+
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 1) {
