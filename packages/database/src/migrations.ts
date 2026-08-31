@@ -613,6 +613,14 @@ ALTER TABLE test_runs ADD COLUMN cleanup_protected INTEGER NOT NULL DEFAULT 0
 `.trim(),
 };
 
+export const SESSION_BRIDGE_MODE_MIGRATION: Migration = {
+  id: "0020_session_bridge_mode",
+  sql: `
+ALTER TABLE test_runs ADD COLUMN bridge_mode TEXT NOT NULL DEFAULT 'REQUIRED'
+  CHECK (bridge_mode IN ('REQUIRED', 'APPIUM_ONLY'));
+`.trim(),
+};
+
 export function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("foreign_keys = ON");

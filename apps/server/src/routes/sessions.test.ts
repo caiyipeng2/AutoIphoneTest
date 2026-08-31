@@ -13,6 +13,7 @@ const view: SessionView = {
   currentEpoch: 1,
   leaderVideoEnabled: true,
   failurePolicy: "PAUSE_ALL",
+  bridgeMode: "REQUIRED",
   leader: {
     serial: parseDeviceSerial("R5CX211TXNT"),
     role: "LEADER",
@@ -46,7 +47,10 @@ const action: ActionView = {
 
 function service(): SessionRouteService {
   return {
-    create: async () => ({ session: view, state: "CREATED" }),
+    create: async (input) => ({
+      session: { ...view, bridgeMode: input.bridgeMode ?? view.bridgeMode },
+      state: "CREATED",
+    }),
     get: (id) => (id === view.id ? view : undefined),
     preflight: async () => ({ ...view, state: "PREFLIGHT" }),
     start: async () => ({ ...view, state: "RUNNING" }),
@@ -112,6 +116,24 @@ describe("session create/detail routes", () => {
     });
     expect(created.statusCode).toBe(201);
     expect(created.json()).toMatchObject({ schemaVersion: 1, state: "CREATED", session: view });
+
+    const appiumOnly = await app.inject({
+      method: "POST",
+      url: "/api/sessions",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+      payload: {
+        clientRequestId: "create-appium-only",
+        packageName: view.packageName,
+        deviceSerials: [view.leader.serial],
+        leaderVideoEnabled: true,
+        bridgeMode: "APPIUM_ONLY",
+      },
+    });
+    expect(appiumOnly.statusCode).toBe(201);
+    expect(appiumOnly.json()).toMatchObject({
+      schemaVersion: 1,
+      session: { ...view, bridgeMode: "APPIUM_ONLY" },
+    });
 
     const preflight = await app.inject({
       method: "POST",

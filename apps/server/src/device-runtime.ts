@@ -42,6 +42,7 @@ import {
   CLEANUP_CONFIRMATIONS_MIGRATION,
   CLEANUP_AUDIT_MIGRATION,
   CLEANUP_PROTECTION_MIGRATION,
+  SESSION_BRIDGE_MODE_MIGRATION,
   ensureRuntimeDirectories,
   FOUNDATION_MIGRATION,
   migrate,
@@ -178,6 +179,7 @@ export async function createRuntimeDeviceRegistry(
     CLEANUP_AUDIT_MIGRATION,
     CLEANUP_PROTECTION_MIGRATION,
     OPTIONAL_REPORT_EXPORTS_MIGRATION,
+    SESSION_BRIDGE_MODE_MIGRATION,
   ]);
   const reportRecovery = new ReportFinalizationRecoveryService(database);
   await reportRecovery.reconcileOrphanedPartials(paths.runsRoot);
@@ -532,10 +534,19 @@ function createRuntimeWorkerCoordinator(
     },
   };
   return new RuntimeWorkerCoordinator(
-    ({ runId, serial, packageName, runNonceHash, logcatRecordSink, faultSink }) => {
+    ({
+      runId,
+      serial,
+      packageName,
+      runNonceHash,
+      bridgeMode: sessionBridgeMode,
+      logcatRecordSink,
+      faultSink,
+    }) => {
       const workerOwner = { ownerPid, ownerToken: `server-${String(ownerPid)}` };
+      const effectiveBridgeMode = sessionBridgeMode ?? bridgeMode;
       const bridgeOptions =
-        bridgeMode === "REQUIRED"
+        effectiveBridgeMode === "REQUIRED"
           ? {
               bridgeForwarder,
               bridgeSessionFactory: ({
@@ -647,31 +658,20 @@ function createConfiguredActionDispatcher(
       .sort()
       .map((serial, index) => [serial, index] as const),
   );
-  const barrierFactory =
-    bridgeMode === "REQUIRED"
-      ? (serial: string, runId?: string) => {
-          if (runId === undefined)
-            throw new Error("Action run id is required for bridge dispatch.");
-          const barrier = workerCoordinator.getActionBarrier(runId, parseDeviceSerial(serial));
-          if (barrier === undefined) throw new Error(`Worker bridge is not ready: ${serial}.`);
-          return barrier;
-        }
-      : undefined;
-  const textFocusBarrier =
-    bridgeMode === "REQUIRED"
-      ? new TextFocusBarrier({
-          sample: async (serial, runId) => {
-            if (runId === undefined) throw new Error("Text action run id is required.");
-            const snapshot = workerCoordinator.getTextFocusSnapshot(
-              runId,
-              parseDeviceSerial(serial),
-            );
-            if (snapshot === undefined)
-              throw new Error(`Worker bridge state is not ready: ${serial}.`);
-            return snapshot;
-          },
-        })
-      : undefined;
+  const barrierFactory = (serial: string, runId?: string) => {
+    if (runId === undefined) throw new Error("Action run id is required for bridge dispatch.");
+    const barrier = workerCoordinator.getActionBarrier(runId, parseDeviceSerial(serial));
+    if (barrier === undefined) throw new Error(`Worker bridge is not ready: ${serial}.`);
+    return barrier;
+  };
+  const textFocusBarrier = new TextFocusBarrier({
+    sample: async (serial, runId) => {
+      if (runId === undefined) throw new Error("Text action run id is required.");
+      const snapshot = workerCoordinator.getTextFocusSnapshot(runId, parseDeviceSerial(serial));
+      if (snapshot === undefined) throw new Error(`Worker bridge state is not ready: ${serial}.`);
+      return snapshot;
+    },
+  });
   const executorFactory =
     baseUrl === undefined
       ? (serial: string) => ({
@@ -715,6 +715,7 @@ function createConfiguredActionDispatcher(
     `server-action-dispatcher-${process.pid}`,
     barrierFactory,
     textFocusBarrier,
+    bridgeMode,
   );
 }
 

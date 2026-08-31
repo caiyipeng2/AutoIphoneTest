@@ -1331,6 +1331,31 @@ main {
     12px Consolas,
     monospace;
 }
+.session-mode-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+.session-mode-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: #697877;
+  font-size: 11px;
+}
+.session-mode-heading small {
+  color: #899392;
+  font-size: 10px;
+}
+.session-mode-grid {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.session-mode-grid .choice {
+  min-height: 70px;
+  padding: 12px;
+}
 .session-config-summary {
   display: flex;
   align-items: center;

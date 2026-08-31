@@ -56,6 +56,7 @@ describe("SessionsPage", () => {
       state,
       currentEpoch: 1,
       leaderVideoEnabled: true,
+      bridgeMode: "REQUIRED",
       leader: {
         serial: "R5CX211TXNT",
         role: "LEADER",
@@ -119,6 +120,77 @@ describe("SessionsPage", () => {
       "/api/sessions",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("submits and displays an explicit Appium-only session mode", async () => {
+    const devices = [
+      {
+        serial: "R5CX211TXNT",
+        state: "ONLINE",
+        metadata: { model: "SM-S9280" },
+        firstSeenAt: "now",
+        lastSeenAt: "now",
+        connectionSeq: 1,
+        tags: [],
+      },
+    ];
+    const session = (state: "CREATED" | "PREFLIGHT" | "RUNNING") => ({
+      id: "run-appium-only",
+      clientRequestId: "request-appium-only",
+      packageName: "com.hg.idleweaponshoptycoon.android",
+      state,
+      currentEpoch: 1,
+      leaderVideoEnabled: true,
+      bridgeMode: "APPIUM_ONLY" as const,
+      leader: {
+        serial: "R5CX211TXNT",
+        role: "LEADER" as const,
+        membershipState: "ACTIVE" as const,
+        epoch: 1,
+        generation: 1,
+      },
+      devices: [
+        {
+          serial: "R5CX211TXNT",
+          role: "LEADER" as const,
+          membershipState: "ACTIVE" as const,
+          epoch: 1,
+          generation: 1,
+        },
+      ],
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/devices") return jsonResponse({ schemaVersion: 1, devices });
+      if (url === "/api/sessions" && init?.method === "POST") {
+        expect(JSON.parse(String(init.body))).toMatchObject({ bridgeMode: "APPIUM_ONLY" });
+        return jsonResponse(
+          { schemaVersion: 1, state: "CREATED", session: session("CREATED") },
+          201,
+        );
+      }
+      if (url.endsWith("/preflight"))
+        return jsonResponse({ schemaVersion: 1, session: session("PREFLIGHT") });
+      if (url.endsWith("/start"))
+        return jsonResponse({ schemaVersion: 1, session: session("RUNNING") });
+      if (url.endsWith("/incidents"))
+        return jsonResponse({
+          schemaVersion: 1,
+          timeline: { runId: "run-appium-only", incidents: [], recoveries: [] },
+        });
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SessionsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /R5CX211TXNT/ })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /R5CX211TXNT/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Appium-only/ }));
+    fireEvent.click(screen.getByRole("button", { name: "创建同步会话" }));
+
+    await waitFor(() => expect(screen.getByText("Appium-only · 非注入同步")).toBeInTheDocument());
   });
 });
 

@@ -114,6 +114,7 @@ export interface SessionView {
   currentEpoch: number;
   leaderVideoEnabled: boolean;
   failurePolicy: "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE";
+  bridgeMode: "REQUIRED" | "APPIUM_ONLY";
   leader: SessionDevice & { role: "LEADER" };
   devices: SessionDevice[];
 }
@@ -396,6 +397,7 @@ export async function createSession(input: {
   deviceSerials: string[];
   leaderVideoEnabled: boolean;
   failurePolicy?: "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE";
+  bridgeMode?: "REQUIRED" | "APPIUM_ONLY";
 }): Promise<SessionMutationResponse> {
   return await sessionMutation("/api/sessions", input);
 }

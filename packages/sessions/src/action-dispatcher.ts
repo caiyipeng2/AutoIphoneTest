@@ -21,6 +21,7 @@ export interface ActionDeviceExecutor {
 export interface ActionDispatchInput {
   readonly actionId: string;
   readonly packageName: string;
+  readonly bridgeMode?: "REQUIRED" | "APPIUM_ONLY";
 }
 
 export type ActionDeviceExecutorFactory = (serial: string) => ActionDeviceExecutor;
@@ -33,6 +34,7 @@ export class ActionDispatcher {
     private readonly ownerToken = `dispatcher-${randomUUID()}`,
     private readonly barrierFactory?: ActionBarrierFactory,
     private readonly textFocusBarrier?: Pick<TextFocusBarrier, "verify">,
+    private readonly defaultBridgeMode: "REQUIRED" | "APPIUM_ONLY" = "REQUIRED",
   ) {}
 
   public async dispatch(input: ActionDispatchInput): Promise<ActionView> {
@@ -45,7 +47,8 @@ export class ActionDispatcher {
     this.outbox.markDispatching(input.actionId, lease.leaseToken);
 
     const command = queued.command;
-    if (command?.type === "text" && this.textFocusBarrier !== undefined) {
+    const bridgeRequired = (input.bridgeMode ?? this.defaultBridgeMode) === "REQUIRED";
+    if (bridgeRequired && command?.type === "text" && this.textFocusBarrier !== undefined) {
       const verification: TextFocusVerificationInput = {
         serials: queued.targets.map((target) => target.serial),
         metricsEpoch: queued.sourceMetricsEpoch,
@@ -78,6 +81,7 @@ export class ActionDispatcher {
         try {
           const command = queued.command;
           const barrier =
+            bridgeRequired &&
             command !== undefined &&
             actionCompletionPolicy(command).armBridge &&
             this.barrierFactory !== undefined

@@ -3,9 +3,11 @@ import {
   CircleAlert,
   Eye,
   LoaderCircle,
+  MousePointer2,
   Pause,
   Play,
   RefreshCw,
+  ShieldCheck,
   Smartphone,
   Square,
 } from "lucide-react";
@@ -24,6 +26,11 @@ import {
 } from "../state/api";
 
 const DEFAULT_PACKAGE = "com.hg.idleweaponshoptycoon.android";
+
+const bridgeModeLabels = {
+  REQUIRED: "QA Bridge · 受控校验",
+  APPIUM_ONLY: "Appium-only · 非注入同步",
+} as const;
 
 const stateLabels: Record<SessionState, string> = {
   CREATED: "已创建",
@@ -46,6 +53,7 @@ export function SessionsPage() {
   const [failurePolicy, setFailurePolicy] = useState<"PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE">(
     "PAUSE_ALL",
   );
+  const [bridgeMode, setBridgeMode] = useState<"REQUIRED" | "APPIUM_ONLY">("REQUIRED");
   const [session, setSession] = useState<SessionView | null>(null);
   const [busy, setBusy] = useState<SessionBusyState>("loading");
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +109,7 @@ export function SessionsPage() {
         deviceSerials: selectedSerials,
         leaderVideoEnabled: true,
         failurePolicy,
+        bridgeMode,
       });
       setSession(created.session);
       setBusy("preflight");
@@ -132,6 +141,7 @@ export function SessionsPage() {
               : "选择当前在线设备，平台会按同一动作序列同步执行。"}
           </p>
         </div>
+        {session && <span className="chip chip-good">{bridgeModeLabels[session.bridgeMode]}</span>}
         <button
           className="button button-primary"
           disabled={isBusy || selectedSerials.length === 0 || session?.state === "RUNNING"}
@@ -230,6 +240,34 @@ export function SessionsPage() {
               spellCheck={false}
             />
           </label>
+          <div className="session-mode-field">
+            <div className="session-mode-heading">
+              <span>同步通道</span>
+              <small>创建后不可切换</small>
+            </div>
+            <div className="choice-grid session-mode-grid" role="group" aria-label="同步通道">
+              <button
+                className={`choice ${bridgeMode === "REQUIRED" ? "active" : ""}`}
+                aria-pressed={bridgeMode === "REQUIRED"}
+                onClick={() => setBridgeMode("REQUIRED")}
+                disabled={isBusy || session !== null}
+              >
+                <ShieldCheck size={17} />
+                <strong>QA Bridge</strong>
+                <small>需要游戏包内置 QA Bridge，并校验焦点与 ACK。</small>
+              </button>
+              <button
+                className={`choice ${bridgeMode === "APPIUM_ONLY" ? "active" : ""}`}
+                aria-pressed={bridgeMode === "APPIUM_ONLY"}
+                onClick={() => setBridgeMode("APPIUM_ONLY")}
+                disabled={isBusy || session !== null}
+              >
+                <MousePointer2 size={17} />
+                <strong>Appium-only</strong>
+                <small>不注入 QA Bridge，直接同步系统触控操作。</small>
+              </button>
+            </div>
+          </div>
           <div className="session-config-summary">
             <span>目标设备</span>
             <strong>
@@ -239,6 +277,12 @@ export function SessionsPage() {
           <div className="session-config-summary">
             <span>账号策略</span>
             <strong>设备 UID 自动绑定</strong>
+          </div>
+          <div className="session-config-summary">
+            <span>当前通道</span>
+            <strong>
+              {session ? bridgeModeLabels[session.bridgeMode] : bridgeModeLabels[bridgeMode]}
+            </strong>
           </div>
         </section>
       </div>

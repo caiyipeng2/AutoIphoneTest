@@ -23,6 +23,7 @@ import { requireSession } from "./bootstrap.js";
 import type { ServerContext } from "./context.js";
 
 const FailurePolicySchema = z.enum(["PAUSE_ALL", "QUARANTINE_FAILED_DEVICE"]);
+const BridgeModeSchema = z.enum(["REQUIRED", "APPIUM_ONLY"]);
 
 const CreateSessionSchema = z
   .object({
@@ -32,6 +33,7 @@ const CreateSessionSchema = z
     deviceSerials: z.array(DeviceSerialSchema).min(1).max(4).optional(),
     leaderVideoEnabled: z.boolean().default(true),
     failurePolicy: FailurePolicySchema.default("PAUSE_ALL"),
+    bridgeMode: BridgeModeSchema.optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -147,6 +149,7 @@ export interface SessionView {
   readonly currentEpoch: number;
   readonly leaderVideoEnabled: boolean;
   readonly failurePolicy: "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE";
+  readonly bridgeMode: "REQUIRED" | "APPIUM_ONLY";
   readonly leader: SessionLeaderView;
   readonly devices: readonly SessionDeviceView[];
 }
@@ -158,6 +161,7 @@ export interface SessionCreateInput {
   readonly deviceSerial?: DeviceSerial;
   readonly leaderVideoEnabled: boolean;
   readonly failurePolicy?: "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE";
+  readonly bridgeMode?: "REQUIRED" | "APPIUM_ONLY";
   readonly actorSessionId: string;
 }
 
@@ -219,6 +223,7 @@ export async function registerSessionsRoutes(
         deviceSerials: payload.deviceSerials.map(parseDeviceSerial),
         leaderVideoEnabled: payload.leaderVideoEnabled,
         failurePolicy: payload.failurePolicy,
+        ...(payload.bridgeMode === undefined ? {} : { bridgeMode: payload.bridgeMode }),
         actorSessionId: session.sessionId,
       });
       return await reply

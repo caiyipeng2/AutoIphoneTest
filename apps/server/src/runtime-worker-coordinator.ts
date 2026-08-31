@@ -5,12 +5,14 @@ import type { ActionBarrier, RuntimeFaultEvent, TextFocusSnapshot } from "@test-
 import type { LogcatRecord } from "@test-center/contracts/logcat";
 import type { ActionCommand } from "@test-center/sessions";
 import type { ActionPayload } from "@test-center/sessions";
+import type { BridgeMode } from "./runtime-config.js";
 
 export interface RuntimeWorkerFactoryInput {
   readonly runId: string;
   readonly serial: DeviceSerial;
   readonly packageName: string;
   readonly runNonceHash: string;
+  readonly bridgeMode?: BridgeMode;
   readonly logcatRecordSink: (record: LogcatRecord) => void;
   readonly faultSink: (event: RuntimeFaultEvent) => void;
 }
@@ -34,6 +36,7 @@ export class RuntimeWorkerCoordinator {
     serials: readonly DeviceSerial[],
     packageName: string,
     runNonceHash: string,
+    bridgeMode?: BridgeMode,
   ): Promise<void> {
     if (this.runs.has(runId)) throw new Error(`Workers already exist for run '${runId}'.`);
     const workers = new Map<DeviceSerial, RuntimeWorkerFactoryReturn>();
@@ -48,6 +51,7 @@ export class RuntimeWorkerCoordinator {
           serial,
           packageName,
           runNonceHash,
+          ...(bridgeMode === undefined ? {} : { bridgeMode }),
           logcatRecordSink: (record) => this.emitLogcat(record),
           faultSink: (event) => this.emitFault(event),
         });

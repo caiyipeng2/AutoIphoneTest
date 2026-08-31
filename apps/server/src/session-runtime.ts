@@ -7,6 +7,7 @@ import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/dev
 import { ActionOutbox, RunActionRepository, type ActionDispatcher } from "@test-center/sessions";
 import type { ReportFinalizationExecutor } from "@test-center/reports";
 import type { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
+import type { BridgeMode } from "./runtime-config.js";
 
 import type {
   SessionCreateInput,
@@ -35,6 +36,7 @@ interface SessionRow {
   readonly current_epoch: number;
   readonly leader_video_enabled: number;
   readonly failure_policy: "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE";
+  readonly bridge_mode: BridgeMode;
   readonly serial: string;
   readonly membership_state: SessionView["leader"]["membershipState"];
   readonly epoch: number;
@@ -61,6 +63,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     private readonly actionOutbox = new ActionOutbox(database),
     private readonly finalization?: Pick<ReportFinalizationExecutor, "startFinalization">,
     private readonly videoRecorder?: SessionVideoRecorder,
+    private readonly defaultBridgeMode: BridgeMode = "REQUIRED",
   ) {}
 
   public async create(
@@ -74,7 +77,8 @@ export class RuntimeSessionRouteService implements SessionRouteService {
         existing.package_name !== packageName ||
         !sameSerials(this.readMemberSerials(existing.id), deviceSerials) ||
         Boolean(existing.leader_video_enabled) !== input.leaderVideoEnabled ||
-        existing.failure_policy !== (input.failurePolicy ?? "PAUSE_ALL")
+        existing.failure_policy !== (input.failurePolicy ?? "PAUSE_ALL") ||
+        existing.bridge_mode !== (input.bridgeMode ?? this.defaultBridgeMode)
       ) {
         throw new Error("Session client request already exists with different payload.");
       }
@@ -91,8 +95,8 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     const insert = this.database.transaction(() => {
       this.database
         .prepare(
-          `INSERT INTO test_runs (id, package_name, state, current_epoch, run_nonce_hash, client_request_id, leader_video_enabled, failure_policy, created_at, updated_at)
-         VALUES (?, ?, 'CREATED', 1, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO test_runs (id, package_name, state, current_epoch, run_nonce_hash, client_request_id, leader_video_enabled, failure_policy, bridge_mode, created_at, updated_at)
+         VALUES (?, ?, 'CREATED', 1, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           runId,
@@ -101,6 +105,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
           input.clientRequestId,
           input.leaderVideoEnabled ? 1 : 0,
           input.failurePolicy ?? "PAUSE_ALL",
+          input.bridgeMode ?? this.defaultBridgeMode,
           now,
           now,
         );
@@ -127,7 +132,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
   public get(id: string): SessionView | undefined {
     const row = this.database
       .prepare(
-        `SELECT r.id, r.client_request_id, r.package_name, r.state, r.current_epoch, r.leader_video_enabled, r.failure_policy,
+        `SELECT r.id, r.client_request_id, r.package_name, r.state, r.current_epoch, r.leader_video_enabled, r.failure_policy, r.bridge_mode,
               d.serial, d.membership_state, d.epoch, d.generation
        FROM test_runs r JOIN run_devices d ON d.run_id = r.id AND d.role = 'LEADER' AND d.epoch = r.current_epoch
        WHERE r.id = ?`,
@@ -150,6 +155,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
         current.devices.map((device) => device.serial),
         current.packageName,
         this.readRunNonceHash(current.id),
+        current.bridgeMode,
       );
     }
     try {
@@ -236,12 +242,14 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     input: SessionActionInput,
   ): Promise<SessionActionResult> {
     void actorSessionId;
-    if (this.get(id) === undefined) throw new Error("Session not found.");
+    const session = this.get(id);
+    if (session === undefined) throw new Error("Session not found.");
     const result = this.actionRepository.create({ runId: id, ...input });
     if (result.state === "CREATED" && this.actionDispatcher !== undefined) {
       const action = await this.actionDispatcher.dispatch({
         actionId: result.action.id,
-        packageName: this.get(id)!.packageName,
+        packageName: session.packageName,
+        bridgeMode: session.bridgeMode,
       });
       return { state: result.state, action };
     }
@@ -251,7 +259,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
   private findByClientRequestId(clientRequestId: string): SessionRow | undefined {
     return this.database
       .prepare(
-        `SELECT r.id, r.client_request_id, r.package_name, r.state, r.current_epoch, r.leader_video_enabled, r.failure_policy,
+        `SELECT r.id, r.client_request_id, r.package_name, r.state, r.current_epoch, r.leader_video_enabled, r.failure_policy, r.bridge_mode,
               d.serial, d.membership_state, d.epoch, d.generation
        FROM test_runs r JOIN run_devices d ON d.run_id = r.id AND d.role = 'LEADER' AND d.epoch = r.current_epoch
        WHERE r.client_request_id = ?`,
@@ -290,6 +298,7 @@ export class RuntimeSessionRouteService implements SessionRouteService {
       currentEpoch: row.current_epoch,
       leaderVideoEnabled: Boolean(row.leader_video_enabled),
       failurePolicy: row.failure_policy,
+      bridgeMode: row.bridge_mode,
       leader: {
         serial: parseDeviceSerial(row.serial) as DeviceSerial,
         role: "LEADER",

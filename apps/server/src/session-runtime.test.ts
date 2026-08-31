@@ -17,6 +17,7 @@ import {
   SESSION_API_MIGRATION,
   ACTION_COMMANDS_MIGRATION,
   RUN_FAILURE_POLICY_MIGRATION,
+  SESSION_BRIDGE_MODE_MIGRATION,
 } from "@test-center/database";
 
 import { RuntimeSessionRouteService } from "./session-runtime.js";
@@ -188,6 +189,7 @@ describe("RuntimeSessionRouteService", () => {
       [serial],
       "com.example.game",
       `sha256:${stored.run_nonce_hash}`,
+      "REQUIRED",
     );
   });
 
@@ -266,6 +268,83 @@ describe("RuntimeSessionRouteService", () => {
     ).rejects.toThrow("online");
   });
 
+  it("persists the selected bridge mode and passes it to managed workers", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at)
+         VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const workerCoordinator = {
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    };
+    const actionDispatcher = {
+      dispatch: vi.fn(async (input: { readonly actionId: string }) => ({
+        id: input.actionId,
+        runId: "run-bridge-mode",
+        clientRequestId: "bridge-mode-action",
+        actionSeq: 1,
+        type: "tap" as const,
+        command: { type: "tap" as const, x: 0.5, y: 0.5 },
+        payload: { kind: "tap" as const, x: 0.5, y: 0.5 },
+        sourceMetricsEpoch: 1,
+        state: "SUCCEEDED" as const,
+        targets: [{ serial, state: "SUCCEEDED" as const }],
+      })),
+    };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      undefined,
+      actionDispatcher,
+      workerCoordinator,
+    );
+    const input = {
+      clientRequestId: "bridge-mode-request",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: false,
+      bridgeMode: "APPIUM_ONLY" as const,
+      actorSessionId: "session-bridge-mode",
+    };
+
+    const created = await service.create(input);
+    expect(created.session.bridgeMode).toBe("APPIUM_ONLY");
+    expect(
+      database.prepare("SELECT bridge_mode FROM test_runs WHERE id = ?").get(created.session.id),
+    ).toEqual({ bridge_mode: "APPIUM_ONLY" });
+    expect((await service.create(input)).session).toEqual(created.session);
+
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    const stored = database
+      .prepare("SELECT run_nonce_hash FROM test_runs WHERE id = ?")
+      .get(created.session.id) as { run_nonce_hash: string };
+    expect(workerCoordinator.start).toHaveBeenCalledWith(
+      created.session.id,
+      [serial],
+      input.packageName,
+      `sha256:${stored.run_nonce_hash}`,
+      "APPIUM_ONLY",
+    );
+
+    await service.submitAction(created.session.id, "session-bridge-mode", {
+      clientRequestId: "bridge-mode-action",
+      type: "tap",
+      payload: { kind: "tap", x: 0.5, y: 0.5 },
+      sourceMetricsEpoch: 1,
+    });
+    expect(actionDispatcher.dispatch).toHaveBeenCalledWith({
+      actionId: expect.any(String),
+      packageName: input.packageName,
+      bridgeMode: "APPIUM_ONLY",
+    });
+  });
+
   it("dispatches a newly created action when an executor is configured", async () => {
     const database = await createDatabase();
     const serial = parseDeviceSerial("R5CX211TXNT");
@@ -312,6 +391,7 @@ describe("RuntimeSessionRouteService", () => {
     expect(dispatcher.dispatch).toHaveBeenCalledWith({
       actionId: result.action.id,
       packageName: "com.example.game",
+      bridgeMode: "REQUIRED",
     });
     expect(result.action.state).toBe("SUCCEEDED");
   });
@@ -448,6 +528,7 @@ describe("RuntimeSessionRouteService", () => {
       [serial],
       "com.example.game",
       expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+      "REQUIRED",
     );
   });
 
@@ -609,6 +690,7 @@ async function createDatabase(): Promise<Database.Database> {
     SESSION_API_MIGRATION,
     ACTION_COMMANDS_MIGRATION,
     RUN_FAILURE_POLICY_MIGRATION,
+    SESSION_BRIDGE_MODE_MIGRATION,
   ]);
   return database;
 }
