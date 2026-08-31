@@ -239,9 +239,25 @@ namespace Caiyipeng.TestCenter.QaBridge
             lock (connectionGate)
             {
                 if (writer == null) return;
-                try { writer.WriteLine(JsonUtility.ToJson(message)); }
+                try
+                {
+                    // Unity JsonUtility serializes null strings as empty strings,
+                    // while the host schema distinguishes nullable fields from
+                    // invalid empty identifiers. Normalize only the two fields
+                    // whose protocol contract explicitly permits null.
+                    var json = NormalizeNullableBridgeFields(JsonUtility.ToJson(message));
+                    writer.WriteLine(json);
+                }
                 catch (IOException) { CloseClient(); }
             }
+        }
+
+        private static string NormalizeNullableBridgeFields(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return json;
+            return json
+                .Replace("\"uid\":\"\"", "\"uid\":null")
+                .Replace("\"focusedControlId\":\"\"", "\"focusedControlId\":null");
         }
 
         private void CloseClient()
