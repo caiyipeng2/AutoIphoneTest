@@ -27,6 +27,7 @@ const service = new AppiumService({
   appiumHome: win32.join(projectRoot, "data", "appium-home"),
   port: appiumPort,
   logPath: win32.join(dataRoot, "appium.log"),
+  readinessTimeoutMs: 60_000,
   cwd: projectRoot,
 });
 const client = new AppiumW3cClient({

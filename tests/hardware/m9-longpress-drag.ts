@@ -27,6 +27,7 @@ const service = new AppiumService({
   appiumHome,
   port: appiumPort,
   logPath,
+  readinessTimeoutMs: 60_000,
   cwd: projectRoot,
 });
 const client = new AppiumW3cClient({
