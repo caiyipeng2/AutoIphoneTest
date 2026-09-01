@@ -1,5 +1,6 @@
 #if UNITY_MULTI_DEVICE_QA
 using System;
+using System.Globalization;
 using System.Reflection;
 using Caiyipeng.TestCenter.QaBridge;
 using UnityEngine;
@@ -133,6 +134,37 @@ namespace Caiyipeng.TestCenter.IdleWeaponShopTycoon
         {
             observer = GetComponent<QaInputObserver>() ?? gameObject.AddComponent<QaInputObserver>();
             viewState = new IdleWeaponShopQaViewStateProvider();
+        }
+
+        private void Update()
+        {
+            // Observe the first frame of a real touch after the game input system
+            // receives it. This never sends input back to Unity or invokes a
+            // Button; it only lets an already-armed host action be acknowledged.
+            if (Input.touchCount != 1) return;
+            var touch = Input.GetTouch(0);
+            if (touch.phase == TouchPhase.Began) ObservePointerPosition(touch.position);
+        }
+
+        private void ObservePointerPosition(Vector2 position)
+        {
+            var width = Mathf.Max(2f, Screen.width - 1f);
+            var height = Mathf.Max(2f, Screen.height - 1f);
+            var normalizedX = QuantizeCoordinate(Mathf.Clamp01(position.x / width));
+            var normalizedY = QuantizeCoordinate(Mathf.Clamp01((Screen.height - 1f - position.y) / height));
+            var shape = "{\"type\":\"tap\",\"x\":" + FormatCoordinate(normalizedX) +
+                        ",\"y\":" + FormatCoordinate(normalizedY) + "}";
+            Observe("tap", shape);
+        }
+
+        private static float QuantizeCoordinate(float value)
+        {
+            return Mathf.Round(value * 1000f) / 1000f;
+        }
+
+        private static string FormatCoordinate(float value)
+        {
+            return value.ToString("0.###", CultureInfo.InvariantCulture);
         }
 
         public bool Observe(string actionType, string normalizedShapeJson)

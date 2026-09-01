@@ -36,6 +36,13 @@ const qaServerPath = join(
   "Runtime",
   "QaBridgeServer.cs",
 );
+const runtimeBridgePath = join(repositoryRoot, "apps", "server", "src", "runtime-bridge.ts");
+const productionActionScriptPath = join(
+  repositoryRoot,
+  "tests",
+  "hardware",
+  "idle-weapon-shop-qa-bridge-action.ts",
+);
 
 describe("Idle Weapon Shop Tycoon QA bridge integration contract", () => {
   it("keeps the production adapter behind the QA-only compilation symbol", async () => {
@@ -102,5 +109,35 @@ describe("Idle Weapon Shop Tycoon QA bridge integration contract", () => {
     expect(source).toContain("NormalizeNullableBridgeFields");
     expect(source).toMatch(/NormalizeNullableBridgeFields[\s\S]*uid/);
     expect(source).toMatch(/NormalizeNullableBridgeFields[\s\S]*focusedControlId/);
+    expect(source).toMatch(/NormalizeNullableBridgeFields[\s\S]*expectedFocus/);
+  });
+
+  it("observes real Unity touch starts without injecting gameplay input", async () => {
+    const source = await readFile(adapterPath, "utf8");
+
+    expect(source).toContain("Input.touchCount");
+    expect(source).toContain("TouchPhase.Began");
+    expect(source).toContain("ObservePointerPosition");
+    expect(source).toContain("Screen.height - 1f");
+    expect(source).not.toMatch(/Input\.(Set|Simulate|Reset)/);
+  });
+
+  it("quantizes host tap descriptors to the device viewport", async () => {
+    const source = await readFile(runtimeBridgePath, "utf8");
+
+    expect(source).toContain("bridgeEventShape");
+    expect(source).toContain("state.width");
+    expect(source).toContain("toFixed(3)");
+  });
+
+  it("keeps production QA action acceptance bounded to one controlled tap", async () => {
+    const source = await readFile(productionActionScriptPath, "utf8");
+
+    expect(source).toContain("createRuntimeBridgeSession");
+    expect(source).toContain("actionBarrier.arm");
+    expect(source).toContain('"input", "tap"');
+    expect(source).toContain("waitForAck");
+    expect(source).not.toContain("clearPackageData");
+    expect(source).not.toContain("uninstallPackage");
   });
 });

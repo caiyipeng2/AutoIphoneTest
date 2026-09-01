@@ -1,8 +1,8 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = (Join-Path $PSScriptRoot '..'),
-    [string]$OutputRoot = (Join-Path $PSScriptRoot '..\dist\portable'),
-    [string]$ReleaseRoot = (Join-Path $PSScriptRoot '..\dist\releases'),
+    [string]$ProjectRoot,
+    [string]$OutputRoot,
+    [string]$ReleaseRoot,
     [switch]$SkipBuild,
     [switch]$SkipProvisioning,
     [switch]$SkipZip
@@ -10,6 +10,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+# PowerShell evaluates parameter defaults before $PSScriptRoot is populated.
+# Resolve script-relative defaults after binding so direct invocation works in
+# both Windows PowerShell 5.1 and PowerShell 7.
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) { $ProjectRoot = Join-Path $PSScriptRoot '..' }
+if ([string]::IsNullOrWhiteSpace($OutputRoot)) { $OutputRoot = Join-Path $PSScriptRoot '..\dist\portable' }
+if ([string]::IsNullOrWhiteSpace($ReleaseRoot)) { $ReleaseRoot = Join-Path $PSScriptRoot '..\dist\releases' }
 
 function Resolve-FullPath([string]$Path) { return [System.IO.Path]::GetFullPath($Path) }
 function Require-File([string]$Path, [string]$Description) {

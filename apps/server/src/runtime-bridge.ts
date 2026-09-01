@@ -32,6 +32,15 @@ export interface RuntimeBridgeSession {
   getTextFocusSnapshot(): TextFocusSnapshot | undefined;
 }
 
+export function createRuntimeBridgeParser(runNonceHash: BridgeHash): BridgeProtocolParser {
+  // Unity's QaClock reports Android elapsedRealtime, so QA_ARMED/QA_ACK lease
+  // checks must use the same process-monotonic domain as ClockCalibrator.
+  return new BridgeProtocolParser({
+    expectedRunNonceHash: runNonceHash,
+    nowRealtimeMs: () => performance.now(),
+  });
+}
+
 export function createRuntimeBridgeSession(
   options: RuntimeBridgeSessionOptions,
 ): RuntimeBridgeSession {
@@ -41,7 +50,7 @@ export function createRuntimeBridgeSession(
       port: options.hostPort,
       connectTimeoutMs: options.connectTimeoutMs ?? 5_000,
     }),
-    parser: new BridgeProtocolParser({ expectedRunNonceHash: runNonceHash }),
+    parser: createRuntimeBridgeParser(runNonceHash),
     handshakeTimeoutMs: options.handshakeTimeoutMs ?? 8_000,
   });
   const calibrator = new ClockCalibrator(client, { sampleCount: 3, pingTimeoutMs: 1_000 });
@@ -61,7 +70,7 @@ export function createRuntimeBridgeSession(
         const command = request.command as ActionCommand;
         const descriptor = {
           actionType: command.type,
-          normalizedShape: actionDescriptor(command),
+          normalizedShape: bridgeEventShape(command, state.width, state.height),
           expectedView: state.view,
           expectedFocus: state.focusedControlId ?? null,
           metricsEpoch: request.metricsEpoch,
@@ -109,4 +118,23 @@ export function createRuntimeBridgeSession(
       };
     },
   };
+}
+
+export function bridgeEventShape(
+  command: ActionCommand,
+  width: number,
+  height: number,
+): ReturnType<typeof actionDescriptor> {
+  if (command.type !== "tap") return actionDescriptor(command);
+  return {
+    type: "tap",
+    x: quantizeCoordinate(command.x, width),
+    y: quantizeCoordinate(command.y, height),
+  };
+}
+
+function quantizeCoordinate(value: number, size: number): number {
+  if (!Number.isSafeInteger(size) || size < 2) throw new TypeError("Bridge viewport is invalid.");
+  const pixel = Math.round(value * (size - 1));
+  return Number((pixel / (size - 1)).toFixed(3));
 }

@@ -257,7 +257,8 @@ namespace Caiyipeng.TestCenter.QaBridge
             if (string.IsNullOrEmpty(json)) return json;
             return json
                 .Replace("\"uid\":\"\"", "\"uid\":null")
-                .Replace("\"focusedControlId\":\"\"", "\"focusedControlId\":null");
+                .Replace("\"focusedControlId\":\"\"", "\"focusedControlId\":null")
+                .Replace("\"expectedFocus\":\"\"", "\"expectedFocus\":null");
         }
 
         private void CloseClient()
