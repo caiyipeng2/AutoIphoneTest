@@ -305,6 +305,7 @@ export async function createRuntimeDeviceRegistry(
     actionOutbox,
     finalizationExecutor,
     leaderVideoRecorder,
+    bridgeMode,
   );
   const incidentMonitor = new IncidentMonitor(
     new IncidentRepository(database),
