@@ -24,4 +24,11 @@ describe("M11 portable ADB endpoint", () => {
     expect(source).toContain("createAdbEnvironment");
     expect(source).toContain("env: adbEnv");
   });
+
+  it("keeps selected devices awake for unattended stability runs and restores their state", async () => {
+    const source = await readFile(stabilityScriptPath, "utf8");
+    expect(source).toContain('"stayon"');
+    expect(source).toContain("readStayAwakeState");
+    expect(source).toContain("restoreStayAwake");
+  });
 });

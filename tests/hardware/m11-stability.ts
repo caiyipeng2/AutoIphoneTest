@@ -54,6 +54,8 @@ const evidenceRoot = win32.normalize(
 const startedAt = new Date().toISOString();
 const samples: StabilitySample[] = [];
 const actionErrors: string[] = [];
+const stayAwakeState = new Map<string, boolean>();
+const cleanupErrors: string[] = [];
 let product: ProductProcess | undefined;
 let sessionId: string | undefined;
 let evidence: Record<string, unknown> = { status: "NOT_STARTED" };
@@ -71,6 +73,14 @@ try {
   const selected = devices.devices.filter((device) => serials.includes(device.serial));
   if (selected.length !== serials.length || selected.some((device) => device.state !== "ONLINE")) {
     throw new Error(`Selected devices are not online: ${JSON.stringify(selected)}.`);
+  }
+  for (const serial of serials) {
+    // Long unattended runs can cross the Android display timeout. Preserve the
+    // operator's prior setting, keep the USB-connected device awake for the
+    // duration, and restore it even when the run fails before session creation.
+    const previousStayAwake = await readStayAwakeState(serial);
+    await setStayAwake(serial, true);
+    stayAwakeState.set(serial, previousStayAwake);
   }
   const created = await client.call<{ session: { id: string } }>(
     "/api/sessions",
@@ -174,6 +184,7 @@ try {
     analysis,
     sampleCount: samples.length,
     samples,
+    cleanupErrors,
   };
   if (evidence.status !== "PASS") process.exitCode = 1;
 } catch (error) {
@@ -191,10 +202,16 @@ try {
     actionErrors,
     sampleCount: samples.length,
     samples,
+    cleanupErrors,
     error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
   };
   process.exitCode = 1;
 } finally {
+  const restoreErrors = await restoreStayAwake(stayAwakeState);
+  cleanupErrors.push(...restoreErrors);
+  if (restoreErrors.length > 0 && evidence.status === "PASS") {
+    evidence = { ...evidence, status: "FAIL", cleanupErrors };
+  }
   await stopProduct(product);
   await mkdir(evidenceRoot, { recursive: true });
   const evidencePath = win32.join(evidenceRoot, "m11-stability.json");
@@ -500,6 +517,49 @@ async function runAdb(
     child.once("error", reject);
     child.once("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
   });
+}
+
+async function readStayAwakeState(serial: string): Promise<boolean> {
+  const result = await runAdb(["-s", serial, "shell", "dumpsys", "power"]);
+  if (result.code !== 0) {
+    throw new Error(
+      `Unable to read Android stay-awake state for ${serial}: ${result.stderr.trim()}`,
+    );
+  }
+  const match = result.stdout.match(/mStayOn=(true|false)/i);
+  if (match === null) {
+    throw new Error(`Android power output did not expose mStayOn for ${serial}.`);
+  }
+  return match[1].toLowerCase() === "true";
+}
+
+async function setStayAwake(serial: string, enabled: boolean): Promise<void> {
+  const result = await runAdb([
+    "-s",
+    serial,
+    "shell",
+    "svc",
+    "power",
+    "stayon",
+    enabled ? "true" : "false",
+  ]);
+  if (result.code !== 0) {
+    throw new Error(
+      `Unable to ${enabled ? "enable" : "restore"} Android stay-awake for ${serial}: ${result.stderr.trim()}`,
+    );
+  }
+}
+
+async function restoreStayAwake(state: ReadonlyMap<string, boolean>): Promise<string[]> {
+  const errors: string[] = [];
+  for (const [serial, previous] of state) {
+    try {
+      await setStayAwake(serial, previous);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  return errors;
 }
 
 function readOptionalPort(value: string | undefined): string | undefined {
