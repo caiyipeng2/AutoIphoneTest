@@ -72,6 +72,19 @@ Session: `run-ce885aab-955b-4846-8af5-5c16422714e2`
 
 The analyzer uses the fixed thresholds in `docs/superpowers/plans/2026-07-31-m11-exports-portable-delivery.md`; no threshold was changed after viewing samples. The earlier failed 60-minute attempt was retained as diagnostic evidence: its action failures began after the 60-second Appium `newCommandTimeout` boundary. The stability runner now sends a safe checkpoint every 30 seconds, and a 95-second two-device preflight confirmed the fix before the passing 60-minute run.
 
+## Latest formal stability revalidation
+
+M11 Task 14 reran the formal 60-minute gate against the current v63 package
+after the shared ADB endpoint fix. The runner now preserves each device's
+Android `mStayOn` setting, enables `svc power stayon` for unattended runs, and
+restores the original value during cleanup. The Motorola run completed with
+335 samples, 0 checkpoint errors, analyzer `PASS`, and worker/lease/forward
+cleanup all at zero. The latest formal gate is single-device because the
+Samsung ADB connection was not stable enough for a second long run.
+
+See [M11 Task 14](M11-task14-formal-moto-stability-acceptance.md) for the full
+metrics and evidence path.
+
 ## Automated verification
 
 | Check                      | Result                                                                                 |
@@ -175,17 +188,18 @@ The recorder uses MP4 for the current scrcpy 3.1 plus Android 16 device combinat
 
 - The portable runtime now wires the pinned scrcpy 3.1 server asset into a serial-bound Tango `ViewProvider` when the asset is present, and the authenticated video gateway starts it on demand. The 60-minute result in this acceptance predates runtime video recording; the separate post-M11 smoke above proves the current leader-video publication path.
 - Appium screenshot fallback and leader-video publication are implemented and verified on a real Android device. Screenshot fallback still requires an active `RUNNING` worker-owned Appium session; without one, the degraded provider remains unavailable.
+- The latest formal 60-minute stability evidence is a single-device Motorola run; a dual-device long-run gate remains pending stable Samsung ADB connectivity. The earlier dual-device smoke and two-device M11 flow remain valid.
 - The `unity-command` build provider is available as an opt-in adapter. It invokes a configured absolute Unity executable with shell-free argument arrays and reuses the immutable artifact-import pipeline. The default Apps route still uses `artifact-import`; enabling command builds for a concrete Unity project requires an explicit arguments builder, signing profile, and real package acceptance.
 - Runtime registration is gated by `TEST_CENTER_UNITY_EXECUTABLE_PATH`, `TEST_CENTER_UNITY_PROJECT_PATH`, and `TEST_CENTER_UNITY_BUILD_ARGS_JSON`; when these are absent, provider discovery intentionally exposes only `artifact-import`.
 - Fault injection and active-session recovery acceptance remain skipped per prior user confirmation.
 
 ## M0-M11 traceability
 
-Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), [M11 Task 9](M11-task9-current-main-portable-revalidation.md), [M11 Task 10](M11-task10-release-zip-acceptance.md), and [M11 Task 11](M11-task11-v63-real-package-acceptance.md).
+Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), [M11 Task 9](M11-task9-current-main-portable-revalidation.md), [M11 Task 10](M11-task10-release-zip-acceptance.md), [M11 Task 11](M11-task11-v63-real-package-acceptance.md), [M11 Task 12](M11-task12-shared-adb-endpoint-acceptance.md), [M11 Task 13](M11-task13-stability-shared-adb-acceptance.md), and [M11 Task 14](M11-task14-formal-moto-stability-acceptance.md).
 
 ## Decision
 
-**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, 60-minute Appium-only two-device run, current-main two-device revalidation, current release ZIP clean-extraction validation, and latest v63 single-device revalidation: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
+**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, historical 60-minute Appium-only two-device run, current-main two-device revalidation, current release ZIP clean-extraction validation, and latest v63 single-device formal stability revalidation: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
 
 Task 9 is committed as `e228dd5`; Task 10 release ZIP changes and this acceptance
 update are committed as `6d8bbb5` and pushed to `origin/main`. The generated ZIP
