@@ -37,6 +37,10 @@ const serials = (process.env.TEST_CENTER_M11_SERIALS ?? "R5CX211TXNT,t4vswkqcs4u
   .filter(Boolean);
 const packageName = process.env.TEST_CENTER_PACKAGE ?? "com.hg.idleweaponshoptycoon.android";
 const adbPath = win32.join(root, "tools", "scrcpy", "3.1", "adb.exe");
+const adbPort = readOptionalPort(
+  process.env.TEST_CENTER_APPIUM_ADB_PORT ?? process.env.TEST_CENTER_ADB_SERVER_PORT,
+);
+const adbEnv = createAdbEnvironment(adbPort);
 const nodePath = win32.join(root, "tools", "node", "22.23.1", "node.exe");
 const serverPath = win32.join(root, "apps", "server", "dist", "main.js");
 const evidenceRoot = win32.normalize(
@@ -201,7 +205,7 @@ async function runAdb(
   args: readonly string[],
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return await new Promise((resolve, reject) => {
-    const child = spawn(adbPath, [...args], { cwd: root, windowsHide: true });
+    const child = spawn(adbPath, [...args], { cwd: root, env: adbEnv, windowsHide: true });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => (stdout += String(chunk)));
@@ -209,6 +213,24 @@ async function runAdb(
     child.once("error", reject);
     child.once("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
   });
+}
+
+function readOptionalPort(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 65_535) {
+    throw new TypeError(`Invalid portable ADB server port: ${value}.`);
+  }
+  return String(parsed);
+}
+
+function createAdbEnvironment(port: string | undefined): NodeJS.ProcessEnv {
+  if (port === undefined) return { ...process.env };
+  return {
+    ...process.env,
+    ADB_SERVER_SOCKET: `tcp:127.0.0.1:${port}`,
+    ANDROID_ADB_SERVER_PORT: port,
+  };
 }
 
 async function startProduct(): Promise<ProductProcess> {
@@ -249,6 +271,7 @@ async function startProduct(): Promise<ProductProcess> {
         "chrome.exe",
       ),
       TEST_CENTER_BRIDGE_MODE: "APPIUM_ONLY",
+      ...adbEnv,
     },
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
