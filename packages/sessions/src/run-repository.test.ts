@@ -7,6 +7,7 @@ import {
   FOUNDATION_MIGRATION,
   migrate,
   ACTION_COMMANDS_MIGRATION,
+  ACTION_RETRY_MIGRATION,
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
 } from "@test-center/database";
@@ -30,6 +31,7 @@ function createHarness() {
     RUN_ACTIONS_MIGRATION,
     SESSION_API_MIGRATION,
     ACTION_COMMANDS_MIGRATION,
+    ACTION_RETRY_MIGRATION,
   ]);
   database
     .prepare(
@@ -155,6 +157,89 @@ describe("RunActionRepository", () => {
       command: { type: "restart" },
       targets: [{ serial: "leader-a", state: "QUEUED" }],
     });
+  });
+
+  it("retries a failed action as a new linked action", () => {
+    const { repository, outbox } = createHarness();
+    const parent = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-parent",
+      type: "tap",
+      payload: { kind: "tap", x: 0.25, y: 0.75 },
+      sourceMetricsEpoch: 4,
+    });
+    const lease = outbox.leaseAction(parent.action.id, "worker-a");
+    outbox.markDispatching(parent.action.id, lease!.leaseToken);
+    outbox.completeTarget(
+      parent.action.id,
+      lease!.leaseToken,
+      "leader-a",
+      "FAILED",
+      JSON.stringify({ ok: false }),
+    );
+
+    const retry = repository.retry(parent.action.id, {
+      clientRequestId: "request-retry",
+      sourceMetricsEpoch: 5,
+      sourceFrameId: "frame-retry",
+    });
+
+    expect(retry.state).toBe("CREATED");
+    expect(retry.action).toMatchObject({
+      runId: "run-1",
+      actionSeq: 2,
+      clientRequestId: "request-retry",
+      type: "tap",
+      command: { type: "tap", x: 0.25, y: 0.75 },
+      parentActionId: parent.action.id,
+      sourceMetricsEpoch: 5,
+      sourceFrameId: "frame-retry",
+      state: "QUEUED",
+    });
+    expect(repository.get(parent.action.id)).toMatchObject({ state: "FAILED" });
+  });
+
+  it("retries an unknown action but rejects a successful parent", () => {
+    const { repository, outbox, database } = createHarness();
+    const parent = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-unknown-parent",
+      type: "tap",
+      payload: { kind: "tap", x: 0.25, y: 0.75 },
+      sourceMetricsEpoch: 4,
+    });
+    database.prepare("UPDATE actions SET state = 'UNKNOWN' WHERE id = ?").run(parent.action.id);
+    database
+      .prepare("UPDATE action_targets SET state = 'UNKNOWN' WHERE action_id = ?")
+      .run(parent.action.id);
+    database
+      .prepare("UPDATE device_action_results SET state = 'UNKNOWN' WHERE action_id = ?")
+      .run(parent.action.id);
+
+    const retry = repository.retry(parent.action.id, { clientRequestId: "request-unknown-retry" });
+    expect(retry.action.parentActionId).toBe(parent.action.id);
+    expect(retry.action.sourceMetricsEpoch).toBe(4);
+    outbox.cancelQueuedForRun("run-1", "test cleanup");
+
+    const success = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-success-parent",
+      type: "tap",
+      payload: { kind: "tap", x: 0.5, y: 0.5 },
+      sourceMetricsEpoch: 4,
+    });
+    const lease = outbox.leaseAction(success.action.id, "worker-success");
+    outbox.markDispatching(success.action.id, lease!.leaseToken);
+    outbox.completeTarget(
+      success.action.id,
+      lease!.leaseToken,
+      "leader-a",
+      "SUCCEEDED",
+      JSON.stringify({ ok: true }),
+    );
+    expect(() =>
+      repository.retry(success.action.id, { clientRequestId: "request-invalid-retry" }),
+    ).toThrow("terminal FAILED or UNKNOWN");
   });
 });
 
@@ -399,13 +484,23 @@ describe("ActionOutbox", () => {
       () => ({ execute }),
       "worker-text-focus",
       undefined,
-      { verify: vi.fn(async () => { throw new Error("TEXT_FOCUS_MISMATCH"); }) },
+      {
+        verify: vi.fn(async () => {
+          throw new Error("TEXT_FOCUS_MISMATCH");
+        }),
+      },
     );
 
-    const result = await dispatcher.dispatch({ actionId: created.action.id, packageName: "com.example.game" });
+    const result = await dispatcher.dispatch({
+      actionId: created.action.id,
+      packageName: "com.example.game",
+    });
 
     expect(execute).not.toHaveBeenCalled();
-    expect(result).toMatchObject({ state: "FAILED", targets: [{ serial: "leader-a", state: "FAILED" }] });
+    expect(result).toMatchObject({
+      state: "FAILED",
+      targets: [{ serial: "leader-a", state: "FAILED" }],
+    });
   });
 
   it("dispatches all active targets concurrently", async () => {

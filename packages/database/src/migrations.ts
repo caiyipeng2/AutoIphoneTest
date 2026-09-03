@@ -379,6 +379,14 @@ export const ACTION_COMMANDS_MIGRATION: Migration = {
   sql: `ALTER TABLE actions ADD COLUMN command_json TEXT;`.trim(),
 };
 
+export const ACTION_RETRY_MIGRATION: Migration = {
+  id: "0021_action_retries",
+  sql: `
+ALTER TABLE actions ADD COLUMN parent_action_id TEXT REFERENCES actions(id);
+CREATE INDEX IF NOT EXISTS idx_actions_parent_action ON actions(parent_action_id);
+`.trim(),
+};
+
 export const INCIDENTS_MIGRATION: Migration = {
   id: "0011_incidents_recovery",
   sql: `

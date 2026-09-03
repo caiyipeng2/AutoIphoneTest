@@ -126,6 +126,13 @@ const CompleteSessionSchema = z
 const ResumeSessionSchema = z
   .object({ reason: z.string().trim().min(1).max(128).default("operator") })
   .strict();
+const RetryActionSchema = z
+  .object({
+    clientRequestId: z.string().trim().min(1).max(128),
+    sourceMetricsEpoch: z.number().int().nonnegative().optional(),
+    sourceFrameId: z.string().trim().min(1).max(128).optional(),
+  })
+  .strict();
 
 export interface SessionLeaderView {
   readonly serial: DeviceSerial;
@@ -186,6 +193,12 @@ export interface SessionActionResult {
   readonly action: ActionView;
 }
 
+export interface SessionRetryInput {
+  readonly clientRequestId: string;
+  readonly sourceMetricsEpoch?: number;
+  readonly sourceFrameId?: string;
+}
+
 export interface SessionCompletionInput {
   readonly state: "FINISHED" | "FAILED" | "INTERRUPTED";
   readonly reason: string;
@@ -205,6 +218,12 @@ export interface SessionRouteService {
     id: string,
     actorSessionId: string,
     input: SessionActionInput,
+  ): Promise<SessionActionResult>;
+  retryAction?(
+    id: string,
+    actorSessionId: string,
+    actionId: string,
+    input: SessionRetryInput,
   ): Promise<SessionActionResult>;
 }
 
@@ -359,6 +378,43 @@ export async function registerSessionsRoutes(
         .send({ error: error instanceof Error ? error.message : "Action rejected." });
     }
   });
+
+  app.post<{ Params: { id: string; actionId: string } }>(
+    "/api/sessions/:id/actions/:actionId/retry",
+    async (request, reply) => {
+      try {
+        assertMutationAllowed(request, context);
+        if (context.sessionService === undefined)
+          return await reply.code(503).send({ error: "Session service unavailable." });
+        if (context.sessionService.retryAction === undefined)
+          return await reply.code(503).send({ error: "Action retry unavailable." });
+        const auth = requireSession(request, context);
+        if (auth === undefined)
+          return await reply.code(401).send({ error: "Authentication required." });
+        const payload = RetryActionSchema.parse(request.body);
+        const retryInput: SessionRetryInput = {
+          clientRequestId: payload.clientRequestId,
+          ...(payload.sourceMetricsEpoch === undefined
+            ? {}
+            : { sourceMetricsEpoch: payload.sourceMetricsEpoch }),
+          ...(payload.sourceFrameId === undefined ? {} : { sourceFrameId: payload.sourceFrameId }),
+        };
+        const result = await context.sessionService.retryAction(
+          decodeURIComponent(request.params.id),
+          auth.sessionId,
+          decodeURIComponent(request.params.actionId),
+          retryInput,
+        );
+        return await reply
+          .code(result.state === "CREATED" ? 201 : 200)
+          .send({ schemaVersion: 1, ...result });
+      } catch (error) {
+        return await reply
+          .code(sessionErrorCode(error))
+          .send({ error: error instanceof Error ? error.message : "Action retry rejected." });
+      }
+    },
+  );
 }
 
 function assertMutationAllowed(request: FastifyRequest, context: ServerContext): void {

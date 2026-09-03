@@ -125,6 +125,30 @@ export interface SessionMutationResponse {
   session: SessionView;
 }
 
+export interface SessionActionTarget {
+  serial: string;
+  state: "QUEUED" | "DISPATCHING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "UNKNOWN";
+}
+
+export interface SessionActionView {
+  id: string;
+  runId: string;
+  clientRequestId: string;
+  actionSeq: number;
+  type: string;
+  parentActionId?: string;
+  sourceMetricsEpoch: number;
+  sourceFrameId?: string;
+  state: "QUEUED" | "LEASED" | "DISPATCHING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "UNKNOWN";
+  targets: SessionActionTarget[];
+}
+
+export interface SessionActionMutationResponse {
+  schemaVersion: 1;
+  state: "CREATED" | "DEDUPLICATED";
+  action: SessionActionView;
+}
+
 export type IncidentCategory =
   | "ADB_DISCONNECTED"
   | "APPIUM_SESSION_LOST"
@@ -412,6 +436,36 @@ export async function fetchSession(id: string, signal?: AbortSignal): Promise<Se
     throw new Error(body.error ?? `session:${response.status}`);
   }
   return body.session;
+}
+
+export async function retrySessionAction(
+  id: string,
+  actionId: string,
+  input: {
+    clientRequestId: string;
+    sourceMetricsEpoch?: number;
+    sourceFrameId?: string;
+  },
+): Promise<SessionActionMutationResponse> {
+  const csrf = readCsrfToken();
+  const response = await fetch(
+    `/api/sessions/${encodeURIComponent(id)}/actions/${encodeURIComponent(actionId)}/retry`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+      },
+      body: JSON.stringify(input),
+    },
+  );
+  const payload = (await response.json()) as Partial<SessionActionMutationResponse> & {
+    error?: string;
+  };
+  if (!response.ok || payload.action === undefined || payload.state === undefined) {
+    throw new Error(payload.error ?? `session-action-retry:${response.status}`);
+  }
+  return payload as SessionActionMutationResponse;
 }
 
 export async function fetchIncidentTimeline(

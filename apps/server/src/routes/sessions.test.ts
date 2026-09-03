@@ -357,4 +357,64 @@ describe("session create/detail routes", () => {
     });
     await app.close();
   });
+
+  it("exposes a protected action retry endpoint with a new parent-linked action", async () => {
+    const retryAction = vi.fn(
+      async (id: string, actor: string, actionId: string, input: { clientRequestId: string }) => {
+        expect([id, actor, actionId]).toEqual(["run-1", expect.any(String), "act-parent"]);
+        return {
+          state: "CREATED" as const,
+          action: {
+            ...action,
+            id: "act-retry",
+            clientRequestId: input.clientRequestId,
+            actionSeq: 2,
+            parentActionId: "act-parent",
+          },
+        };
+      },
+    );
+    const app = await createApp({
+      port: 4800,
+      bootstrapCode: "session-bootstrap-6",
+      launchSecret: "session-secret-6",
+      sessionService: { ...service(), retryAction },
+    });
+    const headers = { host: "127.0.0.1:4800", origin: "http://127.0.0.1:4800" };
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers,
+      payload: { code: "session-bootstrap-6" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const csrf = Array.isArray(cookies)
+      ? cookies
+          .find((cookie) => cookie.startsWith("tc_csrf="))
+          ?.split("=", 2)[1]
+          ?.split(";", 1)[0]
+      : undefined;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/sessions/run-1/actions/act-parent/retry",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+      payload: { clientRequestId: "action-retry-1", sourceMetricsEpoch: 2 },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(retryAction).toHaveBeenCalledWith("run-1", expect.any(String), "act-parent", {
+      clientRequestId: "action-retry-1",
+      sourceMetricsEpoch: 2,
+    });
+    expect(response.json()).toMatchObject({
+      schemaVersion: 1,
+      state: "CREATED",
+      action: { id: "act-retry", parentActionId: "act-parent" },
+    });
+    await app.close();
+  });
 });

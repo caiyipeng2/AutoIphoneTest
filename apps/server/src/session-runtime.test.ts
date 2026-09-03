@@ -16,14 +16,15 @@ import {
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
   ACTION_COMMANDS_MIGRATION,
+  ACTION_RETRY_MIGRATION,
   RUN_FAILURE_POLICY_MIGRATION,
   SESSION_BRIDGE_MODE_MIGRATION,
 } from "@test-center/database";
 
 import { RuntimeSessionRouteService } from "./session-runtime.js";
-import type { ActionView } from "@test-center/sessions";
-import { RunActionRepository } from "@test-center/sessions";
-import { ActionOutbox } from "@test-center/sessions";
+import type { ActionView } from "../../../packages/sessions/src/run-repository.js";
+import { RunActionRepository } from "../../../packages/sessions/src/run-repository.js";
+import { ActionOutbox } from "../../../packages/sessions/src/action-outbox.js";
 
 const databases: Database.Database[] = [];
 const roots: string[] = [];
@@ -35,6 +36,73 @@ afterEach(async () => {
 });
 
 describe("RuntimeSessionRouteService", () => {
+  it("retries only a failed parent as a new action and dispatches the child", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const repository = new RunActionRepository(database);
+    const outbox = new ActionOutbox(database);
+    const dispatch = vi.fn(async (input: { readonly actionId: string }) => {
+      const child = repository.get(input.actionId);
+      if (child === undefined) throw new Error("child action missing");
+      return child;
+    });
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      repository,
+      { dispatch },
+      undefined,
+      outbox,
+    );
+    const created = await service.create({
+      clientRequestId: "request-retry-service",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    const parent = await service.submitAction(created.session.id, "session-1", {
+      clientRequestId: "action-parent-service",
+      type: "tap",
+      payload: { kind: "tap", x: 0.1, y: 0.2 },
+      sourceMetricsEpoch: 1,
+    });
+    outbox.cancelQueuedForRun(created.session.id, "test cleanup");
+    database.prepare("UPDATE actions SET state = 'FAILED' WHERE id = ?").run(parent.action.id);
+    database
+      .prepare("UPDATE action_targets SET state = 'FAILED' WHERE action_id = ?")
+      .run(parent.action.id);
+    database
+      .prepare("UPDATE device_action_results SET state = 'FAILED' WHERE action_id = ?")
+      .run(parent.action.id);
+
+    const retry = await service.retryAction(created.session.id, "session-1", parent.action.id, {
+      clientRequestId: "action-child-service",
+      sourceMetricsEpoch: 2,
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      actionId: retry.action.id,
+      packageName: "com.example.game",
+      bridgeMode: "REQUIRED",
+    });
+    expect(retry.action).toMatchObject({
+      parentActionId: parent.action.id,
+      clientRequestId: "action-child-service",
+      state: "QUEUED",
+    });
+    expect(retry.action.id).not.toBe(parent.action.id);
+    expect(repository.get(parent.action.id)?.state).toBe("FAILED");
+  });
+
   it("resumes a paused session with fresh workers and the next epoch/generation", async () => {
     const database = await createDatabase();
     const serials = [parseDeviceSerial("R5CX211TXNT"), parseDeviceSerial("R5CRC342PRF")];
@@ -843,6 +911,7 @@ async function createDatabase(): Promise<Database.Database> {
     RUN_ACTIONS_MIGRATION,
     SESSION_API_MIGRATION,
     ACTION_COMMANDS_MIGRATION,
+    ACTION_RETRY_MIGRATION,
     RUN_FAILURE_POLICY_MIGRATION,
     SESSION_BRIDGE_MODE_MIGRATION,
   ]);

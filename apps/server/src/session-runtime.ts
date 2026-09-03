@@ -15,6 +15,7 @@ import type {
   SessionActionInput,
   SessionActionResult,
   SessionCompletionInput,
+  SessionRetryInput,
   SessionRouteService,
   SessionView,
 } from "./routes/sessions.js";
@@ -320,6 +321,28 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     const session = this.get(id);
     if (session === undefined) throw new Error("Session not found.");
     const result = this.actionRepository.create({ runId: id, ...input });
+    if (result.state === "CREATED" && this.actionDispatcher !== undefined) {
+      const action = await this.actionDispatcher.dispatch({
+        actionId: result.action.id,
+        packageName: session.packageName,
+        bridgeMode: session.bridgeMode,
+      });
+      return { state: result.state, action };
+    }
+    return result;
+  }
+
+  public async retryAction(
+    id: string,
+    _actorSessionId: string,
+    actionId: string,
+    input: SessionRetryInput,
+  ): Promise<SessionActionResult> {
+    const session = this.get(id);
+    if (session === undefined) throw new Error("Session not found.");
+    const parent = this.actionRepository.get(actionId);
+    if (parent === undefined || parent.runId !== id) throw new Error("Parent action not found.");
+    const result = this.actionRepository.retry(actionId, input);
     if (result.state === "CREATED" && this.actionDispatcher !== undefined) {
       const action = await this.actionDispatcher.dispatch({
         actionId: result.action.id,

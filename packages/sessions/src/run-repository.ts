@@ -28,6 +28,7 @@ export interface CreateActionInput {
   readonly command?: ActionCommand;
   readonly sourceMetricsEpoch: number;
   readonly sourceFrameId?: string;
+  readonly parentActionId?: string;
 }
 
 export interface ActionTargetView {
@@ -45,6 +46,7 @@ export interface ActionView {
   readonly command?: ActionCommand;
   readonly sourceMetricsEpoch: number;
   readonly sourceFrameId?: string;
+  readonly parentActionId?: string;
   readonly state:
     "QUEUED" | "LEASED" | "DISPATCHING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "UNKNOWN";
   readonly targets: readonly ActionTargetView[];
@@ -65,6 +67,7 @@ interface ActionRow {
   readonly command_json: string | null;
   readonly state: ActionView["state"];
   readonly metrics_epoch: number;
+  readonly parent_action_id?: string | null;
 }
 
 interface TargetRow {
@@ -75,7 +78,15 @@ interface TargetRow {
 const NON_TERMINAL_STATES = ["QUEUED", "LEASED", "DISPATCHING"] as const;
 
 export class RunActionRepository {
-  public constructor(private readonly database: Database.Database) {}
+  private readonly hasParentActionColumn: boolean;
+
+  public constructor(private readonly database: Database.Database) {
+    this.hasParentActionColumn = (
+      this.database.prepare("PRAGMA table_info(actions)").all() as {
+        name: string;
+      }[]
+    ).some((column) => column.name === "parent_action_id");
+  }
 
   public create(input: CreateActionInput): CreateActionResult {
     validateCreateAction(input);
@@ -92,10 +103,12 @@ export class RunActionRepository {
         )
         .get(input.runId, input.clientRequestId) as ActionRow | undefined;
       if (existing !== undefined) {
+        const existingParentActionId = this.readParentActionId(existing.id);
         if (
           existing.action_type !== legacyActionType(command) ||
           existing.payload_json !== payloadJson ||
-          existing.metrics_epoch !== input.sourceMetricsEpoch
+          existing.metrics_epoch !== input.sourceMetricsEpoch ||
+          existingParentActionId !== input.parentActionId
         ) {
           throw new Error("Action client request already exists with a different payload.");
         }
@@ -131,24 +144,49 @@ export class RunActionRepository {
         .get(input.runId) as { action_seq: number };
       const actionId = `act-${randomUUID()}`;
       const now = new Date().toISOString();
-      this.database
-        .prepare(
-          `INSERT INTO actions
-           (id, run_id, action_seq, client_request_id, action_type, payload_json, command_json, state, metrics_epoch, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)`,
-        )
-        .run(
-          actionId,
-          input.runId,
-          sequence.action_seq + 1,
-          input.clientRequestId,
-          legacyActionType(command),
-          payloadJson,
-          JSON.stringify(command),
-          input.sourceMetricsEpoch,
-          now,
-          now,
-        );
+      if (input.parentActionId !== undefined && !this.hasParentActionColumn) {
+        throw new Error("Action retry persistence is unavailable in this database schema.");
+      }
+      if (this.hasParentActionColumn) {
+        this.database
+          .prepare(
+            `INSERT INTO actions
+             (id, run_id, action_seq, client_request_id, action_type, payload_json, command_json, parent_action_id, state, metrics_epoch, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)`,
+          )
+          .run(
+            actionId,
+            input.runId,
+            sequence.action_seq + 1,
+            input.clientRequestId,
+            legacyActionType(command),
+            payloadJson,
+            JSON.stringify(command),
+            input.parentActionId ?? null,
+            input.sourceMetricsEpoch,
+            now,
+            now,
+          );
+      } else {
+        this.database
+          .prepare(
+            `INSERT INTO actions
+             (id, run_id, action_seq, client_request_id, action_type, payload_json, command_json, state, metrics_epoch, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'QUEUED', ?, ?, ?)`,
+          )
+          .run(
+            actionId,
+            input.runId,
+            sequence.action_seq + 1,
+            input.clientRequestId,
+            legacyActionType(command),
+            payloadJson,
+            JSON.stringify(command),
+            input.sourceMetricsEpoch,
+            now,
+            now,
+          );
+      }
       for (const member of members) {
         this.database
           .prepare(
@@ -191,6 +229,39 @@ export class RunActionRepository {
     return row === undefined ? undefined : this.readAction(row.id);
   }
 
+  public retry(
+    parentActionId: string,
+    input: {
+      readonly clientRequestId: string;
+      readonly sourceMetricsEpoch?: number;
+      readonly sourceFrameId?: string;
+    },
+  ): CreateActionResult {
+    if (!parentActionId.trim()) throw new TypeError("Parent action id is required.");
+    if (!this.hasParentActionColumn) {
+      throw new Error("Action retry persistence is unavailable in this database schema.");
+    }
+    const parent = this.get(parentActionId);
+    if (parent === undefined) throw new Error("Parent action not found.");
+    if (parent.state !== "FAILED" && parent.state !== "UNKNOWN") {
+      throw new Error("Only terminal FAILED or UNKNOWN actions can be retried.");
+    }
+    return this.create({
+      runId: parent.runId,
+      clientRequestId: input.clientRequestId,
+      type: parent.type,
+      ...(parent.payload === undefined ? {} : { payload: parent.payload }),
+      ...(parent.command === undefined ? {} : { command: parent.command }),
+      sourceMetricsEpoch: input.sourceMetricsEpoch ?? parent.sourceMetricsEpoch,
+      ...(input.sourceFrameId === undefined
+        ? parent.sourceFrameId === undefined
+          ? {}
+          : { sourceFrameId: parent.sourceFrameId }
+        : { sourceFrameId: input.sourceFrameId }),
+      parentActionId,
+    });
+  }
+
   private readAction(actionId: string): ActionView {
     const row = this.database
       .prepare(
@@ -210,6 +281,7 @@ export class RunActionRepository {
     const targets = this.database
       .prepare("SELECT serial, state FROM action_targets WHERE action_id = ? ORDER BY serial ASC")
       .all(actionId) as readonly TargetRow[];
+    const parentActionId = this.readParentActionId(row.id);
     return {
       id: row.id,
       runId: row.run_id,
@@ -220,12 +292,21 @@ export class RunActionRepository {
       ...(envelope.payload === null ? {} : { payload: envelope.payload }),
       sourceMetricsEpoch: row.metrics_epoch,
       ...(envelope.sourceFrameId === null ? {} : { sourceFrameId: envelope.sourceFrameId }),
+      ...(parentActionId === undefined ? {} : { parentActionId }),
       state: row.state,
       targets: targets.map((target) => ({
         serial: target.serial as DeviceSerial,
         state: target.state,
       })),
     };
+  }
+
+  private readParentActionId(actionId: string): string | undefined {
+    if (!this.hasParentActionColumn) return undefined;
+    const row = this.database
+      .prepare("SELECT parent_action_id FROM actions WHERE id = ?")
+      .get(actionId) as { parent_action_id: string | null } | undefined;
+    return row?.parent_action_id ?? undefined;
   }
 }
 
