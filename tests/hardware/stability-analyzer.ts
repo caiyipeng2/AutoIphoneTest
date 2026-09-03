@@ -104,7 +104,10 @@ export function analyzeStability(
     x: sample.elapsedSeconds,
     y: sample.processTreeThreads,
   }));
-  const privateSlope = theilSenSlope(privateValues) * 60;
+  // Samples store bytes, while the acceptance threshold is expressed in MiB
+  // per minute. Normalize before comparing and reporting the slope so a
+  // harmless sub-MiB trend cannot be rejected as a one-byte-per-minute breach.
+  const privateSlope = (theilSenSlope(privateValues) * 60) / (1024 * 1024);
   const handlesSlope = theilSenSlope(handlesValues) * 60;
   const threadsSlope = theilSenSlope(threadValues) * 60;
   const privateTau = kendallTau(privateValues.map(({ y }) => y));

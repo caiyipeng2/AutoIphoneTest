@@ -103,4 +103,22 @@ describe("AppiumService", () => {
       undefined,
     );
   });
+
+  it("allows the runtime to pin Appium to the same Android SDK environment as its ADB client", () => {
+    const service = new AppiumService({
+      executablePath: "E:\\tools\\node.exe",
+      appiumHome: "E:\\appium-home",
+      port: 4723,
+      logPath: "E:\\logs\\appium.log",
+      environment: {
+        ANDROID_HOME: "E:\\tools\\scrcpy\\3.1",
+        ANDROID_SDK_ROOT: "E:\\tools\\scrcpy\\3.1",
+      },
+    });
+
+    expect(service.environment).toMatchObject({
+      ANDROID_HOME: "E:\\tools\\scrcpy\\3.1",
+      ANDROID_SDK_ROOT: "E:\\tools\\scrcpy\\3.1",
+    });
+  });
 });

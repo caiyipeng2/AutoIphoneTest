@@ -84,6 +84,21 @@ describe("M11 stability analyzer", () => {
     expect(result.metrics.privateBytesKendallTau).toBeGreaterThanOrEqual(0.5);
   });
 
+  it("keeps a monotonic trend below one MiB per minute under the private-byte threshold", () => {
+    const samples = Array.from({ length: 12 }, (_, index) =>
+      sample({
+        elapsedSeconds: index * 60,
+        processTreePrivateBytes: 256 * 1024 * 1024 + index * 512 * 1024,
+      }),
+    );
+
+    const result = analyzeStability(samples, { warmupSeconds: 120, expectedWorkers: 1 });
+
+    expect(result.status).toBe("PASS");
+    expect(result.thresholds.privateBytesSlope).toBe("PASS");
+    expect(result.metrics.privateBytesSlopeMiBPerMinute).toBeCloseTo(0.5, 5);
+  });
+
   it("fails a sustained queue and oversized WAL checkpoint", () => {
     const samples = Array.from({ length: 8 }, (_, index) =>
       sample({

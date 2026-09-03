@@ -19,6 +19,8 @@ export interface AppiumServiceOptions {
   readonly logPath: string;
   readonly readinessTimeoutMs?: number;
   readonly cwd?: string;
+  /** Environment overrides for SDK/ADB selection in the owned Appium child. */
+  readonly environment?: NodeJS.ProcessEnv;
   readonly spawnProcess?: (
     executablePath: string,
     args: readonly string[],
@@ -64,7 +66,11 @@ export class AppiumService {
       "--log",
       options.logPath,
     ];
-    this.environment = { ...process.env, APPIUM_HOME: options.appiumHome };
+    this.environment = {
+      ...process.env,
+      ...(options.environment ?? {}),
+      APPIUM_HOME: options.appiumHome,
+    };
     this.readinessTimeoutMs = options.readinessTimeoutMs ?? 15_000;
     if (this.readinessTimeoutMs <= 0) throw new TypeError("readinessTimeoutMs must be positive.");
     this.spawnProcess =

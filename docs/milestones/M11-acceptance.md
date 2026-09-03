@@ -85,6 +85,19 @@ Samsung ADB connection was not stable enough for a second long run.
 See [M11 Task 14](M11-task14-formal-moto-stability-acceptance.md) for the full
 metrics and evidence path.
 
+## Latest dual-device formal stability revalidation
+
+M11 Task 15 completed a fresh dual-device 60-minute run after pinning each
+Appium child to the runtime's ADB SDK root. Samsung `R5CX211TXNT` remained the
+leader and Motorola `ZT4229J5ZR` the follower for the full run; no action errors,
+crashes, restarts, queue violations, or resource leaks were recorded. The raw
+runner initially exposed a units defect in the analyzer (bytes/minute compared
+with a MiB/minute threshold). After correcting that conversion without changing
+the fixed threshold, the same 333 samples passed all analyzer gates.
+
+See [M11 Task 15](M11-task15-dual-stability-adsdk-acceptance.md) for the raw
+evidence path, corrected metrics, and ADB consistency verification.
+
 ## Automated verification
 
 | Check                      | Result                                                                                 |
@@ -188,18 +201,18 @@ The recorder uses MP4 for the current scrcpy 3.1 plus Android 16 device combinat
 
 - The portable runtime now wires the pinned scrcpy 3.1 server asset into a serial-bound Tango `ViewProvider` when the asset is present, and the authenticated video gateway starts it on demand. The 60-minute result in this acceptance predates runtime video recording; the separate post-M11 smoke above proves the current leader-video publication path.
 - Appium screenshot fallback and leader-video publication are implemented and verified on a real Android device. Screenshot fallback still requires an active `RUNNING` worker-owned Appium session; without one, the degraded provider remains unavailable.
-- The latest formal 60-minute stability evidence is a single-device Motorola run; a dual-device long-run gate remains pending stable Samsung ADB connectivity. The earlier dual-device smoke and two-device M11 flow remain valid.
+- The latest formal 60-minute stability evidence is a corrected dual-device run using Samsung as leader and Motorola as follower. The earlier single-device Motorola gate remains valid as an independent recovery baseline.
 - The `unity-command` build provider is available as an opt-in adapter. It invokes a configured absolute Unity executable with shell-free argument arrays and reuses the immutable artifact-import pipeline. The default Apps route still uses `artifact-import`; enabling command builds for a concrete Unity project requires an explicit arguments builder, signing profile, and real package acceptance.
 - Runtime registration is gated by `TEST_CENTER_UNITY_EXECUTABLE_PATH`, `TEST_CENTER_UNITY_PROJECT_PATH`, and `TEST_CENTER_UNITY_BUILD_ARGS_JSON`; when these are absent, provider discovery intentionally exposes only `artifact-import`.
 - Fault injection and active-session recovery acceptance remain skipped per prior user confirmation.
 
 ## M0-M11 traceability
 
-Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), [M11 Task 9](M11-task9-current-main-portable-revalidation.md), [M11 Task 10](M11-task10-release-zip-acceptance.md), [M11 Task 11](M11-task11-v63-real-package-acceptance.md), [M11 Task 12](M11-task12-shared-adb-endpoint-acceptance.md), [M11 Task 13](M11-task13-stability-shared-adb-acceptance.md), and [M11 Task 14](M11-task14-formal-moto-stability-acceptance.md).
+Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), [M11 Task 9](M11-task9-current-main-portable-revalidation.md), [M11 Task 10](M11-task10-release-zip-acceptance.md), [M11 Task 11](M11-task11-v63-real-package-acceptance.md), [M11 Task 12](M11-task12-shared-adb-endpoint-acceptance.md), [M11 Task 13](M11-task13-stability-shared-adb-acceptance.md), [M11 Task 14](M11-task14-formal-moto-stability-acceptance.md), and [M11 Task 15](M11-task15-dual-stability-adsdk-acceptance.md).
 
 ## Decision
 
-**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, historical 60-minute Appium-only two-device run, current-main two-device revalidation, current release ZIP clean-extraction validation, and latest v63 single-device formal stability revalidation: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
+**M11 portable delivery, clean real-device flow, optional exports, stability analyzer, Appium-only screenshot fallback, leader-video publication, historical 60-minute Appium-only two-device run, current-main two-device revalidation, current release ZIP clean-extraction validation, and latest v63 dual-device formal stability revalidation: PASS locally. Runtime scrcpy provider wiring, screenshot fallback, and recorded leader-video evidence are implemented and verified locally.**
 
 Task 9 is committed as `e228dd5`; Task 10 release ZIP changes and this acceptance
 update are committed as `6d8bbb5` and pushed to `origin/main`. The generated ZIP

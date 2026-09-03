@@ -591,6 +591,7 @@ function createRuntimeWorkerCoordinator(
             appiumHome,
             port,
             logPath: win32.join(logPath, "appium.log"),
+            environment: createAppiumSdkEnvironment(adbPath),
             // UiAutomator2 may install/validate its device-side server on a
             // cold Android device. Keep this bounded but long enough for two
             // sequential workers to initialize without a false timeout.
@@ -746,6 +747,16 @@ function readOptionalPort(value: string | undefined): number | undefined {
     throw new TypeError(`Invalid Appium ADB port: ${value}.`);
   }
   return parsed;
+}
+
+export function createAppiumSdkEnvironment(adbPath: string): NodeJS.ProcessEnv {
+  if (!win32.isAbsolute(adbPath)) throw new TypeError("Appium ADB path must be absolute.");
+  const adbDirectory = win32.dirname(adbPath);
+  const sdkRoot =
+    win32.basename(adbDirectory).toLowerCase() === "platform-tools"
+      ? win32.dirname(adbDirectory)
+      : adbDirectory;
+  return { ANDROID_HOME: sdkRoot, ANDROID_SDK_ROOT: sdkRoot };
 }
 
 function readDeviceViewport(metadata: Readonly<Record<string, unknown>> | undefined): {

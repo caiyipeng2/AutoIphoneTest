@@ -14,7 +14,7 @@ import {
   migrate,
 } from "@test-center/database";
 
-import { RuntimeArtifactRouteService } from "./device-runtime.js";
+import { createAppiumSdkEnvironment, RuntimeArtifactRouteService } from "./device-runtime.js";
 
 const roots: string[] = [];
 const databases: Database.Database[] = [];
@@ -26,6 +26,17 @@ afterEach(async () => {
 });
 
 describe("RuntimeArtifactRouteService", () => {
+  it("derives a shared Appium SDK root from the runtime ADB executable", () => {
+    expect(createAppiumSdkEnvironment("E:\\tools\\scrcpy\\3.1\\adb.exe")).toEqual({
+      ANDROID_HOME: "E:\\tools\\scrcpy\\3.1",
+      ANDROID_SDK_ROOT: "E:\\tools\\scrcpy\\3.1",
+    });
+    expect(createAppiumSdkEnvironment("D:\\Android\\platform-tools\\adb.exe")).toEqual({
+      ANDROID_HOME: "D:\\Android",
+      ANDROID_SDK_ROOT: "D:\\Android",
+    });
+  });
+
   it("persists parsed APK metadata from the staged path", async () => {
     const root = await mkdtemp(join(tmpdir(), "test-center-runtime-artifact-"));
     roots.push(root);
