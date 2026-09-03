@@ -54,7 +54,8 @@ actual device viewport rather than a fixed `1080x2340` assumption.
 
 This is a two-device v63 acceptance. It does not claim three- or four-device
 capacity or the four-device soak. Fault injection and active-session recovery
-remain skipped under the existing user confirmation.
+were later resumed and recorded in [M9 Task 22](M9-task22-fault-recovery-acceptance.md);
+this Task 21 record remains the action-matrix evidence only.
 
 Local source changes and this acceptance record are submitted only after local
 verification; no Unity game source repository files are committed here.

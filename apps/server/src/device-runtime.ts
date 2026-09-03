@@ -534,6 +534,17 @@ function createRuntimeWorkerCoordinator(
       );
     },
   };
+  const appiumForwardCleaner = {
+    remove: async (serial: string, hostPort: number) => {
+      // Appium owns the system/mjpeg forwards, so the worker must remove them
+      // explicitly when UiAutomator2 dies before DELETE /session can run.
+      await client.execute({
+        kind: "forwardRemove",
+        serial: parseDeviceSerial(serial),
+        hostPort,
+      });
+    },
+  };
   return new RuntimeWorkerCoordinator(
     ({
       runId,
@@ -573,6 +584,7 @@ function createRuntimeWorkerCoordinator(
           ? {}
           : { adbPort: appiumAdbPort, suppressKillServer: true }),
         ...bridgeOptions,
+        appiumForwardCleaner,
         runNonceHash,
         actionViewport: readDeviceViewport(registry.get(serial)?.metadata),
         allocator,

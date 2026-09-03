@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { AppiumW3cClientError } from "@test-center/appium";
 import type { AppiumW3cClient, PortLease, SessionFence } from "@test-center/appium";
 import type { LogcatStream } from "@test-center/adb";
 import {
@@ -112,6 +113,50 @@ function createManagedHarness() {
 }
 
 describe("DeviceWorker", () => {
+  it("classifies a UiAutomator2 instrumentation crash as an Appium session loss", async () => {
+    const fence: SessionFence = { sessionId: "session-fault", serial: "serial-a", generation: 1 };
+    const faultSink = vi.fn();
+    const client = {
+      createSession: vi.fn(async () => fence),
+      deleteSession: vi.fn(async () => undefined),
+      activateApp: vi.fn(async () => undefined),
+      currentPackage: vi.fn(async () => "com.example.game"),
+      performActions: vi.fn(async () => {
+        throw new AppiumW3cClientError(
+          "APPIUM_ERROR",
+          "'POST /actions' cannot be proxied to UiAutomator2 server because the instrumentation process is not running (probably crashed).",
+        );
+      }),
+    } as unknown as AppiumW3cClient;
+    const logcat = {
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => undefined),
+    } as unknown as LogcatStream;
+    const worker = new DeviceWorker({
+      serial: "serial-a",
+      packageName: "com.example.game",
+      owner: { ownerPid: 100, ownerToken: "run-a" },
+      allocator: { allocate: vi.fn(async () => lease), release: vi.fn(async () => undefined) },
+      identityProbe: vi.fn(async () => ({ serial: "serial-a", packageName: "com.example.game" })),
+      clientFactory: vi.fn(() => client),
+      logcatFactory: vi.fn(() => logcat),
+      faultSink,
+    });
+
+    await worker.start();
+    await expect(
+      worker.executeAction({
+        packageName: "com.example.game",
+        command: { type: "tap", x: 0.1, y: 0.1 },
+      }),
+    ).rejects.toMatchObject({ code: "APPIUM_ERROR" });
+
+    expect(faultSink).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "APPIUM_SESSION_LOST", serial: "serial-a" }),
+    );
+    await worker.stop();
+  });
+
   it("starts managed Appium from the resource lease before creating the session", async () => {
     const { worker, client, logcat, appium, appiumServiceFactory, resourceManager } =
       createManagedHarness();
@@ -173,6 +218,31 @@ describe("DeviceWorker", () => {
     expect(appium.stop).toHaveBeenCalledTimes(1);
     expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, resourceLease.ownerToken);
     expect(worker.state).toBe("STOPPED");
+  });
+
+  it("cleans Appium system and MJPEG forwards even when the session is already lost", async () => {
+    const { client, logcat, appium, resourceManager } = createManagedHarness();
+    const cleaner = { remove: vi.fn(async () => undefined) };
+    vi.mocked(client.deleteSession).mockRejectedValueOnce(new Error("session already lost"));
+    const worker = new DeviceWorker({
+      serial: "serial-a",
+      packageName: "com.example.game",
+      owner: { ownerPid: 100, ownerToken: "run-a" },
+      runId: "run-a",
+      resourceManager,
+      appiumServiceFactory: () => appium,
+      identityProbe: vi.fn(async () => ({ serial: "serial-a", packageName: "com.example.game" })),
+      clientFactory: () => client,
+      logcatFactory: () => logcat,
+      appiumForwardCleaner: cleaner,
+    });
+
+    await worker.start();
+    await expect(worker.stop()).rejects.toMatchObject({ code: "STOP_FAILED" });
+
+    expect(cleaner.remove).toHaveBeenCalledWith("serial-a", resourceLease.ports.system);
+    expect(cleaner.remove).toHaveBeenCalledWith("serial-a", resourceLease.ports.mjpeg);
+    expect(resourceManager.release).toHaveBeenCalledWith(resourceLease, resourceLease.ownerToken);
   });
 
   it("releases the managed lease when Appium stop fails", async () => {

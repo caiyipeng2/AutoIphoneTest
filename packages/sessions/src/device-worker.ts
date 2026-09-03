@@ -54,6 +54,11 @@ export interface DeviceWorkerBridgeForwarder {
   remove(serial: string, hostPort: number): Promise<void>;
 }
 
+/** Removes Appium-owned host forwards after a session loss. */
+export interface DeviceWorkerForwardCleaner {
+  remove(serial: string, hostPort: number): Promise<void>;
+}
+
 export interface DeviceWorkerBridgeSession {
   connect(): Promise<void>;
   close(): Promise<void>;
@@ -101,6 +106,7 @@ export interface DeviceWorkerOptions {
   readonly adbPort?: number;
   readonly suppressKillServer?: boolean;
   readonly bridgeForwarder?: DeviceWorkerBridgeForwarder;
+  readonly appiumForwardCleaner?: DeviceWorkerForwardCleaner;
   readonly bridgeSessionFactory?: (
     input: DeviceWorkerBridgeSessionFactoryInput,
   ) => DeviceWorkerBridgeSession;
@@ -151,6 +157,7 @@ export class DeviceWorker {
   private bridgeSession: DeviceWorkerBridgeSession | undefined;
   private bridgeForwarded = false;
   private readonly bridgeForwarder: DeviceWorkerOptions["bridgeForwarder"];
+  private readonly appiumForwardCleaner: DeviceWorkerOptions["appiumForwardCleaner"];
   private readonly bridgeSessionFactory: DeviceWorkerOptions["bridgeSessionFactory"];
   private readonly bridgeDevicePort: number;
   private readonly runNonceHash: string | undefined;
@@ -186,6 +193,7 @@ export class DeviceWorker {
     this.adbPort = options.adbPort;
     this.suppressKillServer = options.suppressKillServer;
     this.bridgeForwarder = options.bridgeForwarder;
+    this.appiumForwardCleaner = options.appiumForwardCleaner;
     this.bridgeSessionFactory = options.bridgeSessionFactory;
     this.bridgeDevicePort = options.bridgeDevicePort ?? 17_501;
     this.runNonceHash = options.runNonceHash;
@@ -316,6 +324,7 @@ export class DeviceWorker {
       if (fault !== undefined) this.faultSink?.(fault);
       if (fence !== undefined && client !== undefined)
         await client.deleteSession(fence).catch(() => undefined);
+      await this.cleanupAppiumForwards(resourceLease, lease);
       await bridgeSession?.close().catch(() => undefined);
       if (bridgeForwarded && resourceLease !== undefined)
         await this.bridgeForwarder
@@ -373,6 +382,13 @@ export class DeviceWorker {
       if (client !== undefined && fence !== undefined) await client.deleteSession(fence);
     } catch (error) {
       firstError ??= error;
+    }
+    for (const hostPort of appiumForwardPorts(resourceLease, lease)) {
+      try {
+        await this.appiumForwardCleaner?.remove(this.serial, hostPort);
+      } catch (error) {
+        firstError ??= error;
+      }
     }
     try {
       if (appium !== undefined) await appium.stop();
@@ -443,38 +459,51 @@ export class DeviceWorker {
     }
     const client = this.client;
     const fence = this.fence;
-    await client.activateApp(fence, input.packageName);
-    await this.waitForForegroundPackage(client, fence, input.packageName);
-    const command = input.command;
-    if (command?.type === "terminate") {
-      await client.terminateApp(fence, input.packageName);
-      return { packageName: input.packageName, pointerActionCount: 0 };
-    }
-    if (command?.type === "restart") {
-      await client.terminateApp(fence, input.packageName);
+    try {
       await client.activateApp(fence, input.packageName);
-      return { packageName: input.packageName, pointerActionCount: 0 };
+      await this.waitForForegroundPackage(client, fence, input.packageName);
+      const command = input.command;
+      if (command?.type === "terminate") {
+        await client.terminateApp(fence, input.packageName);
+        return { packageName: input.packageName, pointerActionCount: 0 };
+      }
+      if (command?.type === "restart") {
+        await client.terminateApp(fence, input.packageName);
+        await client.activateApp(fence, input.packageName);
+        return { packageName: input.packageName, pointerActionCount: 0 };
+      }
+      if (command?.type === "back") {
+        await client.pressKey(fence, 4);
+        return { packageName: input.packageName, pointerActionCount: 0 };
+      }
+      if (command?.type === "activate") {
+        return { packageName: input.packageName, pointerActionCount: 0 };
+      }
+      if (command?.type === "text") {
+        await client.typeText(fence, command.text);
+        return { packageName: input.packageName, pointerActionCount: 0 };
+      }
+      const actions =
+        command === undefined
+          ? createPointerActions(
+              input.payload ?? { kind: "tap", x: 0.5, y: 0.5 },
+              this.actionViewport,
+            )
+          : createCommandPointerActions(command, this.actionViewport);
+      await client.performActions(fence, actions);
+      return {
+        packageName: input.packageName,
+        pointerActionCount: actions[0]?.actions.length ?? 0,
+      };
+    } catch (error) {
+      const fault = toRuntimeFaultEvent(error, {
+        runId: this.runId,
+        serial: this.serial,
+        generation: this._generation,
+      });
+      if (fault !== undefined) this.faultSink?.(fault);
+      throw error;
     }
-    if (command?.type === "back") {
-      await client.pressKey(fence, 4);
-      return { packageName: input.packageName, pointerActionCount: 0 };
-    }
-    if (command?.type === "activate") {
-      return { packageName: input.packageName, pointerActionCount: 0 };
-    }
-    if (command?.type === "text") {
-      await client.typeText(fence, command.text);
-      return { packageName: input.packageName, pointerActionCount: 0 };
-    }
-    const actions =
-      command === undefined
-        ? createPointerActions(
-            input.payload ?? { kind: "tap", x: 0.5, y: 0.5 },
-            this.actionViewport,
-          )
-        : createCommandPointerActions(command, this.actionViewport);
-    await client.performActions(fence, actions);
-    return { packageName: input.packageName, pointerActionCount: actions[0]?.actions.length ?? 0 };
   }
 
   private async waitForForegroundPackage(
@@ -520,6 +549,24 @@ export class DeviceWorker {
   private isManaged(): boolean {
     return this.runId !== undefined;
   }
+
+  private async cleanupAppiumForwards(
+    resourceLease: WorkerResourceLease | undefined,
+    lease: PortLease | undefined,
+  ): Promise<void> {
+    for (const hostPort of appiumForwardPorts(resourceLease, lease)) {
+      await this.appiumForwardCleaner?.remove(this.serial, hostPort).catch(() => undefined);
+    }
+  }
+}
+
+function appiumForwardPorts(
+  resourceLease: WorkerResourceLease | undefined,
+  lease: PortLease | undefined,
+): readonly number[] {
+  if (resourceLease !== undefined) return [resourceLease.ports.system, resourceLease.ports.mjpeg];
+  if (lease !== undefined) return [lease.systemPort, lease.mjpegPort];
+  return [];
 }
 
 function toRuntimeFaultEvent(
@@ -531,8 +578,12 @@ function toRuntimeFaultEvent(
   },
 ): RuntimeFaultEvent | undefined {
   const code = readErrorCode(error);
+  const message = error instanceof Error ? error.message : String(error);
+  const appiumSessionLost =
+    code === "SESSION_NOT_FOUND" ||
+    (code === "APPIUM_ERROR" && /instrumentation process is not running/i.test(message));
   if (
-    code !== "SESSION_NOT_FOUND" &&
+    !appiumSessionLost &&
     code !== "HANDSHAKE_TIMEOUT" &&
     code !== "TRANSPORT_CLOSED" &&
     code !== "TIMEOUT" &&
@@ -544,17 +595,15 @@ function toRuntimeFaultEvent(
     code !== "ARM_DESCRIPTOR_MISMATCH"
   )
     return undefined;
-  const category: RuntimeFaultCategory =
-    code === "SESSION_NOT_FOUND"
-      ? "APPIUM_SESSION_LOST"
-      : code === "HANDSHAKE_TIMEOUT" ||
-          code === "TRANSPORT_CLOSED" ||
-          code === "TIMEOUT" ||
-          code === "PING_TIMEOUT" ||
-          code === "ARM_TIMEOUT"
-        ? "BRIDGE_TIMEOUT"
-        : "BRIDGE_STATE_MISMATCH";
-  const message = error instanceof Error ? error.message : String(error);
+  const category: RuntimeFaultCategory = appiumSessionLost
+    ? "APPIUM_SESSION_LOST"
+    : code === "HANDSHAKE_TIMEOUT" ||
+        code === "TRANSPORT_CLOSED" ||
+        code === "TIMEOUT" ||
+        code === "PING_TIMEOUT" ||
+        code === "ARM_TIMEOUT"
+      ? "BRIDGE_TIMEOUT"
+      : "BRIDGE_STATE_MISMATCH";
   return {
     runId: input.runId ?? "unmanaged",
     serial: input.serial,

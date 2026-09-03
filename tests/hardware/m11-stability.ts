@@ -32,6 +32,7 @@ const serials = (process.env.TEST_CENTER_M11_SERIALS ?? "R5CX211TXNT,t4vswkqcs4u
   .map((serial) => serial.trim())
   .filter(Boolean);
 const packageName = process.env.TEST_CENTER_PACKAGE ?? "com.hg.idleweaponshoptycoon.android";
+const failurePolicy = parseFailurePolicy(process.env.TEST_CENTER_M11_FAILURE_POLICY);
 const durationSeconds = positiveInteger(process.env.TEST_CENTER_M11_STABILITY_SECONDS, 3_600);
 const intervalSeconds = positiveInteger(process.env.TEST_CENTER_M11_SAMPLE_INTERVAL_SECONDS, 10);
 const warmupSeconds = positiveInteger(process.env.TEST_CENTER_M11_WARMUP_SECONDS, 600);
@@ -90,7 +91,7 @@ try {
         packageName,
         deviceSerials: serials,
         leaderVideoEnabled: false,
-        failurePolicy: "PAUSE_ALL",
+        failurePolicy,
       },
       client,
     ),
@@ -172,6 +173,7 @@ try {
     cleanRoot: root,
     serials,
     packageName,
+    failurePolicy,
     durationSeconds,
     intervalSeconds,
     checkpointIntervalSeconds,
@@ -195,6 +197,7 @@ try {
     cleanRoot: root,
     serials,
     packageName,
+    failurePolicy,
     durationSeconds,
     intervalSeconds,
     warmupSeconds,
@@ -224,6 +227,12 @@ function positiveInteger(value: string | undefined, fallback: number): number {
   if (!Number.isInteger(parsed) || parsed < 1)
     throw new Error("M11 stability timing must be a positive integer.");
   return parsed;
+}
+
+function parseFailurePolicy(value: string | undefined): "PAUSE_ALL" | "QUARANTINE_FAILED_DEVICE" {
+  if (value === undefined || value.trim() === "") return "PAUSE_ALL";
+  if (value === "PAUSE_ALL" || value === "QUARANTINE_FAILED_DEVICE") return value;
+  throw new TypeError(`Invalid M11 stability failure policy: ${value}.`);
 }
 
 async function startProduct(): Promise<ProductProcess> {

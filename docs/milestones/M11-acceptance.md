@@ -222,7 +222,9 @@ The recorder uses MP4 for the current scrcpy 3.1 plus Android 16 device combinat
 - The latest formal 60-minute stability evidence is a corrected dual-device run using Samsung as leader and Motorola as follower. The earlier single-device Motorola gate remains valid as an independent recovery baseline.
 - The `unity-command` build provider is available as an opt-in adapter. It invokes a configured absolute Unity executable with shell-free argument arrays and reuses the immutable artifact-import pipeline. The default Apps route still uses `artifact-import`; enabling command builds for a concrete Unity project requires an explicit arguments builder, signing profile, and real package acceptance.
 - Runtime registration is gated by `TEST_CENTER_UNITY_EXECUTABLE_PATH`, `TEST_CENTER_UNITY_PROJECT_PATH`, and `TEST_CENTER_UNITY_BUILD_ARGS_JSON`; when these are absent, provider discovery intentionally exposes only `artifact-import`.
-- Fault injection and active-session recovery acceptance remain skipped per prior user confirmation.
+- Fault injection and active-session PAUSE_ALL recovery acceptance are recorded
+  in M9 Task 22. Physical follower quarantine and user-facing resume/rebuild/
+  rejoin commands remain outside the current accepted boundary.
 
 ## M0-M11 traceability
 

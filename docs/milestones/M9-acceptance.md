@@ -10,23 +10,23 @@ M9 covers the closed action set, typed incidents, deterministic `PAUSE_ALL` / `Q
 
 ## Implementation evidence
 
-| Area                                                                                  | Result                                                                                                          |
-| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Closed actions: tap, long press, drag/swipe, Back, text, activate, terminate, restart | Implemented and covered by existing action tests                                                                |
-| Nine incident categories and deterministic policy decisions                           | Implemented; leader, sole-member, unknown-member, and LOW_DISK force pause                                      |
-| Failure policy persistence                                                            | Implemented with migration `0013_run_failure_policy`; session API and runtime monitors read the selected policy |
-| Incident/recovery persistence and deduplication                                       | Implemented in SQLite; recovery decisions are immutable after completion                                        |
-| Incident timeline/filter/details UI                                                   | Implemented and tested                                                                                          |
-| Test-only fault source                                                                | `tests/faults/fake-fault-controller.ts`, no production route                                                    |
-| Plaintext evidence scan                                                               | PASS, 6,631 files scanned, 0 hits                                                                               |
-| Explicit bridge mode                                                                  | `TEST_CENTER_BRIDGE_MODE=required` remains the strict default; `optional` selects Appium-only explicitly       |
-| Managed Appium-only action path                                                       | Worker-owned Appium session executes tap/swipe/long press/drag/text/Back/lifecycle actions without QA Bridge  |
-| Worker startup cleanup                                                                 | Sequential 1-4 worker establishment avoids concurrent UiAutomator2 bootstrap races; dispatch remains parallel |
-| Managed Appium readiness                                                               | Default worker readiness window is 60 seconds and remains configurable with `TEST_CENTER_APPIUM_READINESS_TIMEOUT_MS` |
-| Automated suite                                                                       | PASS, 89 files / 365 tests                                                                                      |
-| TypeScript build                                                                      | PASS                                                                                                            |
-| ESLint                                                                                | PASS                                                                                                            |
-| `git diff --check`                                                                    | PASS                                                                                                            |
+| Area                                                                                  | Result                                                                                                                |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Closed actions: tap, long press, drag/swipe, Back, text, activate, terminate, restart | Implemented and covered by existing action tests                                                                      |
+| Nine incident categories and deterministic policy decisions                           | Implemented; leader, sole-member, unknown-member, and LOW_DISK force pause                                            |
+| Failure policy persistence                                                            | Implemented with migration `0013_run_failure_policy`; session API and runtime monitors read the selected policy       |
+| Incident/recovery persistence and deduplication                                       | Implemented in SQLite; recovery decisions are immutable after completion                                              |
+| Incident timeline/filter/details UI                                                   | Implemented and tested                                                                                                |
+| Test-only fault source                                                                | `tests/faults/fake-fault-controller.ts`, no production route                                                          |
+| Plaintext evidence scan                                                               | PASS, 6,631 files scanned, 0 hits                                                                                     |
+| Explicit bridge mode                                                                  | `TEST_CENTER_BRIDGE_MODE=required` remains the strict default; `optional` selects Appium-only explicitly              |
+| Managed Appium-only action path                                                       | Worker-owned Appium session executes tap/swipe/long press/drag/text/Back/lifecycle actions without QA Bridge          |
+| Worker startup cleanup                                                                | Sequential 1-4 worker establishment avoids concurrent UiAutomator2 bootstrap races; dispatch remains parallel         |
+| Managed Appium readiness                                                              | Default worker readiness window is 60 seconds and remains configurable with `TEST_CENTER_APPIUM_READINESS_TIMEOUT_MS` |
+| Automated suite                                                                       | PASS, 89 files / 365 tests                                                                                            |
+| TypeScript build                                                                      | PASS                                                                                                                  |
+| ESLint                                                                                | PASS                                                                                                                  |
+| `git diff --check`                                                                    | PASS                                                                                                                  |
 
 ## Hardware acceptance
 
@@ -42,12 +42,30 @@ The production package was then run through the new explicit Appium-only managed
 
 Two-device session creation and preflight succeeded with `R5CX211TXNT` and `t4vswkqcs4uc8pob`. After extending the bounded Appium readiness window for cold device-side UiAutomator2 bootstrap, the managed run reached `RUNNING`; one host tap produced `SUCCEEDED` results for both the leader and follower. The coordinator starts workers sequentially to avoid concurrent device-side bootstrap races, while action dispatch remains concurrent.
 
-Per user confirmation, active-session fault injection and incident/recovery acceptance are temporarily skipped. The existing fault harness remains test-only and unchanged; no production fault route was added.
+The original active-session fault acceptance was resumed in M9 Task 22. The
+focused policy matrix passed 43/43 tests. A real two-device run then terminated
+the Motorola follower's UiAutomator2 instrumentation process while `RUNNING`.
+The runtime persisted `APPIUM_SESSION_LOST`, completed the configured
+`PAUSE_ALL` recovery in 780 ms, rejected subsequent actions while paused, and
+released all worker, port-lease, and ADB-forward resources. The repaired
+physical fault matrix also force-stopped and manually relaunched the package on
+the online Samsung device using the shared ADB endpoint.
+
+See [M9 Task 22](M9-task22-fault-recovery-acceptance.md) for the full evidence.
+
+Real follower quarantine was not completed because the Motorola device
+disconnected from ADB after the fault experiment and did not return during the
+bounded reconnect attempts. The deterministic quarantine policy and membership
+tests passed; no physical quarantine result is claimed.
+
+The production build has no fault-injection route. The current recovery record
+is the policy decision (`PAUSE_ALL` or `QUARANTINE_DEVICE`); user-facing
+resume/rebuild/rejoin commands remain outside this accepted boundary.
 
 ## Acceptance decision
 
-**M9 implementation: READY FOR REVIEW. M9 single-device Appium-only action acceptance: PASS. M9 two-device hardware acceptance: PASS. M9 active-session fault-policy acceptance: SKIPPED BY USER.**
+**M9 implementation: READY FOR REVIEW. M9 single-device Appium-only action acceptance: PASS. M9 two-device hardware acceptance: PASS. M9 active-session PAUSE_ALL fault-policy acceptance: PASS. Deterministic follower quarantine acceptance: PASS; physical follower quarantine: BLOCKED by device ADB availability.**
 
-The Appium driver/device discovery blocker is resolved for the current environment. Appium-only operation is explicit and does not silently weaken the strict Bridge default. M10 remains unopened; fault-policy verification can be resumed later when requested.
+The Appium driver/device discovery blocker is resolved for the current environment. Appium-only operation is explicit and does not silently weaken the strict Bridge default. The physical fault/recovery acceptance evidence is recorded in [M9 Task 22](M9-task22-fault-recovery-acceptance.md). M10 remains independently accepted; explicit operator resume/rebuild/rejoin commands are still a separate follow-up scope.
 
-Local changes are intentionally uncommitted and unpushed pending user approval.
+The user has approved this acceptance slice for commit and push to `main`.

@@ -31,4 +31,10 @@ describe("M11 portable ADB endpoint", () => {
     expect(source).toContain("readStayAwakeState");
     expect(source).toContain("restoreStayAwake");
   });
+
+  it("allows the stability runner to exercise the explicit quarantine policy", async () => {
+    const source = await readFile(stabilityScriptPath, "utf8");
+    expect(source).toContain("TEST_CENTER_M11_FAILURE_POLICY");
+    expect(source).toContain("QUARANTINE_FAILED_DEVICE");
+  });
 });
