@@ -18,7 +18,10 @@ import { IncidentTimeline } from "../features/sessions/IncidentTimeline";
 import {
   createSession,
   fetchDevices,
+  pauseSession,
   preflightSession,
+  refreshSession,
+  resumeSession,
   startSession,
   type DeviceRecord,
   type SessionState,
@@ -42,7 +45,15 @@ const stateLabels: Record<SessionState, string> = {
   FAILED: "失败",
 };
 
-type SessionBusyState = "idle" | "loading" | "creating" | "preflight" | "starting";
+type SessionBusyState =
+  | "idle"
+  | "loading"
+  | "creating"
+  | "preflight"
+  | "starting"
+  | "refreshing"
+  | "pausing"
+  | "resuming";
 
 export function SessionsPage() {
   const [devices, setDevices] = useState<DeviceRecord[]>([]);
@@ -126,6 +137,45 @@ export function SessionsPage() {
     }
   };
 
+  const handleRefreshSession = async () => {
+    if (session === null) return;
+    setError(null);
+    setBusy("refreshing");
+    try {
+      setSession(await refreshSession(session.id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "会话状态刷新失败");
+    } finally {
+      setBusy("idle");
+    }
+  };
+
+  const handlePauseSession = async () => {
+    if (session === null || session.state !== "RUNNING") return;
+    setError(null);
+    setBusy("pausing");
+    try {
+      setSession(await pauseSession(session.id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "会话暂停失败");
+    } finally {
+      setBusy("idle");
+    }
+  };
+
+  const handleResumeSession = async () => {
+    if (session === null || session.state !== "PAUSED") return;
+    setError(null);
+    setBusy("resuming");
+    try {
+      setSession(await resumeSession(session.id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "会话恢复失败");
+    } finally {
+      setBusy("idle");
+    }
+  };
+
   const previewSerial = manualSerial.trim() || selectedSerials[0] || "";
   const isBusy = busy !== "idle";
 
@@ -144,7 +194,7 @@ export function SessionsPage() {
         {session && <span className="chip chip-good">{bridgeModeLabels[session.bridgeMode]}</span>}
         <button
           className="button button-primary"
-          disabled={isBusy || selectedSerials.length === 0 || session?.state === "RUNNING"}
+          disabled={isBusy || selectedSerials.length === 0 || session !== null}
           onClick={() => void handleCreateSession()}
         >
           {isBusy ? <LoaderCircle className="spin" size={15} /> : <Play size={15} />}
@@ -156,6 +206,49 @@ export function SessionsPage() {
                 ? "启动中"
                 : "创建同步会话"}
         </button>
+        {session && (
+          <div className="session-control-actions" aria-label="会话控制">
+            <button
+              className="icon-button"
+              title="刷新会话状态"
+              aria-label="刷新会话状态"
+              onClick={() => void handleRefreshSession()}
+              disabled={isBusy}
+            >
+              <RefreshCw className={busy === "refreshing" ? "spin" : undefined} size={17} />
+            </button>
+            {session.state === "RUNNING" && (
+              <button
+                className="button button-quiet"
+                aria-label="暂停会话"
+                onClick={() => void handlePauseSession()}
+                disabled={isBusy}
+              >
+                {busy === "pausing" ? (
+                  <LoaderCircle className="spin" size={15} />
+                ) : (
+                  <Pause size={15} />
+                )}
+                {busy === "pausing" ? "暂停中" : "暂停会话"}
+              </button>
+            )}
+            {session.state === "PAUSED" && (
+              <button
+                className="button button-primary"
+                aria-label="继续运行"
+                onClick={() => void handleResumeSession()}
+                disabled={isBusy}
+              >
+                {busy === "resuming" ? (
+                  <LoaderCircle className="spin" size={15} />
+                ) : (
+                  <Play size={15} />
+                )}
+                {busy === "resuming" ? "恢复中" : "继续运行"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (

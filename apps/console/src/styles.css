@@ -1050,6 +1050,15 @@ main {
 .session-state .button {
   margin-left: auto;
 }
+.session-control-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.session-state .session-control-actions .button {
+  margin-left: 0;
+}
 .empty-state {
   display: grid;
   place-items: center;
@@ -2085,6 +2094,16 @@ main {
   .upload-panel .button,
   .session-state .button {
     margin-left: 0;
+  }
+  .session-control-actions {
+    align-items: stretch;
+    flex-direction: column;
+    margin-left: 0;
+    width: 100%;
+  }
+  .session-control-actions .button {
+    justify-content: center;
+    width: 100%;
   }
   .form-grid,
   .choice-grid {

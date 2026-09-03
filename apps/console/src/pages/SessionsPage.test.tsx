@@ -192,6 +192,101 @@ describe("SessionsPage", () => {
 
     await waitFor(() => expect(screen.getByText("Appium-only · 非注入同步")).toBeInTheDocument());
   });
+
+  it("pauses and resumes the active session from the console", async () => {
+    const devices = [
+      {
+        serial: "R5CX211TXNT",
+        state: "ONLINE",
+        metadata: { model: "SM-S9280" },
+        firstSeenAt: "now",
+        lastSeenAt: "now",
+        connectionSeq: 1,
+        tags: [],
+      },
+    ];
+    const session = (state: "CREATED" | "PREFLIGHT" | "RUNNING" | "PAUSED", epoch = 1) => ({
+      id: "run-controls",
+      clientRequestId: "request-controls",
+      packageName: "com.hg.idleweaponshoptycoon.android",
+      state,
+      currentEpoch: epoch,
+      leaderVideoEnabled: true,
+      bridgeMode: "APPIUM_ONLY" as const,
+      failurePolicy: "PAUSE_ALL" as const,
+      leader: {
+        serial: "R5CX211TXNT",
+        role: "LEADER" as const,
+        membershipState: "ACTIVE" as const,
+        epoch,
+        generation: epoch,
+      },
+      devices: [
+        {
+          serial: "R5CX211TXNT",
+          role: "LEADER" as const,
+          membershipState: "ACTIVE" as const,
+          epoch,
+          generation: epoch,
+        },
+      ],
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/devices") return jsonResponse({ schemaVersion: 1, devices });
+      if (url === "/api/sessions" && init?.method === "POST") {
+        return jsonResponse(
+          { schemaVersion: 1, state: "CREATED", session: session("CREATED") },
+          201,
+        );
+      }
+      if (url === "/api/sessions/run-controls" && (!init || init.method === undefined))
+        return jsonResponse({ schemaVersion: 1, session: session("RUNNING") });
+      if (url.endsWith("/preflight"))
+        return jsonResponse({ schemaVersion: 1, session: session("PREFLIGHT") });
+      if (url.endsWith("/start"))
+        return jsonResponse({ schemaVersion: 1, session: session("RUNNING") });
+      if (url.endsWith("/pause")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ reason: "operator-console" });
+        return jsonResponse({ schemaVersion: 1, session: session("PAUSED") });
+      }
+      if (url.endsWith("/resume")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ reason: "operator-console" });
+        return jsonResponse({ schemaVersion: 1, session: session("RUNNING", 2) });
+      }
+      if (url.endsWith("/incidents"))
+        return jsonResponse({
+          schemaVersion: 1,
+          timeline: { runId: "run-controls", incidents: [], recoveries: [] },
+        });
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SessionsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /R5CX211TXNT/ })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /R5CX211TXNT/ }));
+    fireEvent.click(screen.getByRole("button", { name: "创建同步会话" }));
+    await waitFor(() => expect(screen.getByText("会话 运行中")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新会话状态" }));
+    await waitFor(() => expect(screen.getByText("会话 运行中")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "暂停会话" }));
+    await waitFor(() => expect(screen.getByText("会话 已暂停")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "继续运行" }));
+    await waitFor(() => expect(screen.getByText("会话 运行中")).toBeInTheDocument());
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions/run-controls/pause",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions/run-controls/resume",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });
 
 function jsonResponse(body: unknown, status = 200) {

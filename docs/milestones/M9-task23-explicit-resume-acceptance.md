@@ -44,8 +44,9 @@ also scans generated Unity `Library` content.
 
 ## Acceptance boundary
 
-This slice proves explicit resume/rebuild after `PAUSE_ALL`. Explicit retry of a
-terminal action is now covered by [M9 Task 24](M9-task24-action-retry-acceptance.md).
+This slice proves explicit resume/rebuild after `PAUSE_ALL`; the operation is
+now exposed in the Sessions console by [M9 Task 25](M9-task25-session-controls-acceptance.md).
+Explicit retry of a terminal action is covered by [M9 Task 24](M9-task24-action-retry-acceptance.md).
 Skip, rejoin of a quarantined serial, leader promotion, and physical two-device
 resume after the previously disconnected Motorola device returns to ADB still
 require their own identity and hardware gates.

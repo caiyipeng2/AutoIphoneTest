@@ -438,6 +438,18 @@ export async function fetchSession(id: string, signal?: AbortSignal): Promise<Se
   return body.session;
 }
 
+export async function refreshSession(id: string): Promise<SessionView> {
+  return await fetchSession(id);
+}
+
+export async function pauseSession(id: string, reason = "operator-console"): Promise<SessionView> {
+  return await sessionStateMutation(id, "pause", reason);
+}
+
+export async function resumeSession(id: string, reason = "operator-console"): Promise<SessionView> {
+  return await sessionStateMutation(id, "resume", reason);
+}
+
 export async function retrySessionAction(
   id: string,
   actionId: string,
@@ -684,6 +696,27 @@ async function sessionPhase(id: string, phase: "preflight" | "start"): Promise<S
       "content-type": "application/json",
       ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
     },
+  });
+  const payload = (await response.json()) as { session?: SessionView; error?: string };
+  if (!response.ok || payload.session === undefined) {
+    throw new Error(payload.error ?? `session-${phase}:${response.status}`);
+  }
+  return payload.session;
+}
+
+async function sessionStateMutation(
+  id: string,
+  phase: "pause" | "resume",
+  reason: string,
+): Promise<SessionView> {
+  const csrf = readCsrfToken();
+  const response = await fetch(`/api/sessions/${encodeURIComponent(id)}/${phase}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+    },
+    body: JSON.stringify({ reason }),
   });
   const payload = (await response.json()) as { session?: SessionView; error?: string };
   if (!response.ok || payload.session === undefined) {
