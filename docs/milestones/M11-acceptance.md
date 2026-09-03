@@ -102,8 +102,8 @@ evidence path, corrected metrics, and ADB consistency verification.
 
 | Check                      | Result                                                                                 |
 | -------------------------- | -------------------------------------------------------------------------------------- |
-| Full Vitest suite          | PASS, 146 files, 589 tests; 1 file and 2 tests skipped by existing suite configuration |
-| M11 analyzer tests         | PASS, 5 tests                                                                          |
+| Full Vitest suite          | PASS, 156 files, 618 tests; 1 file and 2 tests skipped by existing suite configuration |
+| M11 analyzer tests         | PASS, 6 tests                                                                          |
 | TypeScript build           | PASS, `npm run typecheck`                                                              |
 | New M11 files ESLint       | PASS                                                                                   |
 | New M11 files Prettier     | PASS                                                                                   |
