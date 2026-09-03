@@ -109,6 +109,13 @@ errors, and complete resource cleanup.
 See [M11 Task 16](M11-task16-current-release-acceptance.md) for the release and
 clean-extraction hashes.
 
+M11 Task 17 performed a fresh real-device dual smoke after Samsung returned to
+ADB. The current release bundle again completed with Samsung as leader and
+Motorola as follower, zero action errors, and complete cleanup.
+
+See [M11 Task 17](M11-task17-real-dual-smoke-revalidation.md) for the latest run
+and report hashes.
+
 ## Automated verification
 
 | Check                      | Result                                                                                 |
@@ -219,7 +226,7 @@ The recorder uses MP4 for the current scrcpy 3.1 plus Android 16 device combinat
 
 ## M0-M11 traceability
 
-Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), [M11 Task 9](M11-task9-current-main-portable-revalidation.md), [M11 Task 10](M11-task10-release-zip-acceptance.md), [M11 Task 11](M11-task11-v63-real-package-acceptance.md), [M11 Task 12](M11-task12-shared-adb-endpoint-acceptance.md), [M11 Task 13](M11-task13-stability-shared-adb-acceptance.md), [M11 Task 14](M11-task14-formal-moto-stability-acceptance.md), [M11 Task 15](M11-task15-dual-stability-adsdk-acceptance.md), and [M11 Task 16](M11-task16-current-release-acceptance.md).
+Prior milestone records remain the source of truth: [M0](M0-acceptance.md), [M1](M1-acceptance.md), [M2](M2-acceptance.md), [M3](M3-acceptance.md), [M5](M5-acceptance.md), [M6](M6-task1-acceptance.md), [M7](M7-console-session-ui-acceptance.md), [M8](M8-device-worker-managed-lifecycle-acceptance.md), [M9](M9-acceptance.md), [M10](M10-acceptance.md), [M11 Task 1](M11-task1-excel-acceptance.md), [M11 Task 2a](M11-task2a-junit-acceptance.md), [M11 Task 2b](M11-task2b-pdf-acceptance.md), [M11 Task 3a](M11-task3a-export-queue-acceptance.md), [M11 Task 3b](M11-task3b-results-export-acceptance.md), [M11 Task 4](M11-task4-portable-acceptance.md), [M11 Task 6](M11-task6-real-package-acceptance.md), [M11 Task 9](M11-task9-current-main-portable-revalidation.md), [M11 Task 10](M11-task10-release-zip-acceptance.md), [M11 Task 11](M11-task11-v63-real-package-acceptance.md), [M11 Task 12](M11-task12-shared-adb-endpoint-acceptance.md), [M11 Task 13](M11-task13-stability-shared-adb-acceptance.md), [M11 Task 14](M11-task14-formal-moto-stability-acceptance.md), [M11 Task 15](M11-task15-dual-stability-adsdk-acceptance.md), [M11 Task 16](M11-task16-current-release-acceptance.md), and [M11 Task 17](M11-task17-real-dual-smoke-revalidation.md).
 
 ## Decision
 
