@@ -123,6 +123,9 @@ const CompleteSessionSchema = z
     reason: z.string().trim().min(1).max(128).default("operator"),
   })
   .strict();
+const ResumeSessionSchema = z
+  .object({ reason: z.string().trim().min(1).max(128).default("operator") })
+  .strict();
 
 export interface SessionLeaderView {
   readonly serial: DeviceSerial;
@@ -196,6 +199,7 @@ export interface SessionRouteService {
   preflight(id: string, actorSessionId: string): Promise<SessionView>;
   start(id: string, actorSessionId: string): Promise<SessionView>;
   pause(id: string, reason: string): Promise<SessionView>;
+  resume?(id: string, reason: string): Promise<SessionView>;
   complete?(id: string, input: SessionCompletionInput): Promise<SessionView>;
   submitAction(
     id: string,
@@ -285,6 +289,28 @@ export async function registerSessionsRoutes(
       return await reply
         .code(sessionErrorCode(error))
         .send({ error: error instanceof Error ? error.message : "Pause rejected." });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/api/sessions/:id/resume", async (request, reply) => {
+    try {
+      assertMutationAllowed(request, context);
+      if (context.sessionService === undefined)
+        return await reply.code(503).send({ error: "Session service unavailable." });
+      if (context.sessionService.resume === undefined)
+        return await reply.code(503).send({ error: "Session resume unavailable." });
+      if (requireSession(request, context) === undefined)
+        return await reply.code(401).send({ error: "Authentication required." });
+      const payload = ResumeSessionSchema.parse(request.body ?? {});
+      const session = await context.sessionService.resume(
+        decodeURIComponent(request.params.id),
+        payload.reason,
+      );
+      return { schemaVersion: 1, session };
+    } catch (error) {
+      return await reply
+        .code(sessionErrorCode(error))
+        .send({ error: error instanceof Error ? error.message : "Resume rejected." });
     }
   });
 

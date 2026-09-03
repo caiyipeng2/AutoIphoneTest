@@ -84,9 +84,11 @@ did not return during the bounded reconnect attempts. No hardware quarantine
 result is claimed.
 
 The current implementation records policy recovery as `PAUSE_ALL` or
-`QUARANTINE_DEVICE`; it does not expose a user-facing resume/rebuild/rejoin HTTP
-command. Those explicit operator recovery commands remain a separate feature
-boundary rather than being inferred from this acceptance.
+`QUARANTINE_DEVICE`. A follow-up local slice now adds the protected
+`POST /api/sessions/:id/resume` command for explicit paused-run worker rebuild;
+its contract and generation/epoch evidence are recorded in [M9 Task 23](M9-task23-explicit-resume-acceptance.md).
+Action retry/skip, device rejoin, and leader promotion remain separate feature
+boundaries rather than being inferred from this acceptance.
 
 ## Verification
 

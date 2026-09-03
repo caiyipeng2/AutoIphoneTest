@@ -93,6 +93,27 @@ describe("RuntimeWorkerCoordinator", () => {
     expect(coordinator.list("run-2")).toEqual([]);
   });
 
+  it("passes persisted worker generations when rebuilding a run", async () => {
+    const inputs: number[] = [];
+    const factory: RuntimeWorkerFactory = (input) => {
+      inputs.push(input.generation ?? 1);
+      return { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
+    };
+    const coordinator = new RuntimeWorkerCoordinator(factory);
+
+    await coordinator.start(
+      "run-generation",
+      [serials[0]!],
+      "com.example.game",
+      "sha256:nonce",
+      undefined,
+      new Map([[serials[0]!, 7]]),
+    );
+
+    expect(inputs).toEqual([7]);
+    await coordinator.stop("run-generation");
+  });
+
   it("cleans up a partially established run after a later worker fails", async () => {
     const events: string[] = [];
     const factory: RuntimeWorkerFactory = (input) => ({

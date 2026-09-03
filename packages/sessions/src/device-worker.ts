@@ -113,6 +113,8 @@ export interface DeviceWorkerOptions {
   readonly bridgeDevicePort?: number;
   readonly runNonceHash?: string;
   readonly actionViewport?: { readonly width: number; readonly height: number };
+  /** Persisted generation to use when a paused run rebuilds this worker. */
+  readonly initialGeneration?: number;
 }
 
 export type DeviceWorkerErrorCode =
@@ -198,6 +200,13 @@ export class DeviceWorker {
     this.bridgeDevicePort = options.bridgeDevicePort ?? 17_501;
     this.runNonceHash = options.runNonceHash;
     this.actionViewport = options.actionViewport ?? { width: 1080, height: 2340 };
+    if (
+      options.initialGeneration !== undefined &&
+      (!Number.isSafeInteger(options.initialGeneration) || options.initialGeneration < 1)
+    ) {
+      throw new TypeError("initialGeneration must be a positive safe integer.");
+    }
+    this._generation = options.initialGeneration ?? 1;
     if ((this.bridgeForwarder === undefined) !== (this.bridgeSessionFactory === undefined)) {
       throw new TypeError("Bridge forwarder and session factory must be configured together.");
     }

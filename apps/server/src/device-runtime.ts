@@ -551,6 +551,7 @@ function createRuntimeWorkerCoordinator(
       serial,
       packageName,
       runNonceHash,
+      generation,
       bridgeMode: sessionBridgeMode,
       logcatRecordSink,
       faultSink,
@@ -586,6 +587,7 @@ function createRuntimeWorkerCoordinator(
         ...bridgeOptions,
         appiumForwardCleaner,
         runNonceHash,
+        ...(generation === undefined ? {} : { initialGeneration: generation }),
         actionViewport: readDeviceViewport(registry.get(serial)?.metadata),
         allocator,
         identityProbe: async () => {

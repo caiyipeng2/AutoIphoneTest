@@ -202,6 +202,81 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     return paused;
   }
 
+  public async resume(id: string, reason: string): Promise<SessionView> {
+    if (!reason.trim() || reason.length > 128) throw new TypeError("Resume reason is invalid.");
+    const current = this.get(id);
+    if (current === undefined) throw new Error("Session not found.");
+    if (current.state !== "PAUSED") throw new Error("Session state must be PAUSED.");
+    const activeMembers = current.devices.filter((device) => device.membershipState === "ACTIVE");
+    if (activeMembers.length === 0) throw new Error("Run has no active devices.");
+    for (const member of activeMembers) {
+      const device = this.registry.get(member.serial);
+      if (device === undefined) throw new Error(`Device not found: ${member.serial}.`);
+      if (device.state !== "ONLINE") throw new Error(`Device must be online: ${member.serial}.`);
+    }
+
+    const nextEpoch = current.currentEpoch + 1;
+    const generations = new Map(
+      activeMembers.map((member) => [member.serial, member.generation + 1] as const),
+    );
+    await this.workerCoordinator?.start(
+      id,
+      activeMembers.map((member) => member.serial),
+      current.packageName,
+      this.readRunNonceHash(id),
+      current.bridgeMode,
+      generations,
+    );
+    try {
+      await this.videoRecorder
+        ?.start({
+          runId: current.id,
+          serial: current.leader.serial,
+          enabled: current.leaderVideoEnabled,
+        })
+        .catch(() => undefined);
+      const now = new Date().toISOString();
+      const update = this.database.transaction(() => {
+        const changed = this.database
+          .prepare(
+            "UPDATE test_runs SET state = 'RUNNING', current_epoch = ?, updated_at = ? WHERE id = ? AND state = 'PAUSED' AND current_epoch = ?",
+          )
+          .run(nextEpoch, now, id, current.currentEpoch) as { changes: number };
+        if (changed.changes !== 1) throw new Error("Session state changed while resuming.");
+        const insertMember = this.database.prepare(
+          `INSERT INTO run_devices
+           (run_id, serial, role, membership_state, epoch, generation, joined_at, updated_at)
+           VALUES (?, ?, ?, 'ACTIVE', ?, ?, ?, ?)`,
+        );
+        for (const member of activeMembers) {
+          insertMember.run(
+            id,
+            member.serial,
+            member.role,
+            nextEpoch,
+            generations.get(member.serial),
+            now,
+            now,
+          );
+        }
+        this.database
+          .prepare(
+            "INSERT INTO run_transitions (run_id, from_state, to_state, reason, created_at) VALUES (?, 'PAUSED', 'RUNNING', ?, ?)",
+          )
+          .run(id, `OPERATOR_RESUMED:${reason}`, now);
+      });
+      update.immediate();
+    } catch (error) {
+      await this.videoRecorder?.stop(id).catch(() => undefined);
+      await this.workerCoordinator?.stop(id).catch(() => undefined);
+      throw error;
+    }
+
+    const resumed = this.get(id);
+    if (resumed === undefined) throw new Error("Resumed session could not be read back.");
+    return resumed;
+  }
+
   public async complete(id: string, input: SessionCompletionInput): Promise<SessionView> {
     if (!input.reason.trim() || input.reason.length > 128)
       throw new TypeError("Completion reason is invalid.");

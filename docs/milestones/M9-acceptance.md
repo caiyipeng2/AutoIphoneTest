@@ -59,13 +59,14 @@ bounded reconnect attempts. The deterministic quarantine policy and membership
 tests passed; no physical quarantine result is claimed.
 
 The production build has no fault-injection route. The current recovery record
-is the policy decision (`PAUSE_ALL` or `QUARANTINE_DEVICE`); user-facing
-resume/rebuild/rejoin commands remain outside this accepted boundary.
+is the policy decision (`PAUSE_ALL` or `QUARANTINE_DEVICE`). Explicit paused-run
+resume/rebuild is now provided by the local M9 Task 23 slice; action retry/skip,
+device rejoin, and leader promotion remain outside this accepted boundary.
 
 ## Acceptance decision
 
 **M9 implementation: READY FOR REVIEW. M9 single-device Appium-only action acceptance: PASS. M9 two-device hardware acceptance: PASS. M9 active-session PAUSE_ALL fault-policy acceptance: PASS. Deterministic follower quarantine acceptance: PASS; physical follower quarantine: BLOCKED by device ADB availability.**
 
-The Appium driver/device discovery blocker is resolved for the current environment. Appium-only operation is explicit and does not silently weaken the strict Bridge default. The physical fault/recovery acceptance evidence is recorded in [M9 Task 22](M9-task22-fault-recovery-acceptance.md). M10 remains independently accepted; explicit operator resume/rebuild/rejoin commands are still a separate follow-up scope.
+The Appium driver/device discovery blocker is resolved for the current environment. Appium-only operation is explicit and does not silently weaken the strict Bridge default. The physical fault/recovery acceptance evidence is recorded in [M9 Task 22](M9-task22-fault-recovery-acceptance.md), and the explicit resume/rebuild contract is recorded in [M9 Task 23](M9-task23-explicit-resume-acceptance.md). M10 remains independently accepted; action retry/skip, device rejoin, and leader promotion are separate follow-up scope.
 
 The user has approved this acceptance slice for commit and push to `main`.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { SessionRouteService, SessionView } from "./sessions.js";
 import { createApp } from "../app.js";
@@ -308,6 +308,52 @@ describe("session create/detail routes", () => {
     expect(response.json()).toMatchObject({
       schemaVersion: 1,
       session: { ...view, state: "FAILED" },
+    });
+    await app.close();
+  });
+
+  it("exposes a protected resume endpoint for paused sessions", async () => {
+    const resume = vi.fn(async (id: string, reason: string) => {
+      expect(id).toBe("run-1");
+      expect(reason).toBe("operator-rebuild");
+      return { ...view, state: "RUNNING" as const, currentEpoch: 2 };
+    });
+    const app = await createApp({
+      port: 4799,
+      bootstrapCode: "session-bootstrap-5",
+      launchSecret: "session-secret-5",
+      sessionService: { ...service(), resume },
+    });
+    const headers = { host: "127.0.0.1:4799", origin: "http://127.0.0.1:4799" };
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers,
+      payload: { code: "session-bootstrap-5" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const csrf = Array.isArray(cookies)
+      ? cookies
+          .find((cookie) => cookie.startsWith("tc_csrf="))
+          ?.split("=", 2)[1]
+          ?.split(";", 1)[0]
+      : undefined;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/sessions/run-1/resume",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+      payload: { reason: "operator-rebuild" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(resume).toHaveBeenCalledWith("run-1", "operator-rebuild");
+    expect(response.json()).toMatchObject({
+      schemaVersion: 1,
+      session: { state: "RUNNING", currentEpoch: 2 },
     });
     await app.close();
   });

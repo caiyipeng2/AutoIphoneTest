@@ -35,6 +35,160 @@ afterEach(async () => {
 });
 
 describe("RuntimeSessionRouteService", () => {
+  it("resumes a paused session with fresh workers and the next epoch/generation", async () => {
+    const database = await createDatabase();
+    const serials = [parseDeviceSerial("R5CX211TXNT"), parseDeviceSerial("R5CRC342PRF")];
+    for (const serial of serials) {
+      database
+        .prepare(
+          `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+        )
+        .run(serial, "now", "now", "now", "now");
+    }
+    const registry = { get: vi.fn(() => ({ state: "ONLINE" })) };
+    const coordinator = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
+    const dispatcher = { dispatch: vi.fn() };
+    const service = new RuntimeSessionRouteService(
+      database,
+      registry as never,
+      undefined,
+      undefined,
+      dispatcher,
+      coordinator,
+    );
+    const created = await service.create({
+      clientRequestId: "request-resume",
+      packageName: "com.example.game",
+      deviceSerials: serials,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    await service.pause(created.session.id, "fault-monitor");
+
+    const resumed = await service.resume(created.session.id, "operator-rebuild");
+
+    expect(resumed).toMatchObject({
+      state: "RUNNING",
+      currentEpoch: 2,
+      devices: [
+        { serial: serials[0], role: "LEADER", membershipState: "ACTIVE", epoch: 2, generation: 2 },
+        {
+          serial: serials[1],
+          role: "FOLLOWER",
+          membershipState: "ACTIVE",
+          epoch: 2,
+          generation: 2,
+        },
+      ],
+    });
+    expect(coordinator.start).toHaveBeenLastCalledWith(
+      created.session.id,
+      serials,
+      "com.example.game",
+      expect.stringMatching(/^sha256:/),
+      "REQUIRED",
+      new Map([
+        [serials[0], 2],
+        [serials[1], 2],
+      ]),
+    );
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
+    expect(
+      database
+        .prepare(
+          "SELECT from_state, to_state, reason FROM run_transitions WHERE run_id = ? ORDER BY id DESC LIMIT 1",
+        )
+        .get(created.session.id),
+    ).toEqual({
+      from_state: "PAUSED",
+      to_state: "RUNNING",
+      reason: "OPERATOR_RESUMED:operator-rebuild",
+    });
+  });
+
+  it("leaves a paused session unchanged when rebuilt workers cannot start", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const coordinator = {
+      start: vi
+        .fn<(...args: never[]) => Promise<void>>()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error("rebuild failed")),
+      stop: vi.fn(async () => undefined),
+    };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      undefined,
+      undefined,
+      undefined,
+      coordinator,
+    );
+    const created = await service.create({
+      clientRequestId: "request-resume-failed",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    await service.pause(created.session.id, "fault-monitor");
+
+    await expect(service.resume(created.session.id, "operator-rebuild")).rejects.toThrow(
+      "rebuild failed",
+    );
+    expect(service.get(created.session.id)).toMatchObject({ state: "PAUSED", currentEpoch: 1 });
+    expect(
+      database
+        .prepare("SELECT COUNT(*) AS count FROM run_devices WHERE run_id = ?")
+        .get(created.session.id),
+    ).toEqual({ count: 1 });
+  });
+
+  it("refuses to resume when an active member is no longer online", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    let online = true;
+    const registry = { get: vi.fn(() => ({ state: online ? "ONLINE" : "OFFLINE" })) };
+    const coordinator = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
+    const service = new RuntimeSessionRouteService(
+      database,
+      registry as never,
+      undefined,
+      undefined,
+      undefined,
+      coordinator,
+    );
+    const created = await service.create({
+      clientRequestId: "request-resume-offline",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    await service.pause(created.session.id, "fault-monitor");
+    online = false;
+
+    await expect(service.resume(created.session.id, "operator-rebuild")).rejects.toThrow("online");
+    expect(coordinator.start).toHaveBeenCalledTimes(1);
+    expect(service.get(created.session.id)).toMatchObject({ state: "PAUSED", currentEpoch: 1 });
+  });
+
   it("pauses a running session, stops workers, and records the transition", async () => {
     const database = await createDatabase();
     const serial = parseDeviceSerial("R5CX211TXNT");

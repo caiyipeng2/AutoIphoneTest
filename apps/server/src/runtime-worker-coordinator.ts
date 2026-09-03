@@ -12,6 +12,7 @@ export interface RuntimeWorkerFactoryInput {
   readonly serial: DeviceSerial;
   readonly packageName: string;
   readonly runNonceHash: string;
+  readonly generation?: number;
   readonly bridgeMode?: BridgeMode;
   readonly logcatRecordSink: (record: LogcatRecord) => void;
   readonly faultSink: (event: RuntimeFaultEvent) => void;
@@ -37,6 +38,7 @@ export class RuntimeWorkerCoordinator {
     packageName: string,
     runNonceHash: string,
     bridgeMode?: BridgeMode,
+    generationBySerial?: ReadonlyMap<DeviceSerial, number>,
   ): Promise<void> {
     if (this.runs.has(runId)) throw new Error(`Workers already exist for run '${runId}'.`);
     const workers = new Map<DeviceSerial, RuntimeWorkerFactoryReturn>();
@@ -46,11 +48,13 @@ export class RuntimeWorkerCoordinator {
       // Establish workers one at a time to avoid device-side bootstrap races;
       // action dispatch remains concurrent after every worker is READY.
       for (const serial of serials) {
+        const generation = generationBySerial?.get(serial);
         const worker = this.factory({
           runId,
           serial,
           packageName,
           runNonceHash,
+          ...(generation === undefined ? {} : { generation }),
           ...(bridgeMode === undefined ? {} : { bridgeMode }),
           logcatRecordSink: (record) => this.emitLogcat(record),
           faultSink: (event) => this.emitFault(event),

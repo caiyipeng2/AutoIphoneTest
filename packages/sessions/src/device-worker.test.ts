@@ -113,6 +113,26 @@ function createManagedHarness() {
 }
 
 describe("DeviceWorker", () => {
+  it("starts with the persisted generation when rebuilding a worker", async () => {
+    const { client, logcat, appium, resourceManager } = createManagedHarness();
+    const rebuilt = new DeviceWorker({
+      serial: "serial-a",
+      packageName: "com.example.game",
+      owner: { ownerPid: 100, ownerToken: "run-a" },
+      runId: "run-a",
+      resourceManager,
+      appiumServiceFactory: () => appium,
+      identityProbe: vi.fn(async () => ({ serial: "serial-a", packageName: "com.example.game" })),
+      clientFactory: () => client,
+      logcatFactory: () => logcat,
+      initialGeneration: 7,
+    });
+
+    expect(rebuilt.generation).toBe(7);
+    await rebuilt.start();
+    await rebuilt.stop();
+  });
+
   it("classifies a UiAutomator2 instrumentation crash as an Appium session loss", async () => {
     const fence: SessionFence = { sessionId: "session-fault", serial: "serial-a", generation: 1 };
     const faultSink = vi.fn();
