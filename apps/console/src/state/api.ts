@@ -137,6 +137,13 @@ export interface SessionActionView {
   actionSeq: number;
   type: string;
   parentActionId?: string;
+  resolution?: {
+    state: "SKIPPED";
+    id: string;
+    clientRequestId: string;
+    reason: string;
+    createdAt: string;
+  };
   sourceMetricsEpoch: number;
   sourceFrameId?: string;
   state: "QUEUED" | "LEASED" | "DISPATCHING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "UNKNOWN";
@@ -485,6 +492,32 @@ export async function retrySessionAction(
   };
   if (!response.ok || payload.action === undefined || payload.state === undefined) {
     throw new Error(payload.error ?? `session-action-retry:${response.status}`);
+  }
+  return payload as SessionActionMutationResponse;
+}
+
+export async function skipSessionAction(
+  id: string,
+  actionId: string,
+  input: { clientRequestId: string; reason: string },
+): Promise<SessionActionMutationResponse> {
+  const csrf = readCsrfToken();
+  const response = await fetch(
+    `/api/sessions/${encodeURIComponent(id)}/actions/${encodeURIComponent(actionId)}/skip`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+      },
+      body: JSON.stringify(input),
+    },
+  );
+  const payload = (await response.json()) as Partial<SessionActionMutationResponse> & {
+    error?: string;
+  };
+  if (!response.ok || payload.action === undefined || payload.state === undefined) {
+    throw new Error(payload.error ?? `session-action-skip:${response.status}`);
   }
   return payload as SessionActionMutationResponse;
 }

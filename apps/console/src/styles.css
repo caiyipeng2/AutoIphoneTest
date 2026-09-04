@@ -1107,6 +1107,18 @@ main {
   padding: 0 10px;
   font-size: 11px;
 }
+.session-action-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.session-action-skip {
+  min-height: 32px;
+  padding: 0 10px;
+  border-color: #d5c5a8;
+  color: #80683f;
+  font-size: 11px;
+}
 .session-actions-empty {
   display: flex;
   align-items: center;
@@ -2164,7 +2176,7 @@ main {
   .session-action-row {
     grid-template-columns: 34px minmax(0, 1fr) auto;
   }
-  .session-action-row .session-action-retry {
+  .session-action-row .session-action-controls {
     grid-column: 2 / -1;
     justify-self: start;
   }

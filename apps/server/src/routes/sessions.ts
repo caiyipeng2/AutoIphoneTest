@@ -133,6 +133,12 @@ const RetryActionSchema = z
     sourceFrameId: z.string().trim().min(1).max(128).optional(),
   })
   .strict();
+const SkipActionSchema = z
+  .object({
+    clientRequestId: z.string().trim().min(1).max(128),
+    reason: z.string().trim().min(1).max(128),
+  })
+  .strict();
 
 export interface SessionLeaderView {
   readonly serial: DeviceSerial;
@@ -199,6 +205,11 @@ export interface SessionRetryInput {
   readonly sourceFrameId?: string;
 }
 
+export interface SessionSkipInput {
+  readonly clientRequestId: string;
+  readonly reason: string;
+}
+
 export interface SessionCompletionInput {
   readonly state: "FINISHED" | "FAILED" | "INTERRUPTED";
   readonly reason: string;
@@ -226,6 +237,12 @@ export interface SessionRouteService {
     input: SessionRetryInput,
   ): Promise<SessionActionResult>;
   listActions?(id: string): readonly ActionView[] | undefined;
+  skipAction?(
+    id: string,
+    actorSessionId: string,
+    actionId: string,
+    input: SessionSkipInput,
+  ): Promise<SessionActionResult>;
 }
 
 export async function registerSessionsRoutes(
@@ -423,6 +440,36 @@ export async function registerSessionsRoutes(
         return await reply
           .code(sessionErrorCode(error))
           .send({ error: error instanceof Error ? error.message : "Action retry rejected." });
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string; actionId: string } }>(
+    "/api/sessions/:id/actions/:actionId/skip",
+    async (request, reply) => {
+      try {
+        assertMutationAllowed(request, context);
+        if (context.sessionService === undefined)
+          return await reply.code(503).send({ error: "Session service unavailable." });
+        if (context.sessionService.skipAction === undefined)
+          return await reply.code(503).send({ error: "Action skip unavailable." });
+        const auth = requireSession(request, context);
+        if (auth === undefined)
+          return await reply.code(401).send({ error: "Authentication required." });
+        const payload = SkipActionSchema.parse(request.body);
+        const result = await context.sessionService.skipAction(
+          decodeURIComponent(request.params.id),
+          auth.sessionId,
+          decodeURIComponent(request.params.actionId),
+          payload,
+        );
+        return await reply
+          .code(result.state === "CREATED" ? 201 : 200)
+          .send({ schemaVersion: 1, ...result });
+      } catch (error) {
+        return await reply
+          .code(sessionErrorCode(error))
+          .send({ error: error instanceof Error ? error.message : "Action skip rejected." });
       }
     },
   );

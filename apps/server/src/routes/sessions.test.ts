@@ -447,4 +447,75 @@ describe("session create/detail routes", () => {
     expect(response.json()).toMatchObject({ schemaVersion: 1, actions: [action] });
     await app.close();
   });
+
+  it("exposes a protected action skip endpoint with an audit resolution", async () => {
+    const skipAction = vi.fn(
+      async (
+        id: string,
+        actor: string,
+        actionId: string,
+        input: { clientRequestId: string; reason: string },
+      ) => {
+        expect([id, actor, actionId]).toEqual(["run-1", expect.any(String), "act-parent"]);
+        expect(input.reason).toBe("operator-console");
+        return {
+          state: "CREATED" as const,
+          action: {
+            ...action,
+            id: "act-parent",
+            state: "FAILED" as const,
+            resolution: {
+              state: "SKIPPED" as const,
+              id: "skip-parent",
+              clientRequestId: input.clientRequestId,
+              reason: input.reason,
+              createdAt: "now",
+            },
+          },
+        };
+      },
+    );
+    const app = await createApp({
+      port: 4802,
+      bootstrapCode: "session-bootstrap-8",
+      launchSecret: "session-secret-8",
+      sessionService: { ...service(), skipAction },
+    });
+    const headers = { host: "127.0.0.1:4802", origin: "http://127.0.0.1:4802" };
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers,
+      payload: { code: "session-bootstrap-8" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const csrf = Array.isArray(cookies)
+      ? cookies
+          .find((cookie) => cookie.startsWith("tc_csrf="))
+          ?.split("=", 2)[1]
+          ?.split(";", 1)[0]
+      : undefined;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/sessions/run-1/actions/act-parent/skip",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+      payload: { clientRequestId: "skip-console-1", reason: "operator-console" },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(skipAction).toHaveBeenCalledWith("run-1", expect.any(String), "act-parent", {
+      clientRequestId: "skip-console-1",
+      reason: "operator-console",
+    });
+    expect(response.json()).toMatchObject({
+      schemaVersion: 1,
+      state: "CREATED",
+      action: { resolution: { state: "SKIPPED" } },
+    });
+    await app.close();
+  });
 });

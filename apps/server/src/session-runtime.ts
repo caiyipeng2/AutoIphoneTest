@@ -21,6 +21,7 @@ import type {
   SessionActionResult,
   SessionCompletionInput,
   SessionRetryInput,
+  SessionSkipInput,
   SessionRouteService,
   SessionView,
 } from "./routes/sessions.js";
@@ -362,6 +363,19 @@ export class RuntimeSessionRouteService implements SessionRouteService {
   public listActions(id: string): readonly ActionView[] | undefined {
     if (this.get(id) === undefined) return undefined;
     return this.actionRepository.list(id);
+  }
+
+  public async skipAction(
+    id: string,
+    _actorSessionId: string,
+    actionId: string,
+    input: SessionSkipInput,
+  ): Promise<SessionActionResult> {
+    const session = this.get(id);
+    if (session === undefined) throw new Error("Session not found.");
+    const parent = this.actionRepository.get(actionId);
+    if (parent === undefined || parent.runId !== id) throw new Error("Parent action not found.");
+    return this.actionRepository.skip(actionId, input);
   }
 
   private findByClientRequestId(clientRequestId: string): SessionRow | undefined {

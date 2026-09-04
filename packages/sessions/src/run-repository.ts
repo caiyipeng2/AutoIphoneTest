@@ -47,9 +47,23 @@ export interface ActionView {
   readonly sourceMetricsEpoch: number;
   readonly sourceFrameId?: string;
   readonly parentActionId?: string;
+  readonly resolution?: ActionSkipResolution;
   readonly state:
     "QUEUED" | "LEASED" | "DISPATCHING" | "SUCCEEDED" | "FAILED" | "CANCELLED" | "UNKNOWN";
   readonly targets: readonly ActionTargetView[];
+}
+
+export interface ActionSkipResolution {
+  readonly state: "SKIPPED";
+  readonly id: string;
+  readonly clientRequestId: string;
+  readonly reason: string;
+  readonly createdAt: string;
+}
+
+export interface SkipActionInput {
+  readonly clientRequestId: string;
+  readonly reason: string;
 }
 
 export interface CreateActionResult {
@@ -75,10 +89,19 @@ interface TargetRow {
   readonly state: ActionTargetView["state"];
 }
 
+interface SkipDecisionRow {
+  readonly id: string;
+  readonly action_id: string;
+  readonly client_request_id: string;
+  readonly reason: string;
+  readonly created_at: string;
+}
+
 const NON_TERMINAL_STATES = ["QUEUED", "LEASED", "DISPATCHING"] as const;
 
 export class RunActionRepository {
   private readonly hasParentActionColumn: boolean;
+  private readonly hasSkipDecisionTable: boolean;
 
   public constructor(private readonly database: Database.Database) {
     this.hasParentActionColumn = (
@@ -86,6 +109,12 @@ export class RunActionRepository {
         name: string;
       }[]
     ).some((column) => column.name === "parent_action_id");
+    this.hasSkipDecisionTable =
+      (this.database
+        .prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'action_skip_decisions'",
+        )
+        .get() as { 1: number } | undefined) !== undefined;
   }
 
   public create(input: CreateActionInput): CreateActionResult {
@@ -251,6 +280,7 @@ export class RunActionRepository {
     }
     const parent = this.get(parentActionId);
     if (parent === undefined) throw new Error("Parent action not found.");
+    if (parent.resolution?.state === "SKIPPED") throw new Error("Action is already skipped.");
     if (parent.state !== "FAILED" && parent.state !== "UNKNOWN") {
       throw new Error("Only terminal FAILED or UNKNOWN actions can be retried.");
     }
@@ -268,6 +298,68 @@ export class RunActionRepository {
         : { sourceFrameId: input.sourceFrameId }),
       parentActionId,
     });
+  }
+
+  public skip(actionId: string, input: SkipActionInput): CreateActionResult {
+    if (!actionId.trim()) throw new TypeError("Action id is required.");
+    if (!input.clientRequestId.trim() || input.clientRequestId.length > 128) {
+      throw new TypeError("Skip client request id is invalid.");
+    }
+    if (!input.reason.trim() || input.reason.length > 128) {
+      throw new TypeError("Skip reason is invalid.");
+    }
+    if (!this.hasSkipDecisionTable) {
+      throw new Error("Action skip persistence is unavailable in this database schema.");
+    }
+    const parent = this.get(actionId);
+    if (parent === undefined) throw new Error("Parent action not found.");
+    if (parent.resolution?.state === "SKIPPED") {
+      const existing = this.readSkipDecision(actionId);
+      if (existing?.clientRequestId === input.clientRequestId && existing.reason === input.reason) {
+        return { state: "DEDUPLICATED", action: parent };
+      }
+      throw new Error("Action is already skipped.");
+    }
+    if (parent.state !== "FAILED" && parent.state !== "UNKNOWN") {
+      throw new Error("Only terminal FAILED or UNKNOWN actions can be skipped.");
+    }
+    const run = this.database
+      .prepare("SELECT state FROM test_runs WHERE id = ?")
+      .get(parent.runId) as { state: string } | undefined;
+    if (run?.state !== "RUNNING" && run?.state !== "PAUSED") {
+      throw new Error("Action skip is accepted only while the run is RUNNING or PAUSED.");
+    }
+    const existingRequest = this.database
+      .prepare(
+        "SELECT id, action_id, client_request_id, reason, created_at FROM action_skip_decisions WHERE run_id = ? AND client_request_id = ?",
+      )
+      .get(parent.runId, input.clientRequestId) as SkipDecisionRow | undefined;
+    if (existingRequest !== undefined) {
+      if (existingRequest.action_id !== actionId || existingRequest.reason !== input.reason) {
+        throw new Error("Skip client request already exists with different payload.");
+      }
+      return { state: "DEDUPLICATED", action: parent };
+    }
+    const decision: ActionSkipResolution = {
+      state: "SKIPPED",
+      id: `skip-${randomUUID()}`,
+      clientRequestId: input.clientRequestId,
+      reason: input.reason,
+      createdAt: new Date().toISOString(),
+    };
+    this.database
+      .prepare(
+        "INSERT INTO action_skip_decisions (id, action_id, run_id, client_request_id, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        decision.id,
+        actionId,
+        parent.runId,
+        decision.clientRequestId,
+        decision.reason,
+        decision.createdAt,
+      );
+    return { state: "CREATED", action: { ...parent, resolution: decision } };
   }
 
   private readAction(actionId: string): ActionView {
@@ -290,6 +382,7 @@ export class RunActionRepository {
       .prepare("SELECT serial, state FROM action_targets WHERE action_id = ? ORDER BY serial ASC")
       .all(actionId) as readonly TargetRow[];
     const parentActionId = this.readParentActionId(row.id);
+    const resolution = this.readSkipDecision(row.id);
     return {
       id: row.id,
       runId: row.run_id,
@@ -301,6 +394,7 @@ export class RunActionRepository {
       sourceMetricsEpoch: row.metrics_epoch,
       ...(envelope.sourceFrameId === null ? {} : { sourceFrameId: envelope.sourceFrameId }),
       ...(parentActionId === undefined ? {} : { parentActionId }),
+      ...(resolution === undefined ? {} : { resolution }),
       state: row.state,
       targets: targets.map((target) => ({
         serial: target.serial as DeviceSerial,
@@ -315,6 +409,24 @@ export class RunActionRepository {
       .prepare("SELECT parent_action_id FROM actions WHERE id = ?")
       .get(actionId) as { parent_action_id: string | null } | undefined;
     return row?.parent_action_id ?? undefined;
+  }
+
+  private readSkipDecision(actionId: string): ActionSkipResolution | undefined {
+    if (!this.hasSkipDecisionTable) return undefined;
+    const row = this.database
+      .prepare(
+        "SELECT id, action_id, client_request_id, reason, created_at FROM action_skip_decisions WHERE action_id = ?",
+      )
+      .get(actionId) as SkipDecisionRow | undefined;
+    return row === undefined
+      ? undefined
+      : {
+          state: "SKIPPED",
+          id: row.id,
+          clientRequestId: row.client_request_id,
+          reason: row.reason,
+          createdAt: row.created_at,
+        };
   }
 }
 

@@ -38,6 +38,7 @@ existing protected API.
 
 ## Acceptance boundary
 
-Retry is explicit and never triggered by fault recovery or resume. Action Skip,
-quarantined-device rejoin, and Leader promotion remain separate follow-up
-slices. The user approved this slice for commit and push to `main`.
+Retry is explicit and never triggered by fault recovery or resume. Action Skip
+is covered by [M9 Task 27](M9-task27-action-skip-acceptance.md); quarantined-device
+rejoin and Leader promotion remain separate follow-up slices. The user approved
+this slice for commit and push to `main`.

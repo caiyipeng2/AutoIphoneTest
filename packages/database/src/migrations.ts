@@ -387,6 +387,23 @@ CREATE INDEX IF NOT EXISTS idx_actions_parent_action ON actions(parent_action_id
 `.trim(),
 };
 
+export const ACTION_SKIP_MIGRATION: Migration = {
+  id: "0022_action_skip_decisions",
+  sql: `
+CREATE TABLE IF NOT EXISTS action_skip_decisions (
+  id TEXT PRIMARY KEY NOT NULL,
+  action_id TEXT NOT NULL UNIQUE REFERENCES actions(id) ON DELETE CASCADE,
+  run_id TEXT NOT NULL REFERENCES test_runs(id) ON DELETE CASCADE,
+  client_request_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (run_id, client_request_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_action_skip_decisions_run ON action_skip_decisions(run_id, created_at);
+`.trim(),
+};
+
 export const INCIDENTS_MIGRATION: Migration = {
   id: "0011_incidents_recovery",
   sql: `

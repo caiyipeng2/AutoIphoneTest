@@ -7,6 +7,7 @@ import {
   Pause,
   Play,
   RefreshCw,
+  SkipForward,
   ShieldCheck,
   Smartphone,
   Square,
@@ -23,6 +24,7 @@ import {
   preflightSession,
   refreshSession,
   retrySessionAction,
+  skipSessionAction,
   resumeSession,
   startSession,
   type DeviceRecord,
@@ -82,6 +84,7 @@ export function SessionsPage() {
   const [actions, setActions] = useState<SessionActionView[]>([]);
   const [actionsLoading, setActionsLoading] = useState(false);
   const [retryingActionId, setRetryingActionId] = useState<string | null>(null);
+  const [skippingActionId, setSkippingActionId] = useState<string | null>(null);
   const [busy, setBusy] = useState<SessionBusyState>("loading");
   const [error, setError] = useState<string | null>(null);
 
@@ -230,8 +233,32 @@ export function SessionsPage() {
     }
   };
 
+  const handleSkipAction = async (action: SessionActionView) => {
+    if (
+      session === null ||
+      (session.state !== "RUNNING" && session.state !== "PAUSED") ||
+      action.resolution?.state === "SKIPPED" ||
+      (action.state !== "FAILED" && action.state !== "UNKNOWN")
+    )
+      return;
+    setError(null);
+    setSkippingActionId(action.id);
+    try {
+      await skipSessionAction(session.id, action.id, {
+        clientRequestId: createRequestId("skip"),
+        reason: "operator-console",
+      });
+      await loadSessionActions(session.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "动作跳过失败");
+    } finally {
+      setSkippingActionId(null);
+    }
+  };
+
   const previewSerial = manualSerial.trim() || selectedSerials[0] || "";
-  const isBusy = busy !== "idle" || actionsLoading || retryingActionId !== null;
+  const isBusy =
+    busy !== "idle" || actionsLoading || retryingActionId !== null || skippingActionId !== null;
 
   return (
     <PageFrame title="会话" eyebrow="TEST SESSIONS / 1-4 同步执行">
@@ -489,7 +516,9 @@ export function SessionsPage() {
           ) : (
             <div className="session-action-list">
               {actions.map((action) => {
-                const retryable = action.state === "FAILED" || action.state === "UNKNOWN";
+                const unresolved = action.resolution?.state !== "SKIPPED";
+                const retryable =
+                  unresolved && (action.state === "FAILED" || action.state === "UNKNOWN");
                 return (
                   <div className="session-action-row" key={action.id}>
                     <span className="session-action-seq">#{action.actionSeq}</span>
@@ -501,6 +530,11 @@ export function SessionsPage() {
                           父 action: {action.parentActionId}
                         </small>
                       )}
+                      {action.resolution?.state === "SKIPPED" && (
+                        <small className="session-action-parent">
+                          已跳过 · {action.resolution.reason}
+                        </small>
+                      )}
                     </div>
                     <span
                       className={`chip ${action.state === "SUCCEEDED" ? "chip-good" : action.state === "FAILED" || action.state === "UNKNOWN" ? "chip-danger" : "chip-warn"}`}
@@ -508,19 +542,36 @@ export function SessionsPage() {
                       {actionStateLabels[action.state]}
                     </span>
                     {retryable && (
-                      <button
-                        className="button button-quiet session-action-retry"
-                        aria-label={`重试 action ${action.actionSeq}`}
-                        onClick={() => void handleRetryAction(action)}
-                        disabled={isBusy || session.state !== "RUNNING"}
-                      >
-                        {retryingActionId === action.id ? (
-                          <LoaderCircle className="spin" size={14} />
-                        ) : (
-                          <RefreshCw size={14} />
-                        )}
-                        {retryingActionId === action.id ? "重试中" : "Retry"}
-                      </button>
+                      <div className="session-action-controls">
+                        <button
+                          className="button button-quiet session-action-retry"
+                          aria-label={`重试 action ${action.actionSeq}`}
+                          onClick={() => void handleRetryAction(action)}
+                          disabled={isBusy || session.state !== "RUNNING"}
+                        >
+                          {retryingActionId === action.id ? (
+                            <LoaderCircle className="spin" size={14} />
+                          ) : (
+                            <RefreshCw size={14} />
+                          )}
+                          {retryingActionId === action.id ? "重试中" : "Retry"}
+                        </button>
+                        <button
+                          className="button button-quiet session-action-skip"
+                          aria-label={`跳过 action ${action.actionSeq}`}
+                          onClick={() => void handleSkipAction(action)}
+                          disabled={
+                            isBusy || (session.state !== "RUNNING" && session.state !== "PAUSED")
+                          }
+                        >
+                          {skippingActionId === action.id ? (
+                            <LoaderCircle className="spin" size={14} />
+                          ) : (
+                            <SkipForward size={14} />
+                          )}
+                          {skippingActionId === action.id ? "跳过中" : "Skip"}
+                        </button>
+                      </div>
                     )}
                   </div>
                 );

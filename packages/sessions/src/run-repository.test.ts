@@ -8,6 +8,7 @@ import {
   migrate,
   ACTION_COMMANDS_MIGRATION,
   ACTION_RETRY_MIGRATION,
+  ACTION_SKIP_MIGRATION,
   RUN_ACTIONS_MIGRATION,
   SESSION_API_MIGRATION,
 } from "@test-center/database";
@@ -32,6 +33,7 @@ function createHarness() {
     SESSION_API_MIGRATION,
     ACTION_COMMANDS_MIGRATION,
     ACTION_RETRY_MIGRATION,
+    ACTION_SKIP_MIGRATION,
   ]);
   database
     .prepare(
@@ -244,6 +246,50 @@ describe("RunActionRepository", () => {
     expect(() =>
       repository.retry(success.action.id, { clientRequestId: "request-invalid-retry" }),
     ).toThrow("terminal FAILED or UNKNOWN");
+  });
+
+  it("records an immutable skip decision without changing the parent action state", () => {
+    const { repository, outbox } = createHarness();
+    const parent = repository.create({
+      runId: "run-1",
+      clientRequestId: "request-skip-parent",
+      type: "tap",
+      payload: { kind: "tap", x: 0.25, y: 0.75 },
+      sourceMetricsEpoch: 4,
+    });
+    const lease = outbox.leaseAction(parent.action.id, "worker-skip");
+    outbox.markDispatching(parent.action.id, lease!.leaseToken);
+    outbox.completeTarget(
+      parent.action.id,
+      lease!.leaseToken,
+      "leader-a",
+      "FAILED",
+      JSON.stringify({ ok: false }),
+    );
+
+    const skipped = repository.skip(parent.action.id, {
+      clientRequestId: "skip-1",
+      reason: "operator decision",
+    });
+    const duplicate = repository.skip(parent.action.id, {
+      clientRequestId: "skip-1",
+      reason: "operator decision",
+    });
+
+    expect(skipped.state).toBe("CREATED");
+    expect(skipped.action).toMatchObject({
+      state: "FAILED",
+      resolution: {
+        state: "SKIPPED",
+        clientRequestId: "skip-1",
+        reason: "operator decision",
+      },
+    });
+    expect(duplicate).toEqual({ state: "DEDUPLICATED", action: skipped.action });
+    expect(repository.get(parent.action.id)).toMatchObject({ state: "FAILED" });
+    expect(() =>
+      repository.retry(parent.action.id, { clientRequestId: "retry-after-skip" }),
+    ).toThrow("already skipped");
   });
 });
 

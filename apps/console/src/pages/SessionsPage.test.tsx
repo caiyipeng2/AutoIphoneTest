@@ -349,6 +349,16 @@ describe("SessionsPage", () => {
       state: "SUCCEEDED",
       targets: [{ serial: "R5CX211TXNT", state: "SUCCEEDED" }],
     };
+    const skippedParent = {
+      ...parent,
+      resolution: {
+        state: "SKIPPED",
+        id: "skip-parent-ui",
+        clientRequestId: "skip-parent-ui-request",
+        reason: "operator-console",
+        createdAt: "now",
+      },
+    };
     let actionListCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -366,13 +376,24 @@ describe("SessionsPage", () => {
         actionListCalls += 1;
         return jsonResponse({
           schemaVersion: 1,
-          actions: actionListCalls === 1 ? [parent] : [parent, child],
+          actions:
+            actionListCalls === 1
+              ? [parent]
+              : actionListCalls === 2
+                ? [parent, child]
+                : [skippedParent, child],
         });
       }
       if (url.endsWith("/retry")) {
         const body = JSON.parse(String(init?.body)) as { clientRequestId: string };
         expect(body.clientRequestId).toMatch(/^retry-/);
         return jsonResponse({ schemaVersion: 1, state: "CREATED", action: child }, 201);
+      }
+      if (url.endsWith("/skip")) {
+        const body = JSON.parse(String(init?.body)) as { clientRequestId: string; reason: string };
+        expect(body.clientRequestId).toMatch(/^skip-/);
+        expect(body.reason).toBe("operator-console");
+        return jsonResponse({ schemaVersion: 1, state: "CREATED", action: skippedParent }, 201);
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -387,8 +408,14 @@ describe("SessionsPage", () => {
     await waitFor(() => expect(screen.getByText("失败")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "重试 action 1" }));
     await waitFor(() => expect(screen.getByText(/父 action: act-parent-ui/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "跳过 action 1" }));
+    await waitFor(() => expect(screen.getByText(/已跳过/)).toBeInTheDocument());
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/sessions/run-retry-ui/actions/act-parent-ui/retry",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions/run-retry-ui/actions/act-parent-ui/skip",
       expect.objectContaining({ method: "POST" }),
     );
   });
