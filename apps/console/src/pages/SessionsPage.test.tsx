@@ -102,6 +102,7 @@ describe("SessionsPage", () => {
           schemaVersion: 1,
           timeline: { runId: "run-2", incidents: [], recoveries: [] },
         });
+      if (url.endsWith("/actions")) return jsonResponse({ schemaVersion: 1, actions: [] });
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -178,6 +179,7 @@ describe("SessionsPage", () => {
           schemaVersion: 1,
           timeline: { runId: "run-appium-only", incidents: [], recoveries: [] },
         });
+      if (url.endsWith("/actions")) return jsonResponse({ schemaVersion: 1, actions: [] });
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -259,6 +261,7 @@ describe("SessionsPage", () => {
           schemaVersion: 1,
           timeline: { runId: "run-controls", incidents: [], recoveries: [] },
         });
+      if (url.endsWith("/actions")) return jsonResponse({ schemaVersion: 1, actions: [] });
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -284,6 +287,108 @@ describe("SessionsPage", () => {
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/sessions/run-controls/resume",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("shows a failed action retry control and displays the linked child action", async () => {
+    const devices = [
+      {
+        serial: "R5CX211TXNT",
+        state: "ONLINE",
+        metadata: { model: "SM-S9280" },
+        firstSeenAt: "now",
+        lastSeenAt: "now",
+        connectionSeq: 1,
+        tags: [],
+      },
+    ];
+    const session = {
+      id: "run-retry-ui",
+      clientRequestId: "request-retry-ui",
+      packageName: "com.hg.idleweaponshoptycoon.android",
+      state: "RUNNING" as const,
+      currentEpoch: 1,
+      leaderVideoEnabled: true,
+      bridgeMode: "APPIUM_ONLY" as const,
+      failurePolicy: "PAUSE_ALL" as const,
+      leader: {
+        serial: "R5CX211TXNT",
+        role: "LEADER" as const,
+        membershipState: "ACTIVE" as const,
+        epoch: 1,
+        generation: 1,
+      },
+      devices: [
+        {
+          serial: "R5CX211TXNT",
+          role: "LEADER" as const,
+          membershipState: "ACTIVE" as const,
+          epoch: 1,
+          generation: 1,
+        },
+      ],
+    };
+    const parent = {
+      id: "act-parent-ui",
+      runId: session.id,
+      clientRequestId: "action-parent-ui",
+      actionSeq: 1,
+      type: "tap",
+      parentActionId: undefined,
+      sourceMetricsEpoch: 1,
+      state: "FAILED",
+      targets: [{ serial: "R5CX211TXNT", state: "FAILED" }],
+    };
+    const child = {
+      ...parent,
+      id: "act-child-ui",
+      clientRequestId: "action-child-ui",
+      actionSeq: 2,
+      parentActionId: parent.id,
+      state: "SUCCEEDED",
+      targets: [{ serial: "R5CX211TXNT", state: "SUCCEEDED" }],
+    };
+    let actionListCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/devices") return jsonResponse({ schemaVersion: 1, devices });
+      if (url === "/api/sessions" && init?.method === "POST")
+        return jsonResponse({ schemaVersion: 1, state: "CREATED", session }, 201);
+      if (url.endsWith("/preflight")) return jsonResponse({ schemaVersion: 1, session });
+      if (url.endsWith("/start")) return jsonResponse({ schemaVersion: 1, session });
+      if (url.endsWith("/incidents"))
+        return jsonResponse({
+          schemaVersion: 1,
+          timeline: { runId: session.id, incidents: [], recoveries: [] },
+        });
+      if (url.endsWith("/actions") && (!init || init.method === undefined)) {
+        actionListCalls += 1;
+        return jsonResponse({
+          schemaVersion: 1,
+          actions: actionListCalls === 1 ? [parent] : [parent, child],
+        });
+      }
+      if (url.endsWith("/retry")) {
+        const body = JSON.parse(String(init?.body)) as { clientRequestId: string };
+        expect(body.clientRequestId).toMatch(/^retry-/);
+        return jsonResponse({ schemaVersion: 1, state: "CREATED", action: child }, 201);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SessionsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /R5CX211TXNT/ })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /R5CX211TXNT/ }));
+    fireEvent.click(screen.getByRole("button", { name: "创建同步会话" }));
+    await waitFor(() => expect(screen.getByText("失败")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "重试 action 1" }));
+    await waitFor(() => expect(screen.getByText(/父 action: act-parent-ui/)).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions/run-retry-ui/actions/act-parent-ui/retry",
       expect.objectContaining({ method: "POST" }),
     );
   });

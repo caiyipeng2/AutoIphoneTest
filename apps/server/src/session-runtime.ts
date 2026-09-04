@@ -4,7 +4,12 @@ import type Database from "better-sqlite3";
 import type { DeviceRegistry } from "@test-center/devices";
 import { parseAndroidPackageName } from "@test-center/contracts/artifact";
 import { parseDeviceSerial, type DeviceSerial } from "@test-center/contracts/device";
-import { ActionOutbox, RunActionRepository, type ActionDispatcher } from "@test-center/sessions";
+import {
+  ActionOutbox,
+  RunActionRepository,
+  type ActionDispatcher,
+  type ActionView,
+} from "@test-center/sessions";
 import type { ReportFinalizationExecutor } from "@test-center/reports";
 import type { RuntimeWorkerCoordinator } from "./runtime-worker-coordinator.js";
 import type { BridgeMode } from "./runtime-config.js";
@@ -352,6 +357,11 @@ export class RuntimeSessionRouteService implements SessionRouteService {
       return { state: result.state, action };
     }
     return result;
+  }
+
+  public listActions(id: string): readonly ActionView[] | undefined {
+    if (this.get(id) === undefined) return undefined;
+    return this.actionRepository.list(id);
   }
 
   private findByClientRequestId(clientRequestId: string): SessionRow | undefined {

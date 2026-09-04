@@ -438,6 +438,15 @@ export async function fetchSession(id: string, signal?: AbortSignal): Promise<Se
   return body.session;
 }
 
+export async function fetchSessionActions(id: string): Promise<SessionActionView[]> {
+  const response = await fetch(`/api/sessions/${encodeURIComponent(id)}/actions`);
+  const payload = (await response.json()) as { actions?: SessionActionView[]; error?: string };
+  if (!response.ok || !Array.isArray(payload.actions)) {
+    throw new Error(payload.error ?? `session-actions:${response.status}`);
+  }
+  return payload.actions;
+}
+
 export async function refreshSession(id: string): Promise<SessionView> {
   return await fetchSession(id);
 }

@@ -55,6 +55,7 @@ function service(): SessionRouteService {
     preflight: async () => ({ ...view, state: "PREFLIGHT" }),
     start: async () => ({ ...view, state: "RUNNING" }),
     submitAction: async () => ({ state: "CREATED", action }),
+    listActions: () => [action],
     pause: async () => ({ ...view, state: "PAUSED" }),
     complete: async () => ({ ...view, state: "FINISHED" }),
   };
@@ -415,6 +416,35 @@ describe("session create/detail routes", () => {
       state: "CREATED",
       action: { id: "act-retry", parentActionId: "act-parent" },
     });
+    await app.close();
+  });
+
+  it("exposes a protected read-only action list endpoint", async () => {
+    const app = await createApp({
+      port: 4801,
+      bootstrapCode: "session-bootstrap-7",
+      launchSecret: "session-secret-7",
+      sessionService: service(),
+    });
+    const headers = { host: "127.0.0.1:4801", origin: "http://127.0.0.1:4801" };
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers,
+      payload: { code: "session-bootstrap-7" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/sessions/run-1/actions",
+      headers: { ...headers, cookie: cookieHeader },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ schemaVersion: 1, actions: [action] });
     await app.close();
   });
 });

@@ -197,6 +197,10 @@ describe("RunActionRepository", () => {
       state: "QUEUED",
     });
     expect(repository.get(parent.action.id)).toMatchObject({ state: "FAILED" });
+    expect(repository.list("run-1")).toMatchObject([
+      { id: parent.action.id, actionSeq: 1, state: "FAILED" },
+      { parentActionId: parent.action.id, actionSeq: 2, state: "QUEUED" },
+    ]);
   });
 
   it("retries an unknown action but rejects a successful parent", () => {

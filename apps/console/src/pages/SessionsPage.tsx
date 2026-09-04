@@ -18,12 +18,15 @@ import { IncidentTimeline } from "../features/sessions/IncidentTimeline";
 import {
   createSession,
   fetchDevices,
+  fetchSessionActions,
   pauseSession,
   preflightSession,
   refreshSession,
+  retrySessionAction,
   resumeSession,
   startSession,
   type DeviceRecord,
+  type SessionActionView,
   type SessionState,
   type SessionView,
 } from "../state/api";
@@ -43,6 +46,16 @@ const stateLabels: Record<SessionState, string> = {
   FINISHED: "已完成",
   INTERRUPTED: "已中断",
   FAILED: "失败",
+};
+
+const actionStateLabels: Record<SessionActionView["state"], string> = {
+  QUEUED: "排队中",
+  LEASED: "已租约",
+  DISPATCHING: "执行中",
+  SUCCEEDED: "成功",
+  FAILED: "失败",
+  CANCELLED: "已取消",
+  UNKNOWN: "未知",
 };
 
 type SessionBusyState =
@@ -66,6 +79,9 @@ export function SessionsPage() {
   );
   const [bridgeMode, setBridgeMode] = useState<"REQUIRED" | "APPIUM_ONLY">("REQUIRED");
   const [session, setSession] = useState<SessionView | null>(null);
+  const [actions, setActions] = useState<SessionActionView[]>([]);
+  const [actionsLoading, setActionsLoading] = useState(false);
+  const [retryingActionId, setRetryingActionId] = useState<string | null>(null);
   const [busy, setBusy] = useState<SessionBusyState>("loading");
   const [error, setError] = useState<string | null>(null);
 
@@ -130,10 +146,22 @@ export function SessionsPage() {
       const started = await startSession(preflight.id);
       setSession(started);
       setActiveSerial(started.leader.serial);
+      await loadSessionActions(started.id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "会话启动失败");
     } finally {
       setBusy("idle");
+    }
+  };
+
+  const loadSessionActions = async (id: string) => {
+    setActionsLoading(true);
+    try {
+      setActions(await fetchSessionActions(id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "动作记录读取失败");
+    } finally {
+      setActionsLoading(false);
     }
   };
 
@@ -143,6 +171,7 @@ export function SessionsPage() {
     setBusy("refreshing");
     try {
       setSession(await refreshSession(session.id));
+      await loadSessionActions(session.id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "会话状态刷新失败");
     } finally {
@@ -156,6 +185,7 @@ export function SessionsPage() {
     setBusy("pausing");
     try {
       setSession(await pauseSession(session.id));
+      await loadSessionActions(session.id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "会话暂停失败");
     } finally {
@@ -169,6 +199,7 @@ export function SessionsPage() {
     setBusy("resuming");
     try {
       setSession(await resumeSession(session.id));
+      await loadSessionActions(session.id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "会话恢复失败");
     } finally {
@@ -176,8 +207,31 @@ export function SessionsPage() {
     }
   };
 
+  const handleRetryAction = async (action: SessionActionView) => {
+    if (
+      session === null ||
+      session.state !== "RUNNING" ||
+      (action.state !== "FAILED" && action.state !== "UNKNOWN")
+    )
+      return;
+    setError(null);
+    setRetryingActionId(action.id);
+    try {
+      await retrySessionAction(session.id, action.id, {
+        clientRequestId: createRequestId("retry"),
+        sourceMetricsEpoch: action.sourceMetricsEpoch,
+        ...(action.sourceFrameId === undefined ? {} : { sourceFrameId: action.sourceFrameId }),
+      });
+      await loadSessionActions(session.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "动作重试失败");
+    } finally {
+      setRetryingActionId(null);
+    }
+  };
+
   const previewSerial = manualSerial.trim() || selectedSerials[0] || "";
-  const isBusy = busy !== "idle";
+  const isBusy = busy !== "idle" || actionsLoading || retryingActionId !== null;
 
   return (
     <PageFrame title="会话" eyebrow="TEST SESSIONS / 1-4 同步执行">
@@ -408,6 +462,74 @@ export function SessionsPage() {
         </section>
       )}
 
+      {session && (
+        <section className="panel session-actions-panel" aria-labelledby="session-actions-title">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">ACTION LOG / {actions.length} RECORDED</p>
+              <h2 id="session-actions-title">动作记录</h2>
+            </div>
+            <button
+              className="icon-button"
+              title="刷新动作记录"
+              aria-label="刷新动作记录"
+              onClick={() => void loadSessionActions(session.id)}
+              disabled={isBusy}
+            >
+              <RefreshCw className={actionsLoading ? "spin" : undefined} size={17} />
+            </button>
+          </div>
+          {actionsLoading && actions.length === 0 ? (
+            <div className="session-actions-empty" role="status">
+              <LoaderCircle className="spin" size={16} />
+              正在读取动作记录...
+            </div>
+          ) : actions.length === 0 ? (
+            <div className="session-actions-empty">当前会话还没有动作记录。</div>
+          ) : (
+            <div className="session-action-list">
+              {actions.map((action) => {
+                const retryable = action.state === "FAILED" || action.state === "UNKNOWN";
+                return (
+                  <div className="session-action-row" key={action.id}>
+                    <span className="session-action-seq">#{action.actionSeq}</span>
+                    <div className="session-action-copy">
+                      <strong>{action.type}</strong>
+                      <small>{action.clientRequestId}</small>
+                      {action.parentActionId && (
+                        <small className="session-action-parent">
+                          父 action: {action.parentActionId}
+                        </small>
+                      )}
+                    </div>
+                    <span
+                      className={`chip ${action.state === "SUCCEEDED" ? "chip-good" : action.state === "FAILED" || action.state === "UNKNOWN" ? "chip-danger" : "chip-warn"}`}
+                    >
+                      {actionStateLabels[action.state]}
+                    </span>
+                    {retryable && (
+                      <button
+                        className="button button-quiet session-action-retry"
+                        aria-label={`重试 action ${action.actionSeq}`}
+                        onClick={() => void handleRetryAction(action)}
+                        disabled={isBusy || session.state !== "RUNNING"}
+                      >
+                        {retryingActionId === action.id ? (
+                          <LoaderCircle className="spin" size={14} />
+                        ) : (
+                          <RefreshCw size={14} />
+                        )}
+                        {retryingActionId === action.id ? "重试中" : "Retry"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="panel session-preview-panel">
         <div className="panel-heading">
           <div>
@@ -476,9 +598,9 @@ export function SessionsPage() {
   );
 }
 
-function createRequestId(): string {
+function createRequestId(prefix = "session"): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
+    return `${prefix}-${crypto.randomUUID()}`;
   }
-  return `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

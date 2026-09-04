@@ -229,6 +229,14 @@ export class RunActionRepository {
     return row === undefined ? undefined : this.readAction(row.id);
   }
 
+  public list(runId: string): readonly ActionView[] {
+    if (!runId.trim()) throw new TypeError("Action runId is required.");
+    const rows = this.database
+      .prepare("SELECT id FROM actions WHERE run_id = ? ORDER BY action_seq ASC, id ASC")
+      .all(runId) as readonly { id: string }[];
+    return rows.map((row) => this.readAction(row.id));
+  }
+
   public retry(
     parentActionId: string,
     input: {

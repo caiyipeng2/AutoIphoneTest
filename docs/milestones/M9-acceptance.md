@@ -61,14 +61,14 @@ tests passed; no physical quarantine result is claimed.
 The production build has no fault-injection route. The current recovery record
 is the policy decision (`PAUSE_ALL` or `QUARANTINE_DEVICE`). Explicit paused-run
 resume/rebuild is provided by M9 Task 23 and exposed in the console by M9 Task
-25; explicit terminal action retry is provided by M9 Task 24 but remains API-only.
-Action skip, device rejoin, and leader promotion remain outside this accepted
-boundary.
+25; explicit terminal action retry is provided by M9 Task 24 and exposed in the
+console by M9 Task 26. Action skip, device rejoin, and leader promotion remain
+outside this accepted boundary.
 
 ## Acceptance decision
 
 **M9 implementation: READY FOR REVIEW. M9 single-device Appium-only action acceptance: PASS. M9 two-device hardware acceptance: PASS. M9 active-session PAUSE_ALL fault-policy acceptance: PASS. Deterministic follower quarantine acceptance: PASS; physical follower quarantine: BLOCKED by device ADB availability.**
 
-The Appium driver/device discovery blocker is resolved for the current environment. Appium-only operation is explicit and does not silently weaken the strict Bridge default. The physical fault/recovery acceptance evidence is recorded in [M9 Task 22](M9-task22-fault-recovery-acceptance.md), the explicit resume/rebuild contract in [M9 Task 23](M9-task23-explicit-resume-acceptance.md), the explicit action retry contract in [M9 Task 24](M9-task24-action-retry-acceptance.md), and the console pause/resume controls in [M9 Task 25](M9-task25-session-controls-acceptance.md). M10 remains independently accepted; action skip, device rejoin, and leader promotion are separate follow-up scope.
+The Appium driver/device discovery blocker is resolved for the current environment. Appium-only operation is explicit and does not silently weaken the strict Bridge default. The physical fault/recovery acceptance evidence is recorded in [M9 Task 22](M9-task22-fault-recovery-acceptance.md), the explicit resume/rebuild contract in [M9 Task 23](M9-task23-explicit-resume-acceptance.md), the explicit action retry contract in [M9 Task 24](M9-task24-action-retry-acceptance.md), the console pause/resume controls in [M9 Task 25](M9-task25-session-controls-acceptance.md), and the console action retry surface in [M9 Task 26](M9-task26-action-retry-console-acceptance.md). M10 remains independently accepted; action skip, device rejoin, and leader promotion are separate follow-up scope.
 
 The user has approved this acceptance slice for commit and push to `main`.

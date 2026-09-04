@@ -1059,6 +1059,62 @@ main {
 .session-state .session-control-actions .button {
   margin-left: 0;
 }
+.session-actions-panel {
+  overflow: hidden;
+}
+.session-action-list {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid #e1e0d6;
+}
+.session-action-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 9px 0;
+  border-bottom: 1px solid #e1e0d6;
+}
+.session-action-seq {
+  color: #7a8887;
+  font:
+    12px Consolas,
+    monospace;
+}
+.session-action-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.session-action-copy strong {
+  color: #344447;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+.session-action-copy small {
+  overflow: hidden;
+  color: #7b8987;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-action-copy .session-action-parent {
+  color: #7d684b;
+}
+.session-action-retry {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+.session-actions-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  color: #7b8987;
+  font-size: 12px;
+}
 .empty-state {
   display: grid;
   place-items: center;
@@ -2104,6 +2160,13 @@ main {
   .session-control-actions .button {
     justify-content: center;
     width: 100%;
+  }
+  .session-action-row {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+  .session-action-row .session-action-retry {
+    grid-column: 2 / -1;
+    justify-self: start;
   }
   .form-grid,
   .choice-grid {

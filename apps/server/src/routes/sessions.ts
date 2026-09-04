@@ -225,6 +225,7 @@ export interface SessionRouteService {
     actionId: string,
     input: SessionRetryInput,
   ): Promise<SessionActionResult>;
+  listActions?(id: string): readonly ActionView[] | undefined;
 }
 
 export async function registerSessionsRoutes(
@@ -267,6 +268,16 @@ export async function registerSessionsRoutes(
     const session = context.sessionService.get(decodeURIComponent(request.params.id));
     if (session === undefined) return await reply.code(404).send({ error: "Session not found." });
     return { schemaVersion: 1, session };
+  });
+
+  app.get<{ Params: { id: string } }>("/api/sessions/:id/actions", async (request, reply) => {
+    if (requireSession(request, context) === undefined)
+      return await reply.code(401).send({ error: "Authentication required." });
+    if (context.sessionService === undefined || context.sessionService.listActions === undefined)
+      return await reply.code(503).send({ error: "Session actions unavailable." });
+    const actions = context.sessionService.listActions(decodeURIComponent(request.params.id));
+    if (actions === undefined) return await reply.code(404).send({ error: "Session not found." });
+    return { schemaVersion: 1, actions };
   });
 
   for (const phase of ["preflight", "start"] as const) {
