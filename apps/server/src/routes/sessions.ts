@@ -142,6 +142,7 @@ const SkipActionSchema = z
 const RejoinSessionSchema = z
   .object({ reason: z.string().trim().min(1).max(128).default("operator") })
   .strict();
+const PromoteLeaderSchema = RejoinSessionSchema;
 
 export interface SessionLeaderView {
   readonly serial: DeviceSerial;
@@ -247,6 +248,7 @@ export interface SessionRouteService {
     input: SessionSkipInput,
   ): Promise<SessionActionResult>;
   rejoinDevice?(id: string, serial: DeviceSerial, reason: string): Promise<SessionView>;
+  promoteLeader?(id: string, serial: DeviceSerial, reason: string): Promise<SessionView>;
 }
 
 export async function registerSessionsRoutes(
@@ -500,6 +502,32 @@ export async function registerSessionsRoutes(
         return await reply
           .code(sessionErrorCode(error))
           .send({ error: error instanceof Error ? error.message : "Device rejoin rejected." });
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string; serial: string } }>(
+    "/api/sessions/:id/devices/:serial/promote-leader",
+    async (request, reply) => {
+      try {
+        assertMutationAllowed(request, context);
+        if (context.sessionService === undefined)
+          return await reply.code(503).send({ error: "Session service unavailable." });
+        if (context.sessionService.promoteLeader === undefined)
+          return await reply.code(503).send({ error: "Leader promotion unavailable." });
+        if (requireSession(request, context) === undefined)
+          return await reply.code(401).send({ error: "Authentication required." });
+        const payload = PromoteLeaderSchema.parse(request.body ?? {});
+        const session = await context.sessionService.promoteLeader(
+          decodeURIComponent(request.params.id),
+          parseDeviceSerial(decodeURIComponent(request.params.serial)),
+          payload.reason,
+        );
+        return { schemaVersion: 1, session };
+      } catch (error) {
+        return await reply
+          .code(sessionErrorCode(error))
+          .send({ error: error instanceof Error ? error.message : "Leader promotion rejected." });
       }
     },
   );

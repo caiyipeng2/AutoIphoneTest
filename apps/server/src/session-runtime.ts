@@ -371,6 +371,85 @@ export class RuntimeSessionRouteService implements SessionRouteService {
     return rejoined;
   }
 
+  public async promoteLeader(
+    id: string,
+    serial: DeviceSerial,
+    reason: string,
+  ): Promise<SessionView> {
+    if (!reason.trim() || reason.length > 128)
+      throw new TypeError("Leader promotion reason is invalid.");
+    const current = this.get(id);
+    if (current === undefined) throw new Error("Session not found.");
+    if (current.state !== "PAUSED") throw new Error("Session state must be PAUSED.");
+    const target = current.devices.find((device) => device.serial === serial);
+    if (target === undefined) throw new Error("Run device not found.");
+    if (target.role !== "FOLLOWER" || target.membershipState !== "ACTIVE") {
+      throw new Error("Only an active follower can become leader.");
+    }
+    const members = current.devices.filter((device) => device.membershipState === "ACTIVE");
+    for (const member of members) {
+      const device = this.registry.get(member.serial);
+      if (device === undefined) throw new Error(`Device not found: ${member.serial}.`);
+      if (device.state !== "ONLINE") throw new Error(`Device must be online: ${member.serial}.`);
+      await this.preflightProbe?.check({ serial: member.serial, packageName: current.packageName });
+    }
+    const nextEpoch = current.currentEpoch + 1;
+    const generations = new Map(
+      members.map((member) => [member.serial, member.generation + 1] as const),
+    );
+    await this.workerCoordinator?.start(
+      id,
+      members.map((member) => member.serial),
+      current.packageName,
+      this.readRunNonceHash(id),
+      current.bridgeMode,
+      generations,
+    );
+    try {
+      await this.videoRecorder
+        ?.start({ runId: id, serial, enabled: current.leaderVideoEnabled })
+        .catch(() => undefined);
+      const now = new Date().toISOString();
+      const update = this.database.transaction(() => {
+        const changed = this.database
+          .prepare(
+            "UPDATE test_runs SET state = 'RUNNING', current_epoch = ?, updated_at = ? WHERE id = ? AND state = 'PAUSED' AND current_epoch = ?",
+          )
+          .run(nextEpoch, now, id, current.currentEpoch) as { changes: number };
+        if (changed.changes !== 1) throw new Error("Session state changed while promoting leader.");
+        const insertMember = this.database.prepare(
+          `INSERT INTO run_devices
+           (run_id, serial, role, membership_state, epoch, generation, joined_at, updated_at)
+           VALUES (?, ?, ?, 'ACTIVE', ?, ?, ?, ?)`,
+        );
+        for (const member of members) {
+          insertMember.run(
+            id,
+            member.serial,
+            member.serial === serial ? "LEADER" : "FOLLOWER",
+            nextEpoch,
+            generations.get(member.serial),
+            now,
+            now,
+          );
+        }
+        this.database
+          .prepare(
+            "INSERT INTO run_transitions (run_id, from_state, to_state, reason, created_at) VALUES (?, 'PAUSED', 'RUNNING', ?, ?)",
+          )
+          .run(id, `OPERATOR_LEADER_PROMOTED:${serial}:${reason}`, now);
+      });
+      update.immediate();
+    } catch (error) {
+      await this.videoRecorder?.stop(id).catch(() => undefined);
+      await this.workerCoordinator?.stop(id).catch(() => undefined);
+      throw error;
+    }
+    const promoted = this.get(id);
+    if (promoted === undefined) throw new Error("Promoted session could not be read back.");
+    return promoted;
+  }
+
   public async complete(id: string, input: SessionCompletionInput): Promise<SessionView> {
     if (!input.reason.trim() || input.reason.length > 128)
       throw new TypeError("Completion reason is invalid.");

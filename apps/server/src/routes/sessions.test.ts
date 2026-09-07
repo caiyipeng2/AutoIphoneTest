@@ -563,4 +563,53 @@ describe("session create/detail routes", () => {
     });
     await app.close();
   });
+
+  it("exposes a protected leader promotion endpoint", async () => {
+    const promoteLeader = vi.fn(async (id: string, serial: string, reason: string) => {
+      expect([id, serial, reason]).toEqual(["run-1", "R5CX211TXNT", "operator-promote"]);
+      return {
+        ...view,
+        state: "RUNNING" as const,
+        currentEpoch: 2,
+        leader: { ...view.leader, serial: parseDeviceSerial(serial) },
+      };
+    });
+    const app = await createApp({
+      port: 4804,
+      bootstrapCode: "session-bootstrap-10",
+      launchSecret: "session-secret-10",
+      sessionService: { ...service(), promoteLeader },
+    });
+    const headers = { host: "127.0.0.1:4804", origin: "http://127.0.0.1:4804" };
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers,
+      payload: { code: "session-bootstrap-10" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const csrf = Array.isArray(cookies)
+      ? cookies
+          .find((cookie) => cookie.startsWith("tc_csrf="))
+          ?.split("=", 2)[1]
+          ?.split(";", 1)[0]
+      : undefined;
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/sessions/run-1/devices/R5CX211TXNT/promote-leader",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+      payload: { reason: "operator-promote" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(promoteLeader).toHaveBeenCalledWith("run-1", "R5CX211TXNT", "operator-promote");
+    expect(response.json()).toMatchObject({
+      schemaVersion: 1,
+      session: { state: "RUNNING", currentEpoch: 2 },
+    });
+    await app.close();
+  });
 });

@@ -37,6 +37,97 @@ afterEach(async () => {
 });
 
 describe("RuntimeSessionRouteService", () => {
+  it("promotes an active follower to leader from a paused run", async () => {
+    const database = await createDatabase();
+    const serials = [parseDeviceSerial("R5CX211TXNT"), parseDeviceSerial("R5CRC342PRF")];
+    for (const serial of serials) {
+      database
+        .prepare(
+          `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+        )
+        .run(serial, "now", "now", "now", "now");
+    }
+    const preflightProbe = { check: vi.fn(async () => undefined) };
+    const coordinator = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      preflightProbe,
+      undefined,
+      undefined,
+      coordinator,
+    );
+    const created = await service.create({
+      clientRequestId: "request-promote",
+      packageName: "com.example.game",
+      deviceSerials: serials,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    await service.pause(created.session.id, "fault-monitor");
+
+    const promoted = await service.promoteLeader(
+      created.session.id,
+      serials[1]!,
+      "operator-promote",
+    );
+
+    expect(promoted).toMatchObject({
+      state: "RUNNING",
+      currentEpoch: 2,
+      leader: { serial: serials[1], role: "LEADER", generation: 2 },
+      devices: [
+        { serial: serials[1], role: "LEADER", membershipState: "ACTIVE", epoch: 2 },
+        { serial: serials[0], role: "FOLLOWER", membershipState: "ACTIVE", epoch: 2 },
+      ],
+    });
+    expect(coordinator.start).toHaveBeenLastCalledWith(
+      created.session.id,
+      serials,
+      "com.example.game",
+      expect.stringMatching(/^sha256:/),
+      "REQUIRED",
+      new Map([
+        [serials[0], 2],
+        [serials[1], 2],
+      ]),
+    );
+    expect(
+      database
+        .prepare("SELECT reason FROM run_transitions WHERE run_id = ? ORDER BY id DESC LIMIT 1")
+        .get(created.session.id),
+    ).toEqual({ reason: `OPERATOR_LEADER_PROMOTED:${serials[1]}:operator-promote` });
+  });
+
+  it("rejects leader promotion when the target is not an active follower", async () => {
+    const database = await createDatabase();
+    const serial = parseDeviceSerial("R5CX211TXNT");
+    database
+      .prepare(
+        `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+      )
+      .run(serial, "now", "now", "now", "now");
+    const service = new RuntimeSessionRouteService(database, {
+      get: () => ({ state: "ONLINE" }),
+    } as never);
+    const created = await service.create({
+      clientRequestId: "request-promote-invalid",
+      packageName: "com.example.game",
+      deviceSerial: serial,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    await service.pause(created.session.id, "fault-monitor");
+
+    await expect(
+      service.promoteLeader(created.session.id, serial, "operator-promote"),
+    ).rejects.toThrow("active follower");
+    expect(service.get(created.session.id)).toMatchObject({ state: "PAUSED", currentEpoch: 1 });
+  });
   it("rejoins a quarantined follower from a paused run with a new epoch", async () => {
     const database = await createDatabase();
     const serials = [parseDeviceSerial("R5CX211TXNT"), parseDeviceSerial("R5CRC342PRF")];
