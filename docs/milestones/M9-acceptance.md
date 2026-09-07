@@ -80,6 +80,6 @@ The physical two-device promotion gate is recorded in [M9 Task 31](M9-task31-rea
 
 The console rejoin control is recorded in [M9 Task 32](M9-task32-device-rejoin-console-acceptance.md). Task 32 was approved and pushed in commit `d81e07e`; physical quarantine and rejoin remain a separate hardware gate.
 
-The physical quarantine and rejoin gate is recorded in [M9 Task 33](M9-task33-real-quarantine-rejoin-acceptance.md). The real Samsung/Motorola Appium-only run passed; Task 33 awaits approval before commit/push.
+The physical quarantine and rejoin gate is recorded in [M9 Task 33](M9-task33-real-quarantine-rejoin-acceptance.md). The real Samsung/Motorola Appium-only run passed; Task 33 was approved and pushed in commit `2c77dd7`.
 
 The user has approved this acceptance slice for commit and push to `main`.

@@ -14,4 +14,4 @@
 
 - [x] Finish the run and verify worker/forward cleanup.
 - [x] Move evidence to E: and record the acceptance boundary.
-- [ ] Stop for user approval before commit and push.
+- [x] Stop for user approval before commit and push.

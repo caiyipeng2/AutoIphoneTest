@@ -59,5 +59,5 @@ rejoin, worker rebuild, and post-rejoin synchronized action all work on the
 real Samsung/Motorola pair without QA Bridge injection.
 
 Evidence was copied with matching file count and byte count to the E-drive
-acceptance root. The record is complete locally and awaits user approval
-before commit and push to `origin/main`.
+acceptance root. The record was approved and pushed to `origin/main` in commit
+`2c77dd7`.
