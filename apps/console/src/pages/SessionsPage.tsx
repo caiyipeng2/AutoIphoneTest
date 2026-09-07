@@ -1,6 +1,7 @@
 import {
   Check,
   CircleAlert,
+  Crown,
   Eye,
   LoaderCircle,
   MousePointer2,
@@ -22,6 +23,7 @@ import {
   fetchSessionActions,
   pauseSession,
   preflightSession,
+  promoteLeaderSession,
   refreshSession,
   retrySessionAction,
   skipSessionAction,
@@ -85,6 +87,7 @@ export function SessionsPage() {
   const [actionsLoading, setActionsLoading] = useState(false);
   const [retryingActionId, setRetryingActionId] = useState<string | null>(null);
   const [skippingActionId, setSkippingActionId] = useState<string | null>(null);
+  const [promotingSerial, setPromotingSerial] = useState<string | null>(null);
   const [busy, setBusy] = useState<SessionBusyState>("loading");
   const [error, setError] = useState<string | null>(null);
 
@@ -256,9 +259,27 @@ export function SessionsPage() {
     }
   };
 
+  const handlePromoteLeader = async (serial: string) => {
+    if (session === null || session.state !== "PAUSED") return;
+    setError(null);
+    setPromotingSerial(serial);
+    try {
+      setSession(await promoteLeaderSession(session.id, serial));
+      await loadSessionActions(session.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Leader 晋升失败");
+    } finally {
+      setPromotingSerial(null);
+    }
+  };
+
   const previewSerial = manualSerial.trim() || selectedSerials[0] || "";
   const isBusy =
-    busy !== "idle" || actionsLoading || retryingActionId !== null || skippingActionId !== null;
+    busy !== "idle" ||
+    actionsLoading ||
+    retryingActionId !== null ||
+    skippingActionId !== null ||
+    promotingSerial !== null;
 
   return (
     <PageFrame title="会话" eyebrow="TEST SESSIONS / 1-4 同步执行">
@@ -483,6 +504,23 @@ export function SessionsPage() {
                   <small>{device.serial}</small>
                 </div>
                 <span className="chip chip-good">{device.membershipState}</span>
+                {session.state === "PAUSED" &&
+                  device.role === "FOLLOWER" &&
+                  device.membershipState === "ACTIVE" && (
+                    <button
+                      className="button button-quiet session-member-promote"
+                      aria-label={`晋升 ${device.serial} 为 Leader`}
+                      onClick={() => void handlePromoteLeader(device.serial)}
+                      disabled={isBusy}
+                    >
+                      {promotingSerial === device.serial ? (
+                        <LoaderCircle className="spin" size={14} />
+                      ) : (
+                        <Crown size={14} />
+                      )}
+                      {promotingSerial === device.serial ? "晋升中" : "晋升 Leader"}
+                    </button>
+                  )}
               </div>
             ))}
           </div>

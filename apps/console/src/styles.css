@@ -1489,6 +1489,13 @@ main {
 .session-member .chip {
   margin-left: auto;
 }
+.session-member-promote {
+  min-height: 30px;
+  margin-left: auto;
+  padding: 0 9px;
+  color: #80683f;
+  font-size: 11px;
+}
 .session-preview-panel {
   margin-bottom: 18px;
 }

@@ -466,6 +466,30 @@ export async function resumeSession(id: string, reason = "operator-console"): Pr
   return await sessionStateMutation(id, "resume", reason);
 }
 
+export async function promoteLeaderSession(
+  id: string,
+  serial: string,
+  reason = "operator-console",
+): Promise<SessionView> {
+  const csrf = readCsrfToken();
+  const response = await fetch(
+    `/api/sessions/${encodeURIComponent(id)}/devices/${encodeURIComponent(serial)}/promote-leader`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+      },
+      body: JSON.stringify({ reason }),
+    },
+  );
+  const payload = (await response.json()) as { session?: SessionView; error?: string };
+  if (!response.ok || payload.session === undefined) {
+    throw new Error(payload.error ?? `session-promote-leader:${response.status}`);
+  }
+  return payload.session;
+}
+
 export async function retrySessionAction(
   id: string,
   actionId: string,

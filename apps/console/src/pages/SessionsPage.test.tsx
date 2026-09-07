@@ -419,6 +419,110 @@ describe("SessionsPage", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("shows paused follower leader promotion and updates the session leader", async () => {
+    const devices = [
+      {
+        serial: "R5CX211TXNT",
+        state: "ONLINE",
+        metadata: { model: "SM-S9280" },
+        firstSeenAt: "now",
+        lastSeenAt: "now",
+        connectionSeq: 1,
+        tags: [],
+      },
+      {
+        serial: "R5CWB17PN0Y",
+        state: "ONLINE",
+        metadata: { model: "SM-A5460" },
+        firstSeenAt: "now",
+        lastSeenAt: "now",
+        connectionSeq: 1,
+        tags: [],
+      },
+    ];
+    const session = (
+      state: "CREATED" | "PREFLIGHT" | "RUNNING" | "PAUSED",
+      leader = "R5CX211TXNT",
+    ) => ({
+      id: "run-promote-ui",
+      clientRequestId: "request-promote-ui",
+      packageName: "com.hg.idleweaponshoptycoon.android",
+      state,
+      currentEpoch: state === "RUNNING" ? 2 : 1,
+      leaderVideoEnabled: true,
+      bridgeMode: "APPIUM_ONLY" as const,
+      failurePolicy: "PAUSE_ALL" as const,
+      leader: {
+        serial: leader,
+        role: "LEADER" as const,
+        membershipState: "ACTIVE" as const,
+        epoch: state === "RUNNING" ? 2 : 1,
+        generation: state === "RUNNING" ? 2 : 1,
+      },
+      devices: [
+        {
+          serial: leader,
+          role: "LEADER" as const,
+          membershipState: "ACTIVE" as const,
+          epoch: state === "RUNNING" ? 2 : 1,
+          generation: state === "RUNNING" ? 2 : 1,
+        },
+        {
+          serial: leader === "R5CX211TXNT" ? "R5CWB17PN0Y" : "R5CX211TXNT",
+          role: "FOLLOWER" as const,
+          membershipState: "ACTIVE" as const,
+          epoch: state === "RUNNING" ? 2 : 1,
+          generation: state === "RUNNING" ? 2 : 1,
+        },
+      ],
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/devices") return jsonResponse({ schemaVersion: 1, devices });
+      if (url === "/api/sessions" && init?.method === "POST")
+        return jsonResponse(
+          { schemaVersion: 1, state: "CREATED", session: session("CREATED") },
+          201,
+        );
+      if (url.endsWith("/preflight"))
+        return jsonResponse({ schemaVersion: 1, session: session("PREFLIGHT") });
+      if (url.endsWith("/start"))
+        return jsonResponse({ schemaVersion: 1, session: session("RUNNING") });
+      if (url.endsWith("/pause"))
+        return jsonResponse({ schemaVersion: 1, session: session("PAUSED") });
+      if (url.endsWith("/actions")) return jsonResponse({ schemaVersion: 1, actions: [] });
+      if (url.endsWith("/incidents"))
+        return jsonResponse({
+          schemaVersion: 1,
+          timeline: { runId: "run-promote-ui", incidents: [], recoveries: [] },
+        });
+      if (url.endsWith("/promote-leader")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ reason: "operator-console" });
+        return jsonResponse({ schemaVersion: 1, session: session("RUNNING", "R5CWB17PN0Y") });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SessionsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /R5CX211TXNT/ })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /R5CX211TXNT/ }));
+    fireEvent.click(screen.getByRole("button", { name: /R5CWB17PN0Y/ }));
+    fireEvent.click(screen.getByRole("button", { name: "创建同步会话" }));
+    await waitFor(() => expect(screen.getByText("会话 运行中")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "暂停会话" }));
+    await waitFor(() => expect(screen.getByText("会话 已暂停")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "晋升 R5CWB17PN0Y 为 Leader" }));
+    await waitFor(() => expect(screen.getByText("会话 运行中")).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions/run-promote-ui/devices/R5CWB17PN0Y/promote-leader",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });
 
 function jsonResponse(body: unknown, status = 200) {

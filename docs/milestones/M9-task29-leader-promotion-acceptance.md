@@ -35,6 +35,11 @@ the run advances to a new epoch without replaying actions.
 - Prettier on changed files: PASS
 - CodeGraph: index up to date
 
+The paused-session mutation is now exposed in the Sessions console by [M9
+Task 30](M9-task30-leader-promotion-console-acceptance.md). The console slice
+has its own local approval boundary and does not change the hardware boundary
+recorded below.
+
 ## Hardware boundary
 
 No physical promotion result is claimed in this slice. A real paused two-device
