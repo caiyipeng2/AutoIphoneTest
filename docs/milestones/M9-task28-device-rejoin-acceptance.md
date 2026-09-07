@@ -48,3 +48,6 @@ device was unavailable after fault injection; real rejoin requires a returned
 ADB device and a fresh two-device acceptance run.
 
 The user approved this slice for commit and push to `main`.
+
+Physical quarantine and rejoin were later validated on the Samsung/Motorola
+pair in [M9 Task 33](M9-task33-real-quarantine-rejoin-acceptance.md).
