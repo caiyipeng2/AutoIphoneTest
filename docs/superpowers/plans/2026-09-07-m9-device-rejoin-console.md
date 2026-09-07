@@ -23,4 +23,4 @@
 
 - [x] Run focused tests, full tests, typecheck, lint, console build, formatting, and CodeGraph.
 - [x] Record that physical quarantine/rejoin remains a separate hardware gate.
-- [ ] Stop for user approval before commit and push.
+- [x] Stop for user approval before commit and push.

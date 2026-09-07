@@ -44,5 +44,5 @@ hardware slice should cause a real follower to enter `QUARANTINED`, verify it
 is back online, use this console control to rebuild the active group, and
 submit a post-rejoin synchronized action.
 
-The implementation and evidence are complete locally and are awaiting user
-approval before commit and push to `origin/main`.
+The implementation and evidence were approved and pushed to `origin/main` in
+commit `d81e07e`.

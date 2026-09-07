@@ -78,6 +78,6 @@ The console control evidence is recorded separately in [M9 Task 30](M9-task30-le
 
 The physical two-device promotion gate is recorded in [M9 Task 31](M9-task31-real-dual-leader-promotion-acceptance.md). The console control and its real Samsung/Motorola run both passed; Task 31 was approved and pushed in commit `d046d5f`.
 
-The console rejoin control is recorded in [M9 Task 32](M9-task32-device-rejoin-console-acceptance.md). Physical quarantine and rejoin remain a separate hardware gate.
+The console rejoin control is recorded in [M9 Task 32](M9-task32-device-rejoin-console-acceptance.md). Task 32 was approved and pushed in commit `d81e07e`; physical quarantine and rejoin remain a separate hardware gate.
 
 The user has approved this acceptance slice for commit and push to `main`.
