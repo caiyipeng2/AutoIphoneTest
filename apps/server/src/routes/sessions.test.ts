@@ -518,4 +518,49 @@ describe("session create/detail routes", () => {
     });
     await app.close();
   });
+
+  it("exposes a protected quarantined-device rejoin endpoint", async () => {
+    const rejoinDevice = vi.fn(async (id: string, serial: string, reason: string) => {
+      expect([id, serial, reason]).toEqual(["run-1", "R5CX211TXNT", "operator-rejoin"]);
+      return { ...view, state: "RUNNING" as const, currentEpoch: 2 };
+    });
+    const app = await createApp({
+      port: 4803,
+      bootstrapCode: "session-bootstrap-9",
+      launchSecret: "session-secret-9",
+      sessionService: { ...service(), rejoinDevice },
+    });
+    const headers = { host: "127.0.0.1:4803", origin: "http://127.0.0.1:4803" };
+    const exchange = await app.inject({
+      method: "POST",
+      url: "/api/bootstrap/exchange",
+      headers,
+      payload: { code: "session-bootstrap-9" },
+    });
+    const cookies = exchange.headers["set-cookie"];
+    const cookieHeader = Array.isArray(cookies)
+      ? cookies.map((cookie) => cookie.split(";", 1)[0]).join("; ")
+      : cookies;
+    const csrf = Array.isArray(cookies)
+      ? cookies
+          .find((cookie) => cookie.startsWith("tc_csrf="))
+          ?.split("=", 2)[1]
+          ?.split(";", 1)[0]
+      : undefined;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/sessions/run-1/devices/R5CX211TXNT/rejoin",
+      headers: { ...headers, cookie: cookieHeader, "x-test-center-csrf": csrf },
+      payload: { reason: "operator-rejoin" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(rejoinDevice).toHaveBeenCalledWith("run-1", "R5CX211TXNT", "operator-rejoin");
+    expect(response.json()).toMatchObject({
+      schemaVersion: 1,
+      session: { state: "RUNNING", currentEpoch: 2 },
+    });
+    await app.close();
+  });
 });

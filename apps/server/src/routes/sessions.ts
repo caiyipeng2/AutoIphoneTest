@@ -139,6 +139,9 @@ const SkipActionSchema = z
     reason: z.string().trim().min(1).max(128),
   })
   .strict();
+const RejoinSessionSchema = z
+  .object({ reason: z.string().trim().min(1).max(128).default("operator") })
+  .strict();
 
 export interface SessionLeaderView {
   readonly serial: DeviceSerial;
@@ -243,6 +246,7 @@ export interface SessionRouteService {
     actionId: string,
     input: SessionSkipInput,
   ): Promise<SessionActionResult>;
+  rejoinDevice?(id: string, serial: DeviceSerial, reason: string): Promise<SessionView>;
 }
 
 export async function registerSessionsRoutes(
@@ -470,6 +474,32 @@ export async function registerSessionsRoutes(
         return await reply
           .code(sessionErrorCode(error))
           .send({ error: error instanceof Error ? error.message : "Action skip rejected." });
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string; serial: string } }>(
+    "/api/sessions/:id/devices/:serial/rejoin",
+    async (request, reply) => {
+      try {
+        assertMutationAllowed(request, context);
+        if (context.sessionService === undefined)
+          return await reply.code(503).send({ error: "Session service unavailable." });
+        if (context.sessionService.rejoinDevice === undefined)
+          return await reply.code(503).send({ error: "Device rejoin unavailable." });
+        if (requireSession(request, context) === undefined)
+          return await reply.code(401).send({ error: "Authentication required." });
+        const payload = RejoinSessionSchema.parse(request.body ?? {});
+        const session = await context.sessionService.rejoinDevice(
+          decodeURIComponent(request.params.id),
+          parseDeviceSerial(decodeURIComponent(request.params.serial)),
+          payload.reason,
+        );
+        return { schemaVersion: 1, session };
+      } catch (error) {
+        return await reply
+          .code(sessionErrorCode(error))
+          .send({ error: error instanceof Error ? error.message : "Device rejoin rejected." });
       }
     },
   );

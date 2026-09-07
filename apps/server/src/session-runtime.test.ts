@@ -37,6 +37,124 @@ afterEach(async () => {
 });
 
 describe("RuntimeSessionRouteService", () => {
+  it("rejoins a quarantined follower from a paused run with a new epoch", async () => {
+    const database = await createDatabase();
+    const serials = [parseDeviceSerial("R5CX211TXNT"), parseDeviceSerial("R5CRC342PRF")];
+    for (const serial of serials) {
+      database
+        .prepare(
+          `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+        )
+        .run(serial, "now", "now", "now", "now");
+    }
+    const registry = { get: vi.fn(() => ({ state: "ONLINE" })) };
+    const preflightProbe = { check: vi.fn(async () => undefined) };
+    const coordinator = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
+    const service = new RuntimeSessionRouteService(
+      database,
+      registry as never,
+      preflightProbe,
+      undefined,
+      undefined,
+      coordinator,
+    );
+    const created = await service.create({
+      clientRequestId: "request-rejoin",
+      packageName: "com.example.game",
+      deviceSerials: serials,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    await service.pause(created.session.id, "fault-monitor");
+    database
+      .prepare(
+        "UPDATE run_devices SET membership_state = 'QUARANTINED' WHERE run_id = ? AND serial = ? AND epoch = 1",
+      )
+      .run(created.session.id, serials[1]);
+
+    const rejoined = await service.rejoinDevice(created.session.id, serials[1]!, "operator-rejoin");
+
+    expect(rejoined).toMatchObject({
+      state: "RUNNING",
+      currentEpoch: 2,
+      devices: [
+        { serial: serials[0], role: "LEADER", membershipState: "ACTIVE", epoch: 2, generation: 2 },
+        {
+          serial: serials[1],
+          role: "FOLLOWER",
+          membershipState: "ACTIVE",
+          epoch: 2,
+          generation: 2,
+        },
+      ],
+    });
+    expect(preflightProbe.check).toHaveBeenCalledWith({
+      serial: serials[1],
+      packageName: "com.example.game",
+    });
+    expect(coordinator.start).toHaveBeenLastCalledWith(
+      created.session.id,
+      serials,
+      "com.example.game",
+      expect.stringMatching(/^sha256:/),
+      "REQUIRED",
+      new Map([
+        [serials[0], 2],
+        [serials[1], 2],
+      ]),
+    );
+  });
+
+  it("keeps a paused run unchanged when rejoin preflight fails", async () => {
+    const database = await createDatabase();
+    const serials = [parseDeviceSerial("R5CX211TXNT"), parseDeviceSerial("R5CRC342PRF")];
+    for (const serial of serials) {
+      database
+        .prepare(
+          `INSERT INTO devices (serial, state, first_seen_at, last_seen_at, created_at, updated_at) VALUES (?, 'ONLINE', ?, ?, ?, ?)`,
+        )
+        .run(serial, "now", "now", "now", "now");
+    }
+    let failRejoin = false;
+    const preflightProbe = {
+      check: vi.fn(async ({ serial }: { serial: string }) => {
+        if (failRejoin && serial === serials[1]) throw new Error("rejoin preflight failed");
+      }),
+    };
+    const coordinator = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
+    const service = new RuntimeSessionRouteService(
+      database,
+      { get: () => ({ state: "ONLINE" }) } as never,
+      preflightProbe,
+      undefined,
+      undefined,
+      coordinator,
+    );
+    const created = await service.create({
+      clientRequestId: "request-rejoin-failed",
+      packageName: "com.example.game",
+      deviceSerials: serials,
+      leaderVideoEnabled: true,
+      actorSessionId: "session-1",
+    });
+    await service.preflight(created.session.id);
+    await service.start(created.session.id);
+    await service.pause(created.session.id, "fault-monitor");
+    database
+      .prepare(
+        "UPDATE run_devices SET membership_state = 'QUARANTINED' WHERE run_id = ? AND serial = ? AND epoch = 1",
+      )
+      .run(created.session.id, serials[1]);
+    failRejoin = true;
+
+    await expect(
+      service.rejoinDevice(created.session.id, serials[1]!, "operator-rejoin"),
+    ).rejects.toThrow("rejoin preflight failed");
+    expect(service.get(created.session.id)).toMatchObject({ state: "PAUSED", currentEpoch: 1 });
+    expect(coordinator.start).toHaveBeenCalledTimes(1);
+  });
   it("retries only a failed parent as a new action and dispatches the child", async () => {
     const database = await createDatabase();
     const serial = parseDeviceSerial("R5CX211TXNT");
