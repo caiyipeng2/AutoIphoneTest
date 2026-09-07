@@ -1496,6 +1496,13 @@ main {
   color: #80683f;
   font-size: 11px;
 }
+.session-member-rejoin {
+  min-height: 30px;
+  margin-left: auto;
+  padding: 0 9px;
+  color: #4d6b75;
+  font-size: 11px;
+}
 .session-preview-panel {
   margin-bottom: 18px;
 }

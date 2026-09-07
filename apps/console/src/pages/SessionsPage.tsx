@@ -24,6 +24,7 @@ import {
   pauseSession,
   preflightSession,
   promoteLeaderSession,
+  rejoinSessionDevice,
   refreshSession,
   retrySessionAction,
   skipSessionAction,
@@ -88,6 +89,7 @@ export function SessionsPage() {
   const [retryingActionId, setRetryingActionId] = useState<string | null>(null);
   const [skippingActionId, setSkippingActionId] = useState<string | null>(null);
   const [promotingSerial, setPromotingSerial] = useState<string | null>(null);
+  const [rejoiningSerial, setRejoiningSerial] = useState<string | null>(null);
   const [busy, setBusy] = useState<SessionBusyState>("loading");
   const [error, setError] = useState<string | null>(null);
 
@@ -273,13 +275,28 @@ export function SessionsPage() {
     }
   };
 
+  const handleRejoinDevice = async (serial: string) => {
+    if (session === null || session.state !== "PAUSED") return;
+    setError(null);
+    setRejoiningSerial(serial);
+    try {
+      setSession(await rejoinSessionDevice(session.id, serial));
+      await loadSessionActions(session.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "设备重新加入失败");
+    } finally {
+      setRejoiningSerial(null);
+    }
+  };
+
   const previewSerial = manualSerial.trim() || selectedSerials[0] || "";
   const isBusy =
     busy !== "idle" ||
     actionsLoading ||
     retryingActionId !== null ||
     skippingActionId !== null ||
-    promotingSerial !== null;
+    promotingSerial !== null ||
+    rejoiningSerial !== null;
 
   return (
     <PageFrame title="会话" eyebrow="TEST SESSIONS / 1-4 同步执行">
@@ -519,6 +536,23 @@ export function SessionsPage() {
                         <Crown size={14} />
                       )}
                       {promotingSerial === device.serial ? "晋升中" : "晋升 Leader"}
+                    </button>
+                  )}
+                {session.state === "PAUSED" &&
+                  device.role === "FOLLOWER" &&
+                  device.membershipState === "QUARANTINED" && (
+                    <button
+                      className="button button-quiet session-member-rejoin"
+                      aria-label={`重新加入 ${device.serial}`}
+                      onClick={() => void handleRejoinDevice(device.serial)}
+                      disabled={isBusy}
+                    >
+                      {rejoiningSerial === device.serial ? (
+                        <LoaderCircle className="spin" size={14} />
+                      ) : (
+                        <RefreshCw size={14} />
+                      )}
+                      {rejoiningSerial === device.serial ? "加入中" : "重新加入"}
                     </button>
                   )}
               </div>

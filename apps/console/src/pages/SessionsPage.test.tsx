@@ -523,6 +523,113 @@ describe("SessionsPage", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("shows paused quarantined follower rejoin and updates the session", async () => {
+    const devices = [
+      {
+        serial: "R5CX211TXNT",
+        state: "ONLINE",
+        metadata: { model: "SM-S9280" },
+        firstSeenAt: "now",
+        lastSeenAt: "now",
+        connectionSeq: 1,
+        tags: [],
+      },
+      {
+        serial: "R5CWB17PN0Y",
+        state: "ONLINE",
+        metadata: { model: "SM-A5460" },
+        firstSeenAt: "now",
+        lastSeenAt: "now",
+        connectionSeq: 1,
+        tags: [],
+      },
+    ];
+    const session = (
+      state: "CREATED" | "PREFLIGHT" | "RUNNING" | "PAUSED",
+      followerState: "ACTIVE" | "QUARANTINED" = "QUARANTINED",
+    ) => ({
+      id: "run-rejoin-ui",
+      clientRequestId: "request-rejoin-ui",
+      packageName: "com.hg.idleweaponshoptycoon.android",
+      state,
+      currentEpoch: state === "RUNNING" ? 2 : 1,
+      leaderVideoEnabled: true,
+      bridgeMode: "APPIUM_ONLY" as const,
+      failurePolicy: "QUARANTINE_FAILED_DEVICE" as const,
+      leader: {
+        serial: "R5CX211TXNT",
+        role: "LEADER" as const,
+        membershipState: "ACTIVE" as const,
+        epoch: state === "RUNNING" ? 2 : 1,
+        generation: 1,
+      },
+      devices: [
+        {
+          serial: "R5CX211TXNT",
+          role: "LEADER" as const,
+          membershipState: "ACTIVE" as const,
+          epoch: state === "RUNNING" ? 2 : 1,
+          generation: 1,
+        },
+        {
+          serial: "R5CWB17PN0Y",
+          role: "FOLLOWER" as const,
+          membershipState: followerState,
+          epoch: state === "RUNNING" ? 2 : 1,
+          generation: state === "RUNNING" ? 2 : 1,
+        },
+      ],
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/devices") return jsonResponse({ schemaVersion: 1, devices });
+      if (url === "/api/sessions" && init?.method === "POST")
+        return jsonResponse(
+          { schemaVersion: 1, state: "CREATED", session: session("CREATED") },
+          201,
+        );
+      if (url.endsWith("/preflight"))
+        return jsonResponse({ schemaVersion: 1, session: session("PREFLIGHT") });
+      if (url.endsWith("/start"))
+        return jsonResponse({ schemaVersion: 1, session: session("RUNNING", "ACTIVE") });
+      if (url.endsWith("/pause"))
+        return jsonResponse({ schemaVersion: 1, session: session("PAUSED") });
+      if (url.endsWith("/actions")) return jsonResponse({ schemaVersion: 1, actions: [] });
+      if (url.endsWith("/incidents"))
+        return jsonResponse({
+          schemaVersion: 1,
+          timeline: { runId: "run-rejoin-ui", incidents: [], recoveries: [] },
+        });
+      if (url.endsWith("/rejoin")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ reason: "operator-console" });
+        return jsonResponse({
+          schemaVersion: 1,
+          session: session("RUNNING", "ACTIVE"),
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SessionsPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /R5CX211TXNT/ })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /R5CX211TXNT/ }));
+    fireEvent.click(screen.getByRole("button", { name: /R5CWB17PN0Y/ }));
+    fireEvent.click(screen.getByRole("button", { name: "创建同步会话" }));
+    await waitFor(() => expect(screen.getByText("会话 运行中")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "暂停会话" }));
+    await waitFor(() => expect(screen.getByText("会话 已暂停")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "重新加入 R5CWB17PN0Y" }));
+    await waitFor(() => expect(screen.getByText("会话 运行中")).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sessions/run-rejoin-ui/devices/R5CWB17PN0Y/rejoin",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
 });
 
 function jsonResponse(body: unknown, status = 200) {

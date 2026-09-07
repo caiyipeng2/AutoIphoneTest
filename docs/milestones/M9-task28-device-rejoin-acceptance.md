@@ -37,6 +37,10 @@ advances the run epoch without replaying actions.
 - Prettier on changed files: PASS
 - CodeGraph: index up to date
 
+The paused rejoin mutation is now exposed in the Sessions console by [M9
+Task 32](M9-task32-device-rejoin-console-acceptance.md). This console slice
+does not change the physical quarantine/rejoin boundary recorded below.
+
 ## Hardware boundary
 
 No physical rejoin result is claimed in this slice. The earlier Motorola

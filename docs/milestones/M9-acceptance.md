@@ -66,6 +66,7 @@ console by M9 Task 26; explicit Action Skip is provided by M9 Task 27; paused
 quarantined-follower rejoin is provided by M9 Task 28; paused active-follower
 Leader promotion is provided by M9 Task 29 and exposed in the Sessions
 console by M9 Task 30.
+Quarantined-follower rejoin is exposed in the Sessions console by M9 Task 32.
 
 ## Acceptance decision
 
@@ -76,5 +77,7 @@ The Appium driver/device discovery blocker is resolved for the current environme
 The console control evidence is recorded separately in [M9 Task 30](M9-task30-leader-promotion-console-acceptance.md). Task 30 was approved and pushed in commit `4f33661`; physical two-device promotion remains a separate hardware gate.
 
 The physical two-device promotion gate is recorded in [M9 Task 31](M9-task31-real-dual-leader-promotion-acceptance.md). The console control and its real Samsung/Motorola run both passed; Task 31 was approved and pushed in commit `d046d5f`.
+
+The console rejoin control is recorded in [M9 Task 32](M9-task32-device-rejoin-console-acceptance.md). Physical quarantine and rejoin remain a separate hardware gate.
 
 The user has approved this acceptance slice for commit and push to `main`.

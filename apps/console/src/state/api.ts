@@ -490,6 +490,30 @@ export async function promoteLeaderSession(
   return payload.session;
 }
 
+export async function rejoinSessionDevice(
+  id: string,
+  serial: string,
+  reason = "operator-console",
+): Promise<SessionView> {
+  const csrf = readCsrfToken();
+  const response = await fetch(
+    `/api/sessions/${encodeURIComponent(id)}/devices/${encodeURIComponent(serial)}/rejoin`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(csrf === undefined ? {} : { "x-test-center-csrf": csrf }),
+      },
+      body: JSON.stringify({ reason }),
+    },
+  );
+  const payload = (await response.json()) as { session?: SessionView; error?: string };
+  if (!response.ok || payload.session === undefined) {
+    throw new Error(payload.error ?? `session-rejoin:${response.status}`);
+  }
+  return payload.session;
+}
+
 export async function retrySessionAction(
   id: string,
   actionId: string,
