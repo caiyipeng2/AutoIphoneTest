@@ -45,5 +45,5 @@ No physical two-device promotion result is claimed here. The next slice will
 pause a real two-device session, promote the active follower from this
 console, and verify the new leader's video and action path.
 
-The implementation and evidence are complete locally and are awaiting user
-approval before commit and push to `origin/main`.
+The implementation and evidence were approved and pushed to `origin/main` in
+commit `4f33661`.

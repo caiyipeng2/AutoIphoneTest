@@ -45,6 +45,6 @@ Record exact results. No physical-device acceptance is included.
 
 Document that promotion is now available in the console while real two-device promotion remains a separate hardware gate.
 
-- [ ] **Step 3: Stop for user approval**
+- [x] **Step 3: Stop for user approval**
 
 Keep changes local until user approval, then commit and push to `origin/main`.
