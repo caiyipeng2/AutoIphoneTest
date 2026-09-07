@@ -13,4 +13,4 @@
 
 - [x] Finalize the run as `FINISHED` and verify no runtime ports/listeners remain.
 - [x] Record the physical evidence and limitations in the M9 acceptance docs.
-- [ ] Stop for user approval before commit and push.
+- [x] Stop for user approval before commit and push.

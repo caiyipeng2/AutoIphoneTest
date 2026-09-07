@@ -60,5 +60,5 @@ Android devices, rebuilds the worker epoch, and accepts a synchronized action
 after the new Leader is active. This closes the physical promotion gate for
 M9; three-/four-device capacity and later stability gates remain separate.
 
-The acceptance record is complete locally and awaits user approval before
-commit and push to `origin/main`.
+The acceptance record was approved and pushed to `origin/main` in commit
+`d046d5f`.
