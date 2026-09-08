@@ -46,7 +46,7 @@ M10 交付历史结果、离线 HTML、原子证据 ZIP、报告最终化恢复�
 
 原始本地证据位于 `data/hardware-m10-real-report-20260826/m11-portable-smoke.json`（`data/` 被 `.gitignore` 忽略）。HTML 报告为内联 CSS、CSP `default-src 'none'`、无脚本和远程资源，设备矩阵和动作结果可离线打开。
 
-当前 main 的双机报告复验已在 M10 Task 7 完成：`run-48637f90-2867-4111-9581-34b7db976a5e` 使用 Samsung `R5CX211TXNT` 和 Motorola `ZT4229J5ZR`，Tap/Swipe 两台均 `SUCCEEDED`，HTML/ZIP 均 `READY`。详见 [M10 Task 7](M10-task7-current-dual-report-revalidation-acceptance.md)。
+当前 main 的双机报告复验已在 M10 Task 7 完成：`run-48637f90-2867-4111-9581-34b7db976a5e` 使用 Samsung `R5CX211TXNT` 和 Motorola `ZT4229J5ZR`，Tap/Swipe 两台均 `SUCCEEDED`，HTML/ZIP 均 `READY`。详见 [M10 Task 7](M10-task7-current-dual-report-revalidation-acceptance.md)，该记录已在提交 `f3e22f9` 推送。
 
 本次运行同时验证了 Excel/PDF/JUnit 可选导出，但这些输出属于 M11 能力，不计入 M10 默认报告门禁。
 
@@ -95,4 +95,4 @@ M10 交付历史结果、离线 HTML、原子证据 ZIP、报告最终化恢复�
 - 375px 窄屏密集表格保留内部横向滚动；当前 M10 目标以桌面报告为主。
 - 视觉验收为人工截图和结构断言，没有建立像素差异基线或 CI 浏览器回归任务。
 - Appium-only 模式不会注入 Unity QA Bridge，因此本次报告的 UID 列为 `Not recorded`；若要求报告必须展示游戏 UID，需要先接入 QA Bridge 或实现受控的应用侧 UID 读取，再单独进行 UID 门禁验收。
-- M10 Task 7 当前双机复验记录和 E 盘证据已完成本地验证，尚待用户确认后提交推送；确认后再进入 M11 下一切片。
+- M10 Task 7 当前双机复验记录和 E 盘证据已完成验证并推送；下一阶段进入 M11。

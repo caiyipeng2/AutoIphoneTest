@@ -13,4 +13,4 @@
 
 - [x] Move evidence to E: with matching file/byte counts.
 - [x] Record the current run and M10 boundary.
-- [ ] Stop for user approval before commit and push.
+- [x] Stop for user approval before commit and push.

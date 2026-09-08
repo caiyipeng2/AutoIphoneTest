@@ -37,5 +37,5 @@ counts and byte totals matched during migration.
 
 **PASS for current two-device M10 default report revalidation.** Optional
 Excel/PDF/JUnit exports and portable delivery remain M11 capabilities. The
-source/document changes are complete locally and await user approval before
-commit and push to `origin/main`.
+source/document changes were approved and pushed to `origin/main` in commit
+`f3e22f9`.
