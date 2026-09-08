@@ -12,4 +12,4 @@
 
 - [x] Preserve the structured evidence on E:.
 - [x] Record the passing analyzer metrics and previous failed-attempt boundary.
-- [ ] Stop for user approval before commit and push.
+- [x] Stop for user approval before commit and push.

@@ -50,5 +50,5 @@ restarts, bounded WAL/queue metrics, and clean worker/lease/forward cleanup.
 
 The previous 5038-port attempt is retained as diagnostic evidence only; this
 passing run used the stable default 5037 ADB service and did not change fixed
-analyzer thresholds. The record is complete locally and awaits user approval
-before commit and push to `origin/main`.
+analyzer thresholds. The record was approved and pushed to `origin/main` in
+commit `aaccc20`.

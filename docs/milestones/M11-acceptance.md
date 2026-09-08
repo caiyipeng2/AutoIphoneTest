@@ -125,7 +125,7 @@ pushed in commit `04fd70a`.
 
 M11 Task 19 completed a fresh 3,600-second two-device stability run on that
 portable runtime. The fixed analyzer passed all event, queue, WAL, memory,
-handle, thread, crash, restart, and cleanup gates. See [M11 Task 19](M11-task19-current-dual-stability-acceptance.md).
+handle, thread, crash, restart, and cleanup gates. See [M11 Task 19](M11-task19-current-dual-stability-acceptance.md), approved and pushed in commit `aaccc20`.
 
 ## Automated verification
 
