@@ -58,5 +58,5 @@ a readable ZIP package containing `[Content_Types].xml`.
 
 **PASS for current two-device portable smoke and optional exports.** The 60-minute
 stability gate remains represented by the prior M11 formal records; this slice
-does not rerun that long-duration test. The source fixes and evidence are
-complete locally and await user approval before commit and push.
+does not rerun that long-duration test. The source fixes and evidence were
+approved and pushed to `origin/main` in commit `04fd70a`.

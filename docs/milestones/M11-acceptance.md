@@ -120,7 +120,8 @@ M11 Task 18 rebuilt the portable runtime from the current `main` after fixing a
 missing Android SDK subset in the portable package. The two-device smoke now
 uses bundled `platform-tools`/`build-tools`, completed Tap/Swipe on Samsung and
 Motorola, and produced READY HTML, ZIP, Excel, PDF, and JUnit exports. See [M11
-Task 18](M11-task18-current-portable-dual-smoke-acceptance.md).
+Task 18](M11-task18-current-portable-dual-smoke-acceptance.md), approved and
+pushed in commit `04fd70a`.
 
 ## Automated verification
 

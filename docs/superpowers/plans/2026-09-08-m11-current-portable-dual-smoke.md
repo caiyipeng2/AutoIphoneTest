@@ -18,4 +18,4 @@
 
 ### Task 3: Approval boundary
 
-- [ ] Stop for user approval before commit and push.
+- [x] Stop for user approval before commit and push.
