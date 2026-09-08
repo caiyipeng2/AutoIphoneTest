@@ -86,6 +86,18 @@ function Copy-WorkspacePackage([string]$Name, [string]$SourceRoot, [string]$Dest
 $root = Resolve-FullPath $ProjectRoot
 $output = Resolve-FullPath $OutputRoot
 $release = Resolve-FullPath $ReleaseRoot
+$configuredAndroidSdkRoot = $env:TEST_CENTER_ANDROID_SDK_ROOT
+if ([string]::IsNullOrWhiteSpace($configuredAndroidSdkRoot)) { $configuredAndroidSdkRoot = $env:ANDROID_HOME }
+if ([string]::IsNullOrWhiteSpace($configuredAndroidSdkRoot)) {
+    $configuredAndroidSdkRoot = 'D:\Unity\Editor\Data\PlaybackEngines\AndroidPlayer\SDK'
+}
+$androidSdkRoot = Resolve-FullPath $configuredAndroidSdkRoot
+$androidPlatformTools = Join-Path $androidSdkRoot 'platform-tools'
+$androidBuildToolsRoot = Join-Path $androidSdkRoot 'build-tools'
+$androidBuildTools = Get-ChildItem -LiteralPath $androidBuildToolsRoot -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+if ($null -eq $androidBuildTools) { throw "Android SDK build-tools are missing: $androidBuildToolsRoot" }
+Require-File (Join-Path $androidPlatformTools 'adb.exe') 'Android SDK platform-tools ADB'
+Require-File (Join-Path $androidBuildTools.FullName 'aapt2.exe') 'Android SDK build-tools aapt2'
 $node = Join-Path $root 'tools\node\22.23.1\node.exe'
 $npm = Join-Path $root 'tools\node\22.23.1\npm.cmd'
 $launcherProject = Join-Path $root 'apps\launcher\src\TestCenter.Launcher\TestCenter.Launcher.csproj'
@@ -139,6 +151,11 @@ try {
     Copy-Tree (Join-Path $root 'tools\java\17.0.19+10') (Join-Path $staging 'tools\java\17.0.19+10')
     Copy-Tree (Join-Path $root 'tools\bundletool\1.18.3') (Join-Path $staging 'tools\bundletool\1.18.3')
     Copy-Tree (Join-Path $root 'tools\scrcpy\3.1') (Join-Path $staging 'tools\scrcpy\3.1')
+    # Appium's UiAutomator2 driver needs both adb and aapt2. Keep these
+    # runtime-critical SDK components inside the portable root so the Launcher
+    # never falls back to a build-machine SDK that may not exist on the target.
+    Copy-Tree $androidPlatformTools (Join-Path $staging 'tools\android-sdk\platform-tools')
+    Copy-Tree $androidBuildTools.FullName (Join-Path $staging "tools\android-sdk\build-tools\$($androidBuildTools.Name)")
     Copy-Tree (Join-Path $root 'data\appium-home') (Join-Path $staging 'data\appium-home')
     Copy-Tree (Join-Path $root 'data\tools\ms-playwright') (Join-Path $staging 'data\tools\ms-playwright')
 

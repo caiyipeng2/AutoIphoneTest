@@ -40,7 +40,7 @@ const checkpointIntervalSeconds = positiveInteger(
   process.env.TEST_CENTER_M11_CHECKPOINT_INTERVAL_SECONDS,
   30,
 );
-const adbPath = win32.join(root, "tools", "scrcpy", "3.1", "adb.exe");
+const adbPath = win32.join(root, "tools", "android-sdk", "platform-tools", "adb.exe");
 const adbPort = readOptionalPort(
   process.env.TEST_CENTER_APPIUM_ADB_PORT ?? process.env.TEST_CENTER_ADB_SERVER_PORT,
 );

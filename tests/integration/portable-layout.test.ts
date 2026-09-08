@@ -19,6 +19,8 @@ const requiredFiles = [
   "tools/bundletool/1.18.3/bundletool-all-1.18.3.jar",
   "tools/scrcpy/3.1/scrcpy.exe",
   "tools/scrcpy/3.1/scrcpy-server",
+  "tools/android-sdk/platform-tools/adb.exe",
+  "tools/android-sdk/build-tools/36.0.0/aapt2.exe",
   "data/tools/ms-playwright/chromium-1187/chrome-win/chrome.exe",
   "config/settings.example.json",
   "docs/user-guide.md",

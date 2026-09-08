@@ -36,7 +36,7 @@ const serials = (process.env.TEST_CENTER_M11_SERIALS ?? "R5CX211TXNT,t4vswkqcs4u
   .map((serial) => serial.trim())
   .filter(Boolean);
 const packageName = process.env.TEST_CENTER_PACKAGE ?? "com.hg.idleweaponshoptycoon.android";
-const adbPath = win32.join(root, "tools", "scrcpy", "3.1", "adb.exe");
+const adbPath = win32.join(root, "tools", "android-sdk", "platform-tools", "adb.exe");
 const adbPort = readOptionalPort(
   process.env.TEST_CENTER_APPIUM_ADB_PORT ?? process.env.TEST_CENTER_ADB_SERVER_PORT,
 );

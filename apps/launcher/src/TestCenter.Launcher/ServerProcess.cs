@@ -24,19 +24,34 @@ public sealed class ServerProcess : IDisposable
         launchSecret = RandomToken();
         var bootstrapCode = RandomToken();
         var requestedPort = FindAvailablePort();
+        var dataRoot = Path.Combine(projectRoot, "data");
+        var androidSdkRoot = Path.Combine(projectRoot, "tools", "android-sdk");
+        var androidAdbPath = Path.Combine(androidSdkRoot, "platform-tools", "adb.exe");
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = nodePath,
+            Arguments = $"\"{serverPath}\"",
+            WorkingDirectory = projectRoot,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        // Portable builds carry their own SDK subset. Only override the
+        // inherited host configuration when that self-contained ADB exists;
+        // source-tree development can continue using the configured SDK.
+        if (File.Exists(androidAdbPath))
+        {
+            startInfo.Environment["TEST_CENTER_ADB_PATH"] = androidAdbPath;
+            startInfo.Environment["TEST_CENTER_DATA_ROOT"] = dataRoot;
+            startInfo.Environment["TEST_CENTER_APPIUM_HOME"] = Path.Combine(dataRoot, "appium-home");
+            startInfo.Environment["ANDROID_HOME"] = androidSdkRoot;
+            startInfo.Environment["ANDROID_SDK_ROOT"] = androidSdkRoot;
+        }
         process = new Process
         {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = nodePath,
-                Arguments = $"\"{serverPath}\"",
-                WorkingDirectory = projectRoot,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            },
+            StartInfo = startInfo,
             EnableRaisingEvents = true,
         };
         process.ErrorDataReceived += (_, args) => { if (!string.IsNullOrWhiteSpace(args.Data)) LastError = args.Data; };

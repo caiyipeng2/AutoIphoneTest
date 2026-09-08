@@ -13,5 +13,7 @@ describe("portable build script", () => {
     expect(source).toContain("IsNullOrWhiteSpace($ProjectRoot)");
     expect(source).toContain("IsNullOrWhiteSpace($OutputRoot)");
     expect(source).toContain("IsNullOrWhiteSpace($ReleaseRoot)");
+    expect(source).toContain("tools\\android-sdk\\platform-tools");
+    expect(source).toContain("tools\\android-sdk\\build-tools");
   });
 });
