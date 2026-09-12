@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -88,7 +89,12 @@ namespace Caiyipeng.TestCenter.QaBridge
         public string expectedView;
         public string expectedFocus;
         public int metricsEpoch;
-        public long expiresAtRealtimeMs;
+        public string expiresAtRealtimeMs;
+
+        public bool TryGetExpiresAtRealtimeMs(out long value)
+        {
+            return long.TryParse(expiresAtRealtimeMs, NumberStyles.None, CultureInfo.InvariantCulture, out value);
+        }
     }
 
     [Serializable]
@@ -105,9 +111,14 @@ namespace Caiyipeng.TestCenter.QaBridge
         public string type = "QA_ARMED";
         public int schemaVersion = 1;
         public string bridgeInstanceId;
+        public string runNonceHash;
         public string actionId;
         public string descriptorHash;
-        public long expiresAtRealtimeMs;
+        public string expectedEventShapeHash;
+        public string expectedView;
+        public string expectedFocus;
+        public int metricsEpoch;
+        public string expiresAtRealtimeMs;
     }
 
     [Serializable]
@@ -117,7 +128,7 @@ namespace Caiyipeng.TestCenter.QaBridge
         public int schemaVersion = 1;
         public string bridgeInstanceId;
         public string actionId;
-        public long observedAtRealtimeNs;
+        public string observedAtRealtimeNs;
         public string descriptorHash;
         public string eventShapeHash;
         public string view;
@@ -135,6 +146,24 @@ namespace Caiyipeng.TestCenter.QaBridge
         public string actionId;
         public string code;
         public string reason;
+    }
+
+    [Serializable]
+    public sealed class QaPongMessage
+    {
+        public string type = "QA_PONG";
+        public int schemaVersion = 1;
+        public string bridgeInstanceId;
+        public string pingId;
+        public string observedAtRealtimeNs;
+    }
+
+    [Serializable]
+    public sealed class QaPingRequest
+    {
+        public string type = "QA_PING";
+        public int schemaVersion = 1;
+        public string pingId;
     }
 
     [Serializable]
@@ -172,12 +201,12 @@ namespace Caiyipeng.TestCenter.QaBridge
         public bool TryArm(QaArmRequest request, long nowRealtimeMs, out string rejectionCode)
         {
             rejectionCode = null;
-            if (request == null || request.schemaVersion != 1 || string.IsNullOrEmpty(request.actionId) || string.IsNullOrEmpty(request.runNonceHash) || request.expiresAtRealtimeMs <= nowRealtimeMs)
+            if (request == null || request.schemaVersion != 1 || string.IsNullOrEmpty(request.actionId) || string.IsNullOrEmpty(request.runNonceHash) || !request.TryGetExpiresAtRealtimeMs(out var expiresAtRealtimeMs) || expiresAtRealtimeMs <= nowRealtimeMs)
             {
                 rejectionCode = "INVALID_ARM";
                 return false;
             }
-            if (active != null && active.expiresAtRealtimeMs > nowRealtimeMs)
+            if (active != null && active.TryGetExpiresAtRealtimeMs(out var activeExpiry) && activeExpiry > nowRealtimeMs)
             {
                 rejectionCode = "ARM_BUSY";
                 return false;
@@ -195,7 +224,7 @@ namespace Caiyipeng.TestCenter.QaBridge
                 rejectionCode = "ARM_NOT_FOUND";
                 return false;
             }
-            if (active.expiresAtRealtimeMs <= nowRealtimeMs)
+            if (!active.TryGetExpiresAtRealtimeMs(out var activeExpiry) || activeExpiry <= nowRealtimeMs)
             {
                 active = null;
                 rejectionCode = "ARM_EXPIRED";
@@ -209,7 +238,7 @@ namespace Caiyipeng.TestCenter.QaBridge
             {
                 bridgeInstanceId = bridgeInstanceId,
                 actionId = active.actionId,
-                observedAtRealtimeNs = nowRealtimeMs * 1000000L,
+                observedAtRealtimeNs = (nowRealtimeMs * 1000000L).ToString(System.Globalization.CultureInfo.InvariantCulture),
                 descriptorHash = active.descriptorHash,
                 eventShapeHash = observed.EventShapeHash,
                 view = observed.View,

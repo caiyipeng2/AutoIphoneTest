@@ -42,7 +42,7 @@ namespace Caiyipeng.TestCenter.QaBridge.Tests
                 expectedView = "MainHUD",
                 expectedFocus = null,
                 metricsEpoch = 4,
-                expiresAtRealtimeMs = 100,
+                expiresAtRealtimeMs = "100",
             };
             Assert.That(gate.TryArm(request, 10, out var rejection), Is.True);
             Assert.That(rejection, Is.Null);
@@ -74,6 +74,39 @@ namespace Caiyipeng.TestCenter.QaBridge.Tests
             Assert.That(failing.TryBuild(out state, out error, "bridge-2"), Is.False);
             Assert.That(state, Is.Null);
             Assert.That(error.code, Is.EqualTo("STATE_PROVIDER_FAILURE"));
+        }
+
+        [Test]
+        public void PingPongMessagePreservesBridgeAndPingIdentity()
+        {
+            var pong = QaBridgeServer.CreatePongMessage("bridge-1", "ping-1", 1234567890L);
+
+            Assert.That(pong.type, Is.EqualTo("QA_PONG"));
+            Assert.That(pong.schemaVersion, Is.EqualTo(1));
+            Assert.That(pong.bridgeInstanceId, Is.EqualTo("bridge-1"));
+            Assert.That(pong.pingId, Is.EqualTo("ping-1"));
+            Assert.That(pong.observedAtRealtimeNs, Is.EqualTo("1234567890"));
+        }
+
+        [Test]
+        public void ArmedMessagePreservesTheFullArmLeaseContract()
+        {
+            var armed = new QaArmedMessage
+            {
+                bridgeInstanceId = "bridge-1",
+                runNonceHash = "sha256:" + new string('a', 64),
+                actionId = "ACT-1",
+                descriptorHash = "sha256:" + new string('b', 64),
+                expectedEventShapeHash = "sha256:" + new string('c', 64),
+                expectedView = "MainHUD",
+                expectedFocus = null,
+                metricsEpoch = 4,
+                expiresAtRealtimeMs = "1234",
+            };
+
+            Assert.That(armed.runNonceHash, Does.StartWith("sha256:"));
+            Assert.That(armed.expectedEventShapeHash, Does.StartWith("sha256:"));
+            Assert.That(armed.expiresAtRealtimeMs, Is.EqualTo("1234"));
         }
 
         private sealed class IdentityProvider : IQaIdentityProvider

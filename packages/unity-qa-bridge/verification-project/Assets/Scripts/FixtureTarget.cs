@@ -62,6 +62,7 @@ namespace Caiyipeng.TestCenter.QaFixture
                 metricsEpoch = fixture.MetricsEpoch,
             };
             var observer = GetComponentInParent<QaInputObserver>();
+            if (observer == null) observer = FindObjectOfType<QaInputObserver>();
             observer?.Observe(descriptor.Hash(), fixture.CurrentView, fixture.FocusedControlId, fixture.MetricsEpoch);
 #endif
         }

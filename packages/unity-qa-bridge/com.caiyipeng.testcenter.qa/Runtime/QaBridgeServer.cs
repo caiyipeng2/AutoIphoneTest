@@ -47,6 +47,16 @@ namespace Caiyipeng.TestCenter.QaBridge
         public bool IsConnected { get; private set; }
         public int MetricsEpoch => statePublisher.MetricsEpoch;
 
+        public static QaPongMessage CreatePongMessage(string bridgeInstanceId, string pingId, long observedAtRealtimeNs)
+        {
+            return new QaPongMessage
+            {
+                bridgeInstanceId = bridgeInstanceId,
+                pingId = pingId,
+                observedAtRealtimeNs = observedAtRealtimeNs.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            };
+        }
+
         public void Start()
         {
             if (running) return;
@@ -157,12 +167,26 @@ namespace Caiyipeng.TestCenter.QaBridge
                 return;
             }
 
+            if (envelope.type == "QA_PING")
+            {
+                QaPingRequest request;
+                try { request = JsonUtility.FromJson<QaPingRequest>(line); }
+                catch (Exception) { Reject(null, "INVALID_PING"); return; }
+                if (request == null || request.schemaVersion != 1 || string.IsNullOrEmpty(request.pingId))
+                {
+                    Reject(request?.pingId, "INVALID_PING");
+                    return;
+                }
+                Send(CreatePongMessage(bridgeInstanceId, request.pingId, QaClock.RealtimeNanoseconds()));
+                return;
+            }
+
             if (envelope.type == "QA_ARM")
             {
                 QaArmRequest request;
                 try { request = JsonUtility.FromJson<QaArmRequest>(line); }
                 catch (Exception) { Reject(null, "INVALID_ARM"); return; }
-                if (request == null || request.schemaVersion != 1 || string.IsNullOrEmpty(request.actionId) || string.IsNullOrEmpty(request.runNonceHash) || request.expiresAtRealtimeMs <= QaClock.RealtimeMilliseconds())
+                if (request == null || request.schemaVersion != 1 || string.IsNullOrEmpty(request.actionId) || string.IsNullOrEmpty(request.runNonceHash) || !request.TryGetExpiresAtRealtimeMs(out var expiresAtRealtimeMs) || expiresAtRealtimeMs <= QaClock.RealtimeMilliseconds())
                 {
                     Reject(request?.actionId, "INVALID_ARM");
                     return;
@@ -172,7 +196,18 @@ namespace Caiyipeng.TestCenter.QaBridge
                     Reject(request.actionId, rejectionCode);
                     return;
                 }
-                Send(new QaArmedMessage { bridgeInstanceId = bridgeInstanceId, actionId = request.actionId, descriptorHash = request.descriptorHash, expiresAtRealtimeMs = request.expiresAtRealtimeMs });
+                Send(new QaArmedMessage
+                {
+                    bridgeInstanceId = bridgeInstanceId,
+                    runNonceHash = request.runNonceHash,
+                    actionId = request.actionId,
+                    descriptorHash = request.descriptorHash,
+                    expectedEventShapeHash = request.expectedEventShapeHash,
+                    expectedView = request.expectedView,
+                    expectedFocus = request.expectedFocus,
+                    metricsEpoch = request.metricsEpoch,
+                    expiresAtRealtimeMs = request.expiresAtRealtimeMs,
+                });
                 return;
             }
             if (envelope.type == "QA_DISARM")
