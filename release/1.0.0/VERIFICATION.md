@@ -39,3 +39,11 @@ This file is prepared for the `v1.0.0` release commit. The annotated tag and
 GitHub Release must be created only after the release commit is pushed and the
 GitHub connection is verified. No tag or GitHub Release is created by this
 local verification step.
+
+## Publication Attempt
+
+- User authorization was received for `origin/main` and the `v1.0.0` release.
+- Two push attempts were stopped by the automatic permission review timeout.
+- Follow-up read-only remote check failed with: `Failed to connect to
+  127.0.0.1 port 9 after 2078 ms: Connection refused`.
+- Remote publication, tag creation, and GitHub Release upload remain pending.
