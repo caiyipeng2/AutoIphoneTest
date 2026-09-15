@@ -54,3 +54,13 @@ local verification step.
   `https://github.com/caiyipeng2/AutoIphoneTest/releases/tag/v1.0.0`.
 - Asset `TestCenterLauncher.zip` is `uploaded`, 709,792,409 bytes, with
   GitHub digest `sha256:00a690dbd426037fd2ae3dc1db682577a9dbcb3db7a050effa3c3d999b804636`.
+
+## Published-Artifact Device Smoke
+
+- Runtime root: `E:\Temp\UnityMultiDeviceAcceptance\v1.0.0-portable`.
+- Device: Motorola `ZT4229J5ZR`.
+- Session: `run-15857380-0f30-4de8-af77-7796b804bd29`.
+- Flow: `PREFLIGHT -> RUNNING -> FINISHED`; Tap and Swipe both `SUCCEEDED`.
+- HTML/ZIP/Excel/PDF/JUnit all reached `READY` and were downloaded with
+  matching hashes.
+- Evidence: `E:\Temp\UnityMultiDeviceAcceptance\v1.0.0-single-smoke\m11-portable-smoke.json`.
