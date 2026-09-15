@@ -43,7 +43,11 @@ local verification step.
 ## Publication Attempt
 
 - User authorization was received for `origin/main` and the `v1.0.0` release.
-- Two push attempts were stopped by the automatic permission review timeout.
-- Follow-up read-only remote check failed with: `Failed to connect to
-  127.0.0.1 port 9 after 2078 ms: Connection refused`.
-- Remote publication, tag creation, and GitHub Release upload remain pending.
+- Initial push attempts were stopped by the automatic permission review
+  timeout because the terminal inherited an invalid localhost proxy.
+- After clearing `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `GIT_HTTP_PROXY`,
+  and `GIT_HTTPS_PROXY`, direct HTTPS and `git ls-remote` checks passed.
+- `origin/main` now resolves to `5e9bab9d0551739df3d981d09bd16d216e616506`.
+- Annotated tag `v1.0.0` is pushed and resolves to the same commit.
+- GitHub Release asset upload remains pending because the GitHub CLI is not
+  installed in this environment.
