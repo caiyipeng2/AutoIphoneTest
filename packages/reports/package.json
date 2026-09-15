@@ -1,6 +1,6 @@
 {
   "name": "@test-center/reports",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "files": [
@@ -13,8 +13,8 @@
     }
   },
   "dependencies": {
-    "@test-center/contracts": "0.0.0",
-    "@test-center/evidence": "0.0.0",
+    "@test-center/contracts": "1.0.0",
+    "@test-center/evidence": "1.0.0",
     "archiver": "8.0.0",
     "better-sqlite3": "13.0.2",
     "exceljs": "4.4.0",

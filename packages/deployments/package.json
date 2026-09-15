@@ -1,6 +1,6 @@
 {
   "name": "@test-center/deployments",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "files": [
@@ -41,11 +41,11 @@
     }
   },
   "dependencies": {
-    "@test-center/adb": "0.0.0",
-    "@test-center/artifacts": "0.0.0",
-    "@test-center/contracts": "0.0.0",
-    "@test-center/database": "0.0.0",
-    "@test-center/environment": "0.0.0",
-    "@test-center/security": "0.0.0"
+    "@test-center/adb": "1.0.0",
+    "@test-center/artifacts": "1.0.0",
+    "@test-center/contracts": "1.0.0",
+    "@test-center/database": "1.0.0",
+    "@test-center/environment": "1.0.0",
+    "@test-center/security": "1.0.0"
   }
 }

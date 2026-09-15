@@ -1,6 +1,6 @@
 {
   "name": "@test-center/build-provider",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "files": [
@@ -21,8 +21,8 @@
     }
   },
   "dependencies": {
-    "@test-center/artifacts": "0.0.0",
-    "@test-center/contracts": "0.0.0",
+    "@test-center/artifacts": "1.0.0",
+    "@test-center/contracts": "1.0.0",
     "zod": "4.4.3"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@test-center/appium",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "files": [
@@ -21,7 +21,7 @@
     }
   },
   "dependencies": {
-    "@test-center/environment": "0.0.0",
+    "@test-center/environment": "1.0.0",
     "appium": "3.6.0",
     "appium-uiautomator2-driver": "8.2.2",
     "zod": "4.4.3"
