@@ -49,5 +49,8 @@ local verification step.
   and `GIT_HTTPS_PROXY`, direct HTTPS and `git ls-remote` checks passed.
 - `origin/main` now resolves to `5e9bab9d0551739df3d981d09bd16d216e616506`.
 - Annotated tag `v1.0.0` is pushed and resolves to the same commit.
-- GitHub Release asset upload remains pending because the GitHub CLI is not
-  installed in this environment.
+- GitHub CLI `v2.100.0` was installed under `E:\Tools\GitHubCLI\v2.100.0`.
+- GitHub Release `v1.0.0` is published at
+  `https://github.com/caiyipeng2/AutoIphoneTest/releases/tag/v1.0.0`.
+- Asset `TestCenterLauncher.zip` is `uploaded`, 709,792,409 bytes, with
+  GitHub digest `sha256:00a690dbd426037fd2ae3dc1db682577a9dbcb3db7a050effa3c3d999b804636`.
