@@ -1,0 +1,12 @@
+v1.0.0 artifact checksums
+
+Source commit: ee7da4e
+
+00A690DBD426037FD2AE3DC1DB682577A9DBCB3DB7A050EFFA3C3D999B804636  TestCenterLauncher.zip
+7FB5288DF6242FA8B4330DA47CBC10A7CEA902489C1C9725C5D14B9BE523EEEF  manifest.sha256.json
+
+Current release ZIP:
+E:\Temp\UnityMultiDeviceAcceptance\v1.0.0-release\TestCenterLauncher.zip
+
+Current portable directory:
+E:\Temp\UnityMultiDeviceAcceptance\v1.0.0-portable
